@@ -10,9 +10,7 @@ A KSL mod for CarX Drift Racing Online, made for TRC (Touge Racing Community). I
 2. Download `TRCTuneLoader.zip` from the [latest release](https://github.com/Bskftw/TRCTuneLoader/releases/latest) and unzip it into `CarX Drift Racing Online\kino\mods\`, so you end up with `kino\mods\TRCTuneLoader\TRCTuneLoader.ksm`.
 3. Start CarX. KSL only looks for mods when the game starts.
 
-After that, KSL keeps the mod up to date by itself: new versions install when you start the game.
-
-The mod is private for now: only TRC testers whitelisted in KSL can load it.
+After that, KSL keeps the mod up to date by itself: new versions install when you start the game. TRC Tune Loader is also listed in KSL's ModDB.
 
 ## Opening it
 
