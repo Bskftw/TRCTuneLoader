@@ -4,7 +4,7 @@ All versions of TRC Tune Loader, newest first. "Not tested in game yet" means th
 
 ## 0.9.0 (Oct 22 2026)
 
-Not tested in game yet. New options, picked by TRC.
+Tested in game. New options, picked by TRC.
 
 **New**
 - **TRC spec badge** while driving: a small tag in a corner of the screen. Green "TRC SPEC" with your set, amber when the car you're driving hasn't been checked yet, red "NOT TRC SPEC". On by default; turn it off or pick its corner in Options.
@@ -18,7 +18,7 @@ Not tested in game yet. New options, picked by TRC.
 
 ## 0.8.0 (Oct 22 2026)
 
-Not tested in game yet.
+Tested in game.
 
 **New**
 - **First-run tour**: the first time you reach the garage after installing, the window opens with a short tour of every tab: what the status bar means, how to apply a tune (also in the dyno), what Check looks at, what your tune code is for, and what Players, Mod check, Backups and Options do. Skip it any time; take it again from Options.
@@ -53,7 +53,7 @@ Tested in game: the engine & drivetrain check caught a KINO gearbox swap (4 gear
 
 ## 0.6.1 (Oct 22 2026)
 
-Never released on its own; included in 0.7.0.
+Never released on its own; included in 0.7.0. Tested in game.
 
 **Fixed**
 - After loading a TRC V3.0 tune, the live check on track said "frontDiffPreload: 100 (expected 500)". V3.0 is the only set that uses the clutch-type diff. CarX copies the rear diff's settings onto the front diff, and on a RWD car the unused front diff is reset on track. The live check now skips the diff your drivetrain doesn't use: the front diff on RWD cars, the rear diff on FWD cars. AWD and 4WD cars still check both.

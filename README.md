@@ -125,12 +125,12 @@ The code is made from the car's ID, its setup (for example the AE86's Ultimate s
 | Built-in tunes, Players page, shared reports between TRC Tune Loader users | 0.3 | Yes, with a second player |
 | Five tune sets with a set picker | 0.4 | Yes |
 | TRC window | 0.5 | Yes |
-| Live car check | 0.3 | Partly |
-| Body kit stance (widebody) check | 0.5 | Not yet |
+| Live car check | 0.3 | Yes |
+| Body kit stance (widebody) check | 0.5 | Yes |
 | Load into the dyno, also in online rooms | 0.6 | Yes (found the V3.0 diff issue fixed in 0.6.1) |
-| Unused diff skipped in the live check | 0.6.1 | Not yet |
-| Workshop bodies | 0.7 | Not yet |
+| Unused diff skipped in the live check | 0.6.1 | Yes |
+| Workshop bodies | 0.7 | Not yet: no Workshop car to test with |
 | Engine & drivetrain check | 0.7 | Yes: KINO gearbox swap, KINO drivetrain change (FWD and AWD) and KINO engine swap were all caught |
-| First-run tour, Options tab, changeable shortcut | 0.8 | Not yet |
-| TRC spec badge, track check pop-up, window size, backup clean-up, Players filter | 0.9 | Not yet |
+| First-run tour, Options tab, changeable shortcut | 0.8 | Yes |
+| TRC spec badge, track check pop-up, window size, backup clean-up, Players filter | 0.9 | Yes |
 
