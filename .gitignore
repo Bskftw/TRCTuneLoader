@@ -1,0 +1,17 @@
+bin/
+obj/
+dist/
+.vs/
+.idea/
+*.user
+
+# KSL build key: private, never commit or share
+*.kmc
+
+# Official TRC tunes: built into the encrypted mod, never published in the repo
+official_tunes/
+
+# Source art in Resources stays local; only the small files the mod uses are tracked
+Resources/*
+!Resources/icon.png
+!Resources/trc_logo.png

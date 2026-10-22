@@ -1,0 +1,107 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    TRC Tune Loader - a KSL mod for CarX Drift Racing Online.
+
+    Before the first build, check the two paths below:
+      CarXPath  - your CarX install folder (Steam > CarX > Manage > Browse local files)
+      KslSdkPath - the KSL SDK folder (the one that contains maykr.exe and API\KSL.API.dll)
+  -->
+  <PropertyGroup>
+    <CarXPath>D:\SteamLibrary\steamapps\common\CarX Drift Racing Online</CarXPath>
+    <KslSdkPath>$(MSBuildProjectDirectory)\..\ksl_sdk_1.0.5\ksl_sdk_1.0.5</KslSdkPath>
+    <CarXManaged>$(CarXPath)\Drift Racing Online_Data\Managed</CarXManaged>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <!-- Same target as the official KSL example mod -->
+    <TargetFramework>net472</TargetFramework>
+    <LangVersion>9</LangVersion>
+    <AssemblyName>TRCTuneLoader</AssemblyName>
+    <RootNamespace>TRC.TuneLoader</RootNamespace>
+    <Version>0.9.0</Version>
+    <Configurations>Debug;Release;Release_Encrypted</Configurations>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Lets "dotnet build" target .NET Framework 4.7.2 without Visual Studio installed -->
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Never copy these next to the mod: the game and KSL already load them -->
+    <Reference Include="KSL.API">
+      <HintPath>$(KslSdkPath)\API\KSL.API.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <!-- Taken from the game itself, so it always matches the Unity version CarX runs -->
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>$(CarXManaged)\UnityEngine.CoreModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <!-- Unity's IMGUI and text styles, for the TRC window (src/TRCTuneLoaderMod.Window.cs, src/Ui/Theme.cs) -->
+    <Reference Include="UnityEngine.IMGUIModule">
+      <HintPath>$(CarXManaged)\UnityEngine.IMGUIModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.TextRenderingModule">
+      <HintPath>$(CarXManaged)\UnityEngine.TextRenderingModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <!-- CarX's own code and physics library, for CarXTuneAdapter. Only src/CarXTuneAdapter.cs uses them. -->
+    <Reference Include="Assembly-CSharp">
+      <HintPath>$(CarXManaged)\Assembly-CSharp.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="CarX.Plugins.Core">
+      <HintPath>$(CarXManaged)\CarX.Plugins.Core.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- tools/ holds helper programs (like the tune code checker), not mod code -->
+    <Compile Remove="tools\**" />
+    <EmbeddedResource Include="Resources\icon.png" />
+    <EmbeddedResource Include="Resources\trc_logo.png" />
+    <!--
+      The official TRC tunes (KINO .knd files) are built into the mod, so players can't see or edit them.
+      They live in official_tunes/<set>/, which Git ignores: copy them from KINO's tunes folder.
+      Resource names look like "TRC.TuneLoader.Official/V2.1\nissan_180sx_V2.1.knd" (OfficialTunes.cs reads them).
+    -->
+    <OfficialTune Include="official_tunes\**\*.knd" />
+    <EmbeddedResource Include="official_tunes\**\*.knd" LogicalName="TRC.TuneLoader.Official/%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <Target Name="CheckOfficialTunes" BeforeTargets="Build" Condition="'$(Configuration)' == 'Release_Encrypted'">
+    <Error Condition="'@(OfficialTune)' == ''" Text="No official tunes in official_tunes\&lt;set&gt;\*.knd. Copy the TRC KINO tunes there before building the player version." />
+    <Message Importance="high" Text="Building in @(OfficialTune->Count()) official tune(s)." />
+  </Target>
+
+  <!--
+    Debug builds only compile: KSL refuses raw .dll mods on this account ("DevOrTesterOnly"),
+    and a .dll next to the .ksm in the game folder would be a second copy of the same mod.
+
+    Release_Encrypted builds: run maykr to turn the .dll into a .ksm, then install it into the game.
+    This is both the test build and the player build. Needs developer rights and the build key from
+    the KSL control panel, saved next to this file as TRCTuneLoader_maykr.kmc. Never commit or share
+    that key. Close CarX first: KSL only picks up mods when the game starts.
+  -->
+  <Target Name="Maykr" AfterTargets="Build" Condition="'$(Configuration)' == 'Release_Encrypted'">
+    <Error Condition="!Exists('$(MSBuildProjectDirectory)\TRCTuneLoader_maykr.kmc')" Text="Missing TRCTuneLoader_maykr.kmc. Generate it in KSL > Devtools > Control panel (it lands in kino\dev) and copy it next to TRCTuneLoader.csproj." />
+    <MakeDir Directories="$(MSBuildProjectDirectory)\dist" />
+    <Exec Command="&quot;$(KslSdkPath)\maykr.exe&quot; &quot;$(TargetPath)&quot; -c &quot;$(MSBuildProjectDirectory)\TRCTuneLoader_maykr.kmc&quot; -o &quot;$(MSBuildProjectDirectory)\dist&quot; -np" />
+  </Target>
+
+  <Target Name="InstallToGame" AfterTargets="Maykr" Condition="'$(Configuration)' == 'Release_Encrypted' And Exists('$(CarXPath)\kino\mods')">
+    <PropertyGroup>
+      <GameModFolder>$(CarXPath)\kino\mods\TRCTuneLoader</GameModFolder>
+    </PropertyGroup>
+    <Delete Files="$(GameModFolder)\TRCTuneLoader.dll" />
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\dist\TRCTuneLoader.ksm" DestinationFolder="$(GameModFolder)" Retries="0" ContinueOnError="WarnAndContinue" />
+    <Message Importance="high" Text="TRC Tune Loader installed to $(GameModFolder). Start (or restart) CarX to load it." />
+  </Target>
+
+</Project>

@@ -1,0 +1,31 @@
+# EXAMPLE ONLY - shows the file layout, not a real TRC tune.
+# Real tunes come from KINO: TRC Tune Loader menu > Import KINO tunes.
+# Values are CarX slider positions (0 = far left, 1 = far right). Use a dot for decimals.
+# Lines starting with # are ignored, and so is anything after a #.
+
+[info]
+name      = Example Touge Grip
+car       = Example Car
+car_id    = 0
+slot      = Ultimate
+slot_id   = 0
+engine_id = 0
+author    = TRC
+version   = 0.2.0
+notes     = Format example. Import your KINO tunes to get real ones.
+
+[values]
+front_spring_way       = 0.5
+front_spring_stiffness = 0.5
+front_camber           = 0.5
+front_toe              = 0.5
+front_caster           = 0.5
+rear_spring_way        = 0.5
+rear_spring_stiffness  = 0.5
+rear_camber            = 0.5
+rear_toe               = 0.5
+front_tyre_pressure    = 0.5
+rear_tyre_pressure     = 0.5
+brake_front_percent    = 0.5
+diff_lock_coef         = 0.5
+final_drive            = 0.5
