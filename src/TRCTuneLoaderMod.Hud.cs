@@ -57,7 +57,7 @@ namespace TRC.TuneLoader {
 			if (autoCheck_ && state == SpecState.NotSpec && lastTrackState_ != SpecState.NotSpec) {
 				popupText_ = $"Not TRC spec: {ProblemOf(carStatus_)}. Click here or press {shortcut_} for details.";
 				popupUntil_ = Time.unscaledTime + PopupSeconds;
-				Kino.Log.Info($"On track: {popupText_}");
+				TrcLog.Info($"On track: {popupText_}");
 			}
 			lastTrackState_ = state;
 		}
@@ -78,7 +78,7 @@ namespace TRC.TuneLoader {
 				return $"your setup differs from {check.Official.Name} in {check.Saved.Differences.Count} place(s)";
 			}
 			if (check.StanceDifferences.Count > 0) {
-				return "a body kit changes the car's stance";
+				return "the car's stance (ride height, track width or axles) isn't stock";
 			}
 			if (check.DrivetrainChanged) {
 				return DrivetrainProblem(check.Drivetrain);

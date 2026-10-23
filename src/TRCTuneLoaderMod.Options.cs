@@ -13,7 +13,7 @@ namespace TRC.TuneLoader {
 	/// with Kino.Input: it's matched in OnGUI against Unity's key events.
 	/// </summary>
 	public partial class TRCTuneLoaderMod {
-		private const int OptionsTab = 5;
+		private const int OptionsTab = 6;
 		private const string ShortcutPref = "open_shortcut";
 		private const string TourPref = "tour_seen";
 		private const string WindowScalePref = "window_scale";
@@ -29,8 +29,8 @@ namespace TRC.TuneLoader {
 		/// <summary>How many backups to keep per car and setup; 0 keeps them all.</summary>
 		private static readonly int[] BackupLimits = { 0, 5, 10, 20 };
 
-		/// <summary>Raise this when the tour changes enough that everyone should see it again.</summary>
-		private const int TourVersion = 1;
+		/// <summary>Raise this when the tour changes enough that everyone should see it again. 2: TRC and Project Dream, time attack and battles.</summary>
+		private const int TourVersion = 2;
 
 		/// <summary>How long the player is on the garage screen before the first-run tour opens.</summary>
 		private const float TourGarageDelaySeconds = 2f;
@@ -77,18 +77,20 @@ namespace TRC.TuneLoader {
 				int keep = Kino.Prefs.Get(BackupsKeepPref, 0);
 				backupsKeep_ = BackupLimits.Contains(keep) ? keep : 0;
 				problemsOnly_ = Kino.Prefs.Get(ProblemsOnlyPref, false);
+				Vector2 timer = Kino.Prefs.Get(HudPositionPref, DefaultHudPosition);
+				hudPosition_ = new Vector2(Mathf.Clamp01(timer.x), Mathf.Clamp01(timer.y));
 			} catch (Exception e) {
-				Kino.Log.Warning($"Couldn't read the TRC Tune Loader options: {e.Message}");
+				TrcLog.Warning($"Couldn't read the TRC Tune Loader options: {e.Message}");
 			}
 		}
 
 		private static void SavePref<T>(string key, T value) {
 			try {
 				if (!Kino.Prefs.Set(key, value)) {
-					Kino.Log.Warning($"Couldn't save the option '{key}'.");
+					TrcLog.Warning($"Couldn't save the option '{key}'.");
 				}
 			} catch (Exception e) {
-				Kino.Log.Warning($"Couldn't save the option '{key}': {e.Message}");
+				TrcLog.Warning($"Couldn't save the option '{key}': {e.Message}");
 			}
 		}
 
@@ -144,14 +146,14 @@ namespace TRC.TuneLoader {
 			try {
 				saved = Kino.Prefs.Set(ShortcutPref, shortcut.Save());
 			} catch (Exception e) {
-				Kino.Log.Warning($"Couldn't save the shortcut: {e.Message}");
+				TrcLog.Warning($"Couldn't save the shortcut: {e.Message}");
 			}
 
 			bool plainKey = !shortcut.Ctrl && !shortcut.Shift && !shortcut.Alt && shortcut.Key >= KeyCode.A && shortcut.Key <= KeyCode.Z;
 			optionsResult_ = $"Shortcut set to {shortcut}." +
 				(saved ? "" : " It couldn't be saved, so it goes back to the old one when the game restarts.") +
 				(plainKey ? " Careful: a letter on its own may also do something in CarX. Ctrl + a letter is safer." : "");
-			Kino.Log.Info($"Shortcut set to {shortcut}.");
+			TrcLog.Info($"Shortcut set to {shortcut}.");
 		}
 
 		/// <summary>True while one of CarX's text boxes (like the chat) has the keyboard, so typing a message doesn't open or close the window.</summary>
@@ -244,6 +246,15 @@ namespace TRC.TuneLoader {
 				autoCheck_ = check;
 				SavePref(AutoCheckPref, autoCheck_);
 			}
+			GUILayout.Space(8);
+			GUILayout.Label("<b>Time attack timer</b>: drag it anywhere on the screen while this window is open during a run.", Theme.Body);
+			GUILayout.BeginHorizontal();
+			if (hudPosition_ != DefaultHudPosition && GUILayout.Button("Put the timer back at the top", Theme.Button)) {
+				hudPosition_ = DefaultHudPosition;
+				SavePref(HudPositionPref, hudPosition_);
+			}
+			GUILayout.FlexibleSpace();
+			GUILayout.EndHorizontal();
 			GUILayout.EndVertical();
 
 			GUILayout.Space(10);
@@ -324,14 +335,14 @@ namespace TRC.TuneLoader {
 			} catch (Exception e) {
 				cleanupPending_ = null;
 				backupOptionsResult_ = $"Couldn't read the backups: {e.Message}";
-				Kino.Log.Error(e);
+				TrcLog.Error(e);
 			}
 		}
 
 		private void DeleteOldBackups() {
 			int deleted = TuneBackups.Delete(cleanupPending_);
 			backupOptionsResult_ = $"Deleted {deleted} old backup(s).";
-			Kino.Log.Info($"Backup clean-up: deleted {deleted} backup(s) over the last {backupsKeep_} per car.");
+			TrcLog.Info($"Backup clean-up: deleted {deleted} backup(s) over the last {backupsKeep_} per car.");
 			cleanupPending_ = null;
 			RefreshBackups();
 		}
@@ -344,6 +355,13 @@ namespace TRC.TuneLoader {
 				Text = "This mod puts the official TRC tunes on your car and checks that it's TRC spec, so your runs count on the TRC leaderboards. " +
 					"This short tour shows what each part of the window does. Use Next and Back, or Skip if you already know your way around.",
 				Tab = -1,
+			},
+			new TourStep {
+				Title = "TRC, the tunes and Project Dream",
+				Text = "TRC (Touge Racing Community) was founded by WingsX for competitive grip racing, inspired by Japanese touge and Initial D. " +
+					"WingsX spent over three years balancing the TRC Ultimate Grip Tunes, so races come down to driver skill, not setups. " +
+					"Project Dream is a connected freeroam island of about 52 roads, built for TRC racing. The About tab tells the whole story.",
+				Tab = AboutTab,
 			},
 			new TourStep {
 				Title = "Opening this window",
@@ -369,7 +387,7 @@ namespace TRC.TuneLoader {
 				Title = "Checking your car",
 				Text = "Check my tune lists anything that isn't TRC spec: your saved setup, the car you're driving, body kit stance, " +
 					"Workshop bodies, engine swaps, and gearbox or drivetrain changes from mods like KINO. " +
-					"Press it once in the garage each time you start the game, so the live check has something to compare with. " +
+					"The live check records what to compare with by itself, a few seconds after your car reaches the garage or the track. " +
 					"Real numbers shows every setting the way CarX's tuning screen does. " +
 					"While you drive, a small badge in a corner shows whether you're spec, and a message pops up if something isn't.",
 				Tab = 0,
@@ -401,6 +419,14 @@ namespace TRC.TuneLoader {
 				Title = "Backups",
 				Text = "Whenever a TRC tune replaces your own tune, your tune is saved here first. Restore puts it back.",
 				Tab = 4,
+			},
+			new TourStep {
+				Title = "Time attack",
+				Text = "Courses here lists the courses on the map you're driving: official TRC courses and your own. " +
+					"Press Time attack, stop behind the start line, and a 3-2-1-GO countdown starts your run. Teleport to start puts you back on the line. " +
+					"Battle challenges another TRC Tune Loader player in the room to a side-by-side race or a cat and mouse, with a 3-2-1-GO on both screens at once. " +
+					"My times keeps your best times for each car and tune set, and the Course builder lets you make your own practice courses.",
+				Tab = CoursesTab,
 			},
 			new TourStep {
 				Title = "Options",
@@ -452,7 +478,7 @@ namespace TRC.TuneLoader {
 			try {
 				Kino.Prefs.Set(TourPref, TourVersion);
 			} catch (Exception e) {
-				Kino.Log.Warning($"Couldn't save that the tour was seen: {e.Message}");
+				TrcLog.Warning($"Couldn't save that the tour was seen: {e.Message}");
 			}
 		}
 

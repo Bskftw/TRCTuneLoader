@@ -23,12 +23,16 @@ namespace TRC.TuneLoader {
 	/// </summary>
 	[KSLMeta("TRCTuneLoader", Version, "bskftw")]
 	public partial class TRCTuneLoaderMod : BaseMod {
-		public const string Version = "0.9.0";
+		public const string Version = "0.10.0";
 
 		private const string BackupsFolderName = "Backups";
 		private const float CarRefreshSeconds = 1.0f;
 		private const float PlayersRefreshSeconds = 2.0f;
 		private const float ReportRequestSeconds = 15.0f;
+		private const float ReferenceCheckSeconds = 2.0f;
+
+		/// <summary>How long the car is on the main garage screen before its live reference is recorded on its own.</summary>
+		private const float GarageReferenceSeconds = 2.0f;
 
 		private readonly OfficialTunes official_ = new OfficialTunes();
 		private readonly ModCheck modCheck_ = new ModCheck();
@@ -42,6 +46,11 @@ namespace TRC.TuneLoader {
 
 		private string lastResult_ = "";
 		private List<string> lastDiffs_ = new List<string>();
+
+		private float nextReferenceCheck_;
+		private string referencePlace_ = "";
+		private float referenceSince_;
+		private string lastReferenceResult_ = "";
 
 		/// <summary>The tune set the player picked to apply (the main set unless they pick another).</summary>
 		private string chosenSet_ = TuneSets.Main.Id;
@@ -95,19 +104,26 @@ namespace TRC.TuneLoader {
 
 		private void Start() {
 			modFolder_ = GetModFolder();
+			TrcLog.Start(modFolder_, $"TRC Tune Loader {Version} log, started {DateTime.Now:yyyy-MM-dd HH:mm:ss}. KSL's own log is kino/output.log.");
 			adapter_ = new CarXTuneAdapter();
 
 			official_.Load();
 			string perSet = string.Join(", ", official_.Sets.Select(s => $"{TuneSets.NameOf(s)}: {official_.Tunes.Count(t => t.SetId == s)}"));
-			Kino.Log.Info($"TRC Tune Loader {Version} started with {official_.Tunes.Count} official tune(s) ({perSet}).");
+			TrcLog.Info($"TRC Tune Loader {Version} started with {official_.Tunes.Count} official tune(s) ({perSet}).");
 			foreach (string error in official_.Errors) {
-				Kino.Log.Warning($"Official tune problem: {error}");
+				TrcLog.Warning($"Official tune problem: {error}");
 			}
 
 			sync_ = new TrcSync(BuildOwnReport);
 			sync_.Start();
-			Kino.Log.Info(sync_.Status);
+			TrcLog.Info(sync_.Status);
 
+			try {
+				SetupCourses();
+				SetupBattles();
+			} catch (Exception e) {
+				TrcLog.Error(e);
+			}
 			SetupWindow();
 		}
 
@@ -122,20 +138,50 @@ namespace TRC.TuneLoader {
 					StartTourWhenReady();
 				} catch (Exception e) {
 					tourSeen_ = true;
-					Kino.Log.Error(e);
+					TrcLog.Error(e);
 				}
+			}
+			try {
+				UpdateLiveReference();
+			} catch (Exception e) {
+				nextReferenceCheck_ = Time.unscaledTime + 30f;
+				TrcLog.Error(e);
 			}
 			try {
 				UpdateTrackStatus();
 			} catch (Exception e) {
 				showBadge_ = false;
 				autoCheck_ = false;
-				Kino.Log.Error(e);
+				TrcLog.Error(e);
+			}
+			try {
+				UpdateCourses();
+			} catch (Exception e) {
+				if (run_ != null) {
+					run_.Cancel($"Time attack problem: {e.Message}");
+				}
+				hasPose_ = false;
+				// It runs every frame: only the first few errors go to the log.
+				if (courseErrors_++ < 3) {
+					TrcLog.Error(e);
+				}
+			}
+			try {
+				UpdateBattles();
+			} catch (Exception e) {
+				if (battle_ != null && battle_.Active) {
+					battle_.Leave(BattleNow);
+					battleResult_ = $"Battle problem: {e.Message}";
+				}
+				if (courseErrors_++ < 6) {
+					TrcLog.Error(e);
+				}
 			}
 		}
 
 		private void OnDestroy() {
 			CloseWindow();
+			CleanUpCourses();
 		}
 
 		/// <summary>The KSL menu page: a launcher for the TRC window.</summary>
@@ -190,16 +236,16 @@ namespace TRC.TuneLoader {
 
 				if (intoDyno) {
 					lastResult_ = $"Loaded {tune.DisplayName} into CarX's tuning screen. To keep it, leave the tuning screen and choose Yes when CarX asks to save. {backupNote}";
-					Kino.Log.Info($"Loaded {tune.DisplayName} ({tune.Fingerprint}) into the dyno for {car_.Describe()}. {backupNote}");
+					TrcLog.Info($"Loaded {tune.DisplayName} ({tune.Fingerprint}) into the dyno for {car_.Describe()}. {backupNote}");
 					return;
 				}
 
-				Kino.Log.Info($"Applied {tune.DisplayName} ({tune.Fingerprint}) to {car_.Describe()}. {backupNote}");
+				TrcLog.Info($"Applied {tune.DisplayName} ({tune.Fingerprint}) to {car_.Describe()}. {backupNote}");
 				CheckOwnCarFromMenu();
 				lastResult_ = $"Applied {tune.DisplayName}. {backupNote} Check: {lastResult_}";
 			} catch (Exception e) {
 				lastResult_ = $"Couldn't apply: {e.Message}";
-				Kino.Log.Error(e);
+				TrcLog.Error(e);
 			}
 		}
 
@@ -234,7 +280,7 @@ namespace TRC.TuneLoader {
 			} else {
 				string path = TuneBackups.Save(BackupsFolder, car_, current, backupNote, adapter_);
 				backupResult = "Your previous tune is in Backups.";
-				Kino.Log.Info($"Backed up {car_.Describe()} to {path}");
+				TrcLog.Info($"Backed up {car_.Describe()} to {path}");
 				PruneBackups();
 			}
 
@@ -276,19 +322,19 @@ namespace TRC.TuneLoader {
 				lastDiffs_.AddRange(check.LiveDifferences);
 				lastResult_ = Summarize(check);
 
-				Kino.Log.Info($"Check on {car_.Describe()}: {lastResult_}");
+				TrcLog.Info($"Check on {car_.Describe()}: {lastResult_}");
 				foreach (string diff in lastDiffs_) {
-					Kino.Log.Info($"  {diff}");
+					TrcLog.Info($"  {diff}");
 				}
 				if (check.Drivetrain != null) {
-					Kino.Log.Info("  Physics engine / car description:");
+					TrcLog.Info("  Physics engine / car description:");
 					foreach (string line in check.Drivetrain.PhysicsLines) {
-						Kino.Log.Info($"    {line}");
+						TrcLog.Info($"    {line}");
 					}
 				}
 			} catch (Exception e) {
 				lastResult_ = $"Check failed: {e.Message}";
-				Kino.Log.Error(e);
+				TrcLog.Error(e);
 			}
 		}
 
@@ -353,6 +399,57 @@ namespace TRC.TuneLoader {
 			return check;
 		}
 
+		/// <summary>
+		/// Records the live check's reference without the player pressing Check, every time a car with an official
+		/// saved setup has none yet this session: on the main garage screen the way Check does (CarX puts the saved
+		/// setup back on the car first), or, for a car that went straight to the track (joining a room, swapping car
+		/// in one), from the car CarX built there, a few seconds after it arrives.
+		/// </summary>
+		private void UpdateLiveReference() {
+			if (Time.unscaledTime < nextReferenceCheck_) {
+				return;
+			}
+			nextReferenceCheck_ = Time.unscaledTime + ReferenceCheckSeconds;
+			if (!RefreshCar() || car_.InDyno) {
+				referencePlace_ = "";
+				return;
+			}
+
+			// Wait until the car has been in the same place (garage or track) for a moment, so CarX has finished building it.
+			string place = $"{car_.CarId}:{car_.SlotId}:{(car_.InGarage ? "garage" : "track")}";
+			if (place != referencePlace_) {
+				referencePlace_ = place;
+				referenceSince_ = Time.unscaledTime;
+				return;
+			}
+			if (Time.unscaledTime - referenceSince_ < (car_.InGarage ? GarageReferenceSeconds : ArrivalCheckSeconds)) {
+				return;
+			}
+
+			if (!adapter_.TryReadCurrentTune(car_, out var current, out _)) {
+				return;
+			}
+			TuneFile official = MatchingOfficial(current);
+			if (official == null || adapter_.HasReference(car_, official.Fingerprint)) {
+				return;
+			}
+
+			bool recorded = car_.InGarage
+				? adapter_.TryRecordReference(car_, official.Fingerprint, out string error)
+				: adapter_.TryRecordReferenceOnTrack(car_, official.Fingerprint, out error);
+			string result = recorded
+				? $"Live check reference recorded {(car_.InGarage ? "in the garage" : "when the car reached the track")} for {car_.Describe()} ({official.Name}, {official.Fingerprint})."
+				: $"Live check reference for {car_.Describe()} not recorded yet: {error}";
+			// A garage screen that isn't the main one fails every few seconds; say so once.
+			if (result != lastReferenceResult_) {
+				lastReferenceResult_ = result;
+				TrcLog.Info(result);
+			}
+			if (recorded) {
+				nextStatusRefresh_ = 0;
+			}
+		}
+
 		/// <summary>"TRC Revival", or "TRC Revival (same tune as TRC V2.0)" when other sets have the identical tune.</summary>
 		private string SetLabel(TuneFile tune) {
 			if (!int.TryParse(tune.CarId, out int carId) || !int.TryParse(tune.SlotId, out int slotId)) {
@@ -378,7 +475,7 @@ namespace TRC.TuneLoader {
 				return $"Not TRC spec: your saved setup matches no official set; {check.Saved.Differences.Count} difference(s) from {set}.{extra} Your code: {code}";
 			}
 			if (check.StanceDifferences.Count > 0) {
-				return $"Not TRC spec: your saved setup is {set} spec, but a body kit changes the car's stance (see below).{extra} Code of the saved setup: {code}";
+				return $"Not TRC spec: your saved setup is {set} spec, but the car's stance (ride height, track width or axles) isn't stock (see below).{extra} Code of the saved setup: {code}";
 			}
 			if (check.DrivetrainChanged) {
 				return $"Not TRC spec: your saved setup is {set} spec, but {DrivetrainProblem(check.Drivetrain)} (see below).{extra} Code of the saved setup: {code}";
@@ -393,7 +490,7 @@ namespace TRC.TuneLoader {
 
 		private static string DrivetrainProblem(DrivetrainCheck drivetrain) => drivetrain.EngineSwap
 			? "a CarX engine swap is installed"
-			: "the engine, gearbox or drivetrain was changed outside CarX's tuning (a KINO swap or another mod)";
+			: "the engine, gearbox, drivetrain or suspension was changed outside CarX's tuning (a KINO swap or air suspension, or another mod)";
 
 		private string DescribeValue(int slotId, string key, float value) {
 			var single = new Dictionary<string, float> { [key] = value };
@@ -433,7 +530,7 @@ namespace TRC.TuneLoader {
 				}
 			} catch (Exception e) {
 				lines.Add($"Couldn't read the real numbers: {e.Message}");
-				Kino.Log.Error(e);
+				TrcLog.Error(e);
 			}
 			return lines;
 		}
@@ -462,7 +559,7 @@ namespace TRC.TuneLoader {
 				players_ = players.Select(CheckPlayer).ToList();
 			} catch (Exception e) {
 				playersError_ = $"Couldn't read the room: {e.Message}";
-				Kino.Log.Error(e);
+				TrcLog.Error(e);
 			}
 		}
 
@@ -504,10 +601,10 @@ namespace TRC.TuneLoader {
 			}
 
 			if (DrivetrainChanged(player)) {
-				row.SetupText += " · engine/gearbox changed outside CarX";
+				row.SetupText += " · engine, gearbox or suspension changed outside CarX";
 			}
 			if (player.StanceDifferences.Count > 0) {
-				row.SetupText += player.Workshop.Exists(w => w.MovesWheels) ? " · Workshop body changes the stance" : " · body kit changes the stance";
+				row.SetupText += player.Workshop.Exists(w => w.MovesWheels) ? " · Workshop body changes the stance" : " · stance not stock";
 			} else if (UnknownWorkshop(player)) {
 				row.SetupText += " · Workshop body, stance unknown";
 			} else if (player.Workshop.Count > 0) {
@@ -569,7 +666,7 @@ namespace TRC.TuneLoader {
 
 				return report;
 			} catch (Exception e) {
-				Kino.Log.Error(e);
+				TrcLog.Error(e);
 				return null;
 			}
 		}
@@ -583,7 +680,7 @@ namespace TRC.TuneLoader {
 			} catch (Exception e) {
 				backups_ = new List<TuneFile>();
 				backupResult_ = $"Couldn't read backups: {e.Message}";
-				Kino.Log.Error(e);
+				TrcLog.Error(e);
 			}
 		}
 
@@ -596,10 +693,10 @@ namespace TRC.TuneLoader {
 				List<TuneFile> old = TuneBackups.OverLimit(BackupsFolder, backupsKeep_).Where(b => b.IsFor(car_.CarId, car_.SlotId)).ToList();
 				int deleted = TuneBackups.Delete(old);
 				if (deleted > 0) {
-					Kino.Log.Info($"Deleted {deleted} old backup(s) of {car_.Describe()} (keeping the last {backupsKeep_}).");
+					TrcLog.Info($"Deleted {deleted} old backup(s) of {car_.Describe()} (keeping the last {backupsKeep_}).");
 				}
 			} catch (Exception e) {
-				Kino.Log.Error(e);
+				TrcLog.Error(e);
 			}
 		}
 
@@ -616,11 +713,11 @@ namespace TRC.TuneLoader {
 					: intoDyno
 						? $"Loaded {backup.Name} into CarX's tuning screen. Leave it and choose Yes to save. {backupNote}"
 						: $"Restored {backup.Name}. {backupNote}";
-				Kino.Log.Info($"Restore {backup.Name} on {car_.Describe()}: {backupResult_}");
+				TrcLog.Info($"Restore {backup.Name} on {car_.Describe()}: {backupResult_}");
 				RefreshBackups();
 			} catch (Exception e) {
 				backupResult_ = $"Couldn't restore: {e.Message}";
-				Kino.Log.Error(e);
+				TrcLog.Error(e);
 			}
 		}
 
@@ -630,7 +727,7 @@ namespace TRC.TuneLoader {
 			try {
 				official_.NameCars(adapter_);
 			} catch (Exception e) {
-				Kino.Log.Error(e);
+				TrcLog.Error(e);
 			}
 		}
 

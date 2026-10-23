@@ -96,7 +96,7 @@ namespace TRC.TuneLoader {
 				Status = "Sharing with other TRC Tune Loader users in the room.";
 			} catch (Exception e) {
 				Status = $"Sharing isn't available: {e.Message}";
-				Kino.Log.Error(e);
+				TrcLog.Error(e);
 			}
 		}
 
@@ -119,7 +119,7 @@ namespace TRC.TuneLoader {
 				Kino.Sync.SendToAll(packet);
 				SendOwnReport(force: true);
 			} catch (Exception e) {
-				Kino.Log.Error(e);
+				TrcLog.Error(e);
 			}
 		}
 
@@ -133,7 +133,7 @@ namespace TRC.TuneLoader {
 			try {
 				SendOwnReport(force: true);
 			} catch (Exception e) {
-				Kino.Log.Error(e);
+				TrcLog.Error(e);
 			}
 		}
 
@@ -143,7 +143,7 @@ namespace TRC.TuneLoader {
 					reportRequested_ = true;
 				}
 			} catch (Exception e) {
-				Kino.Log.Warning($"Ignored a broken TRC request: {e.Message}");
+				TrcLog.Warning($"Ignored a broken TRC request: {e.Message}");
 			}
 		}
 
@@ -234,7 +234,7 @@ namespace TRC.TuneLoader {
 					}
 				}
 			} catch (Exception e) {
-				Kino.Log.Warning($"Ignored a broken TRC report: {e.Message}");
+				TrcLog.Warning($"Ignored a broken TRC report: {e.Message}");
 			}
 		}
 

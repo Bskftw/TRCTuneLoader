@@ -23,6 +23,28 @@
     <Compile Include="..\..\src\KndFile.cs" Link="src\KndFile.cs" />
     <Compile Include="..\..\src\TuneCheck.cs" Link="src\TuneCheck.cs" />
     <Compile Include="..\..\src\DescSnapshot.cs" Link="src\DescSnapshot.cs" />
+    <!-- Courses and time attack, driven by simulated cars in SelfTest.Courses.cs. They use Unity's Vector3, so Unity's core DLL comes from the game. -->
+    <Compile Include="..\..\src\Courses\Course.cs" Link="src\Courses\Course.cs" />
+    <Compile Include="..\..\src\Courses\CourseGeometry.cs" Link="src\Courses\CourseGeometry.cs" />
+    <Compile Include="..\..\src\Courses\CourseFile.cs" Link="src\Courses\CourseFile.cs" />
+    <Compile Include="..\..\src\Courses\CourseLibrary.cs" Link="src\Courses\CourseLibrary.cs" />
+    <Compile Include="..\..\src\Courses\CourseRecorder.cs" Link="src\Courses\CourseRecorder.cs" />
+    <Compile Include="..\..\src\Courses\TimeAttackRun.cs" Link="src\Courses\TimeAttackRun.cs" />
+    <Compile Include="..\..\src\Courses\TimeAttackLog.cs" Link="src\Courses\TimeAttackLog.cs" />
+    <Compile Include="..\..\src\Battles\BattleMessage.cs" Link="src\Battles\BattleMessage.cs" />
+    <Compile Include="..\..\src\Battles\BattleRules.cs" Link="src\Battles\BattleRules.cs" />
+    <Compile Include="..\..\src\Battles\BattleSession.cs" Link="src\Battles\BattleSession.cs" />
+    <Compile Include="..\..\src\TuneBackups.cs" Link="src\TuneBackups.cs" />
+    <Compile Include="..\..\src\ICarTuneAdapter.cs" Link="src\ICarTuneAdapter.cs" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <CarXPath>D:\SteamLibrary\steamapps\common\CarX Drift Racing Online</CarXPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>$(CarXPath)\Drift Racing Online_Data\Managed\UnityEngine.CoreModule.dll</HintPath>
+    </Reference>
   </ItemGroup>
 
 </Project>

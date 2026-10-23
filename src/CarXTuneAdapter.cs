@@ -318,11 +318,29 @@ namespace TRC.TuneLoader {
 			}
 		}
 
+		public bool HasReference(CarInfo car, string tuneCode) =>
+			car != null && references_.TryGetValue(ReferenceKey(car), out DescSnapshot reference) && reference.TuneCode == tuneCode;
+
+		public bool TryRecordReferenceOnTrack(CarInfo car, string tuneCode, out string error) {
+			try {
+				RaceCar raceCar = FindPlayerCar(out bool inGarage);
+				if (inGarage || raceCar == null || CarIdOf(raceCar) != car.CarId) {
+					error = "Not on the track with this car.";
+					return false;
+				}
+				RecordReference(car, raceCar, tuneCode);
+				error = "";
+				return true;
+			} catch (Exception e) {
+				return Failed(e, out error);
+			}
+		}
+
 		public bool TryCheckLive(CarInfo car, string tuneCode, out List<string> differences, out string note) {
 			differences = new List<string>();
 			try {
 				if (!references_.TryGetValue(ReferenceKey(car), out DescSnapshot reference) || reference.TuneCode != tuneCode) {
-					note = "No live reference for this car yet: press Check once in the garage with it.";
+					note = "The live car is recorded a few seconds after it reaches the garage or the track: give it a moment.";
 					return false;
 				}
 
@@ -456,6 +474,143 @@ namespace TRC.TuneLoader {
 			}
 		}
 
+		private bool poseFailureLogged_;
+
+		public bool TryGetCarPose(out CarPose pose) {
+			pose = default;
+			try {
+				if (!(States.mainCurrent is BaseRaceModeState race) || race.userCar == null || race.userCar.isNetworkCar) {
+					return false;
+				}
+
+				RaceCar raceCar = race.userCar;
+				Transform body = raceCar.carX != null ? raceCar.carX.transform : raceCar.transform;
+				pose.Position = body.position;
+				pose.Forward = body.forward;
+				pose.SpeedKmh = raceCar.carX != null ? Mathf.Abs(raceCar.carX.speedKMH) : 0f;
+				pose.CarId = CarIdOf(raceCar);
+				return true;
+			} catch (Exception e) {
+				// Called every frame: log the first failure only.
+				if (!poseFailureLogged_) {
+					poseFailureLogged_ = true;
+					TrcLog.Error(e);
+				}
+				return false;
+			}
+		}
+
+		/// <summary>How far down (metres) the road is looked for under the car: deep enough for any jump.</summary>
+		private const float RoadRayLength = 60f;
+
+		private readonly RaycastHit[] roadHits_ = new RaycastHit[32];
+		private readonly Vector3[] footprintPoints_ = new Vector3[5];
+		private int footprintCar_ = -1;
+
+		/// <summary>Half the car's width and length (metres), a little inside its body, for the corners checked over the road.</summary>
+		private Vector2 footprint_ = new Vector2(0.8f, 1.8f);
+
+		public bool TryCheckOverRoad(ICollection<int> roadColliders, out bool overRoad) {
+			overRoad = false;
+			try {
+				if (!(States.mainCurrent is BaseRaceModeState race) || race.userCar == null || race.userCar.isNetworkCar) {
+					return false;
+				}
+				RaceCar raceCar = race.userCar;
+				Transform body = raceCar.carX != null ? raceCar.carX.transform : raceCar.transform;
+
+				// The car's size, once per car (its description is costly to read every frame).
+				int carId = CarIdOf(raceCar);
+				if (carId != footprintCar_) {
+					footprintCar_ = carId;
+					Vector3 extents = raceCar.GetDesc().carXDesc.weight.bounds.extents;
+					footprint_ = extents.x > 0.4f && extents.z > 1f ? new Vector2(extents.x * 0.9f, extents.z * 0.9f) : new Vector2(0.8f, 1.8f);
+				}
+
+				// The middle and the four corners, each straight down, through anything in between (a tree, a sign):
+				// any of them above the course's road counts, so being in the air over the road is still on it.
+				Vector3 middle = body.position;
+				Vector3 right = body.right * footprint_.x;
+				Vector3 ahead = body.forward * footprint_.y;
+				footprintPoints_[0] = middle;
+				footprintPoints_[1] = middle + right + ahead;
+				footprintPoints_[2] = middle - right + ahead;
+				footprintPoints_[3] = middle + right - ahead;
+				footprintPoints_[4] = middle - right - ahead;
+				foreach (Vector3 point in footprintPoints_) {
+					int count = Physics.RaycastNonAlloc(point + Vector3.up * 2f, Vector3.down, roadHits_, RoadRayLength, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+					for (int i = 0; i < count; i++) {
+						Collider collider = roadHits_[i].collider;
+						if (collider != null && roadColliders.Contains(collider.GetInstanceID())) {
+							overRoad = true;
+							return true;
+						}
+					}
+				}
+				return true;
+			} catch (Exception) {
+				// Called every frame: a failure only means the road check is skipped.
+				return false;
+			}
+		}
+
+		public bool TryMoveCarTo(Vector3 position, Vector3 forward, out string error) {
+			try {
+				if (!(States.mainCurrent is BaseRaceModeState race) || race.userCar == null || race.userCar.isNetworkCar) {
+					error = "Drive onto the map first.";
+					return false;
+				}
+				// The same rules as CarX's own respawn key (PlayerCarControl.TryRespawnCar).
+				PlayerCarControl control = PlayerCarControl.instance;
+				if (!race.allowCarRespawnInRace || (control != null && !control.canSpawnCarInMPRace)) {
+					error = "CarX doesn't allow moving the car right now.";
+					return false;
+				}
+				RaceCar raceCar = race.userCar;
+				if (raceCar.lockState || raceCar.carPlacementModel == null) {
+					error = "The car can't be moved right now.";
+					return false;
+				}
+
+				// CarX's own placement: puts the car on the road below the point, stops it and tells the room.
+				raceCar.carPlacementModel.ResetToPoint(position + Vector3.up, Quaternion.LookRotation(forward, Vector3.up));
+				error = "";
+				return true;
+			} catch (Exception e) {
+				return Failed(e, out error);
+			}
+		}
+
+		public bool TryGetMap(out MapInfo map, out string error) {
+			map = null;
+			try {
+				DB.Meta.Track track = (States.mainCurrent as BaseRaceState)?.trackMeta;
+				if (track == null) {
+					error = "Not on a map.";
+					return false;
+				}
+
+				if (track.external) {
+					bool modIo = track.ugcServiceId == (byte)Services.UGC.Interfaces.IUGCManager.ServiceProvider.ModIO;
+					string id = track.externalId.ToString(CultureInfo.InvariantCulture);
+					string name = Clean(track.name);
+					map = new MapInfo {
+						Key = $"{(modIo ? "modio" : "workshop")}:{id}",
+						Name = name.Length > 0 ? name : $"{(modIo ? "mod.io" : "Steam Workshop")} map {id}",
+						External = true,
+					};
+				} else {
+					string id = track.id.ToString(CultureInfo.InvariantCulture);
+					string name = Clean(track.name);
+					map = new MapInfo { Key = $"carx:{id}", Name = name.Length > 0 ? name : $"CarX track {id}" };
+				}
+				error = "";
+				return true;
+			} catch (Exception e) {
+				return Failed(e, out error);
+			}
+		}
+
 		/// <summary>
 		/// Has CarX put a saved setup on the garage car, then lets the car settle on it. CarX applies a
 		/// tune on the stock wheel positions and then lets body parts move them (widebody kits), so the
@@ -549,19 +704,75 @@ namespace TRC.TuneLoader {
 				return new List<string>();
 			}
 
-			List<string> differences = new Stance(raceCar.GetDesc()).DifferencesFrom(stock);
-			if (differences.Count > 0 && installedParts != null) {
+			BaseCar.Desc live = raceCar.GetDesc();
+			List<string> differences = new Stance(live).DifferencesFrom(stock);
+			AddWheelHeights(differences, raceCar, live.baseY, stock.BaseY);
+			if (differences.Count == 0) {
+				return differences;
+			}
+
+			bool partFound = false;
+			if (installedParts != null) {
 				HashSet<int> defaultParts = DefaultParts(carId);
 				foreach (var part in Customization.CarPartDatabase.ConvertToPartList(installedParts)) {
 					if (part != null && !defaultParts.Contains(part.id) && part.cmds != null && part.cmds.Exists(Stance.MovesWheels)) {
 						string name = Clean(string.IsNullOrEmpty(part.description) ? part.type : part.description);
 						string workshop = part.external ? $", Workshop item {part.packetid}" : "";
 						differences.Add($"Body kit part that moves the wheels: {name} ({part.type}{workshop})");
+						partFound = true;
 					}
 				}
 			}
-
+			if (!partFound) {
+				differences.Add("No body kit part on the car explains this, so it was changed outside CarX (KINO's air suspension or hydraulics, or another mod).");
+			}
 			return differences;
+		}
+
+		private static readonly (CarX.WheelIndex Index, string Name)[] Wheels = {
+			(CarX.WheelIndex.FrontLeft, "front left"),
+			(CarX.WheelIndex.FrontRight, "front right"),
+			(CarX.WheelIndex.RearLeft, "rear left"),
+			(CarX.WheelIndex.RearRight, "rear right"),
+		};
+
+		/// <summary>
+		/// Each wheel's mounting height in the physics engine. CarX sets all four to the body's ride height (the
+		/// description only reads it back from the rear left wheel), and body kits move all four together, which
+		/// the body ride height line already covers. A wheel at another height than the rest, like KINO's air
+		/// suspension or hydraulics can leave, is listed here, against the stock ride height.
+		/// </summary>
+		private static void AddWheelHeights(List<string> differences, RaceCar raceCar, float liveBaseY, float stockBaseY) {
+			CarX.Car physics = raceCar.carX;
+			if (physics == null) {
+				return;
+			}
+			foreach (var (index, name) in Wheels) {
+				float y = physics.GetWheel(index).topPos.y;
+				float fromBody = (y - liveBaseY) * 1000f;
+				float fromStock = (y - stockBaseY) * 1000f;
+				if (Math.Abs(fromBody) >= 0.5f && Math.Abs(fromStock) >= 0.5f) {
+					differences.Add($"Stance: ride height at the {name} wheel {(fromStock > 0 ? "+" : "")}{fromStock:0} mm ({y * 1000f:0} mm, stock {stockBaseY * 1000f:0} mm)");
+				}
+			}
+		}
+
+		/// <summary>The physics engine's own suspension values for each wheel, for the live check's reference.</summary>
+		private static void AddWheelPhysics(IDictionary<string, object> values, RaceCar raceCar) {
+			CarX.Car physics = raceCar.carX;
+			if (physics == null) {
+				return;
+			}
+			foreach (var (index, _) in Wheels) {
+				CarX.Wheel wheel = physics.GetWheel(index);
+				Vector3 top = wheel.topPos;
+				string name = $"wheels.{index}";
+				values[$"{name}.topPos.x"] = top.x;
+				values[$"{name}.topPos.y"] = top.y;
+				values[$"{name}.topPos.z"] = top.z;
+				values[$"{name}.maxSpringLen"] = wheel.maxSpringLen;
+				values[$"{name}.springCoef"] = wheel.springCoef;
+			}
 		}
 
 		/// <summary>CarX's base car data for the setup plus what the stock body parts do to the wheel positions, or null.</summary>
@@ -783,6 +994,10 @@ namespace TRC.TuneLoader {
 							expected.Values[DrivetrainKey] = DrivetrainName(expectedType);
 							break;
 						default:
+							if (SuspensionKey(parameter.type) is string suspension) {
+								expected.Values[suspension] = real;
+								break;
+							}
 							int gear = (int)parameter.type - (int)ParameterType.Gear1;
 							if (gear >= 0 && gear < 12 && gear < gears) {
 								expected.Values[GearKey(gear)] = real;
@@ -831,7 +1046,42 @@ namespace TRC.TuneLoader {
 			values[DrivetrainKey] = DrivetrainName(desc.transmission.gearType);
 			values["Clutch max torque"] = desc.transmission.clutchMaxTorque;
 			values["Transmission loss"] = desc.transmission.transmissionLossCoef;
+
+			AddSuspension(values, "Front", desc.frontSuspension);
+			AddSuspension(values, "Rear", desc.rearSuspension);
 			return snapshot;
+		}
+
+		/// <summary>
+		/// The suspension values CarX sets from the tune (ApplyAdvancedProfile). KINO's air suspension and hydraulics
+		/// change these (seen in game: front stiffness, fast bump, fast rebound and slow bump), so they're compared too.
+		/// </summary>
+		private static void AddSuspension(IDictionary<string, object> values, string axle, CarX.CarDesc.Suspension suspension) {
+			values[$"{axle} spring travel"] = suspension.springLength;
+			values[$"{axle} spring stiffness"] = suspension.stiffness;
+			values[$"{axle} fast bump"] = suspension.fastBump;
+			values[$"{axle} fast rebound"] = suspension.fastRebound;
+			values[$"{axle} slow bump"] = suspension.slowBump;
+			values[$"{axle} slow rebound"] = suspension.slowRebound;
+		}
+
+		/// <summary>The suspension value a tune setting sets, as named in <see cref="AddSuspension"/>, or null.</summary>
+		private static string SuspensionKey(ParameterType type) {
+			switch (type) {
+				case ParameterType.FrontSpringWay: return "Front spring travel";
+				case ParameterType.FrontSpringStiffness: return "Front spring stiffness";
+				case ParameterType.FrontFastBump: return "Front fast bump";
+				case ParameterType.FrontFastRebound: return "Front fast rebound";
+				case ParameterType.FrontSlowBump: return "Front slow bump";
+				case ParameterType.FrontSlowRebound: return "Front slow rebound";
+				case ParameterType.RearSpringWay: return "Rear spring travel";
+				case ParameterType.RearSpringStiffness: return "Rear spring stiffness";
+				case ParameterType.RearFastBump: return "Rear fast bump";
+				case ParameterType.RearFastRebound: return "Rear fast rebound";
+				case ParameterType.RearSlowBump: return "Rear slow bump";
+				case ParameterType.RearSlowRebound: return "Rear slow rebound";
+				default: return null;
+			}
 		}
 
 		private static string DrivetrainName(CarX.GearType type) {
@@ -879,6 +1129,17 @@ namespace TRC.TuneLoader {
 				int gear = i + 1;
 				Add($"Gear {gear} ratio", () => physics.GetGearRatio(gear), gears[i]);
 			}
+
+			// No description value to set these against: logged to learn what KINO's air suspension and hydraulics change.
+			foreach (var (index, name) in Wheels) {
+				try {
+					CarX.Wheel wheel = physics.GetWheel(index);
+					lines.Add($"Wheel {name}: top {Format(wheel.topPos.x)}, {Format(wheel.topPos.y)}, {Format(wheel.topPos.z)}; " +
+						$"spring length {Format(wheel.maxSpringLen)}, spring {Format(wheel.springCoef)}, helper length {Format(wheel.maxHelperLength)}, helper {Format(wheel.helperCoef)}, radius {Format(wheel.radius)}");
+				} catch (Exception e) {
+					lines.Add($"Wheel {name}: couldn't read ({e.GetType().Name})");
+				}
+			}
 			return lines;
 		}
 
@@ -888,7 +1149,7 @@ namespace TRC.TuneLoader {
 		private static void AddStanceDifference(List<string> differences, string name, float live, float stock) {
 			float deltaMm = (live - stock) * 1000f;
 			if (Math.Abs(deltaMm) >= 0.5f) {
-				differences.Add($"Body kit: {name} {(deltaMm > 0 ? "+" : "")}{deltaMm:0} mm ({live * 1000f:0} mm, stock {stock * 1000f:0} mm)");
+				differences.Add($"Stance: {name} {(deltaMm > 0 ? "+" : "")}{deltaMm:0} mm ({live * 1000f:0} mm, stock {stock * 1000f:0} mm)");
 			}
 		}
 
@@ -915,11 +1176,16 @@ namespace TRC.TuneLoader {
 			return ignored;
 		}
 
-		private static DescSnapshot SnapshotOf(RaceCar raceCar) =>
-			DescSnapshot.Of(raceCar.GetDesc(), new Dictionary<string, object> {
+		private static DescSnapshot SnapshotOf(RaceCar raceCar) {
+			var extra = new Dictionary<string, object> {
 				["frontBaseOffset"] = raceCar.frontBaseOffset,
 				["rearBaseOffset"] = raceCar.rearBaseOffset,
-			});
+			};
+			// The physics engine's own wheel values too: a mod that changes the suspension there (not in the
+			// description) shows up as a difference.
+			AddWheelPhysics(extra, raceCar);
+			return DescSnapshot.Of(raceCar.GetDesc(), extra);
+		}
 
 		private static string ReferenceKey(CarInfo car) => $"{car.CarId}:{car.SlotId}";
 
@@ -1038,7 +1304,7 @@ namespace TRC.TuneLoader {
 
 		private static bool Failed(Exception e, out string error) {
 			error = $"CarX connection problem: {e.GetType().Name}: {e.Message}";
-			KSL.API.Kino.Log.Error(e);
+			TrcLog.Error(e);
 			return false;
 		}
 

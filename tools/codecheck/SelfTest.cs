@@ -2,9 +2,10 @@ using System;
 using System.Collections.Generic;
 
 namespace TRC.TuneLoader.CodeCheck {
-	/// <summary>Checks of TuneCheck, the "Check my current tune" logic. Run with "CodeCheck.exe --selftest".</summary>
-	internal static class SelfTest {
+	/// <summary>Checks of TuneCheck, the "Check my current tune" logic, and of courses and time attack. Run with "CodeCheck.exe --selftest".</summary>
+	internal static partial class SelfTest {
 		private static int failures_;
+		private static int checks_;
 
 		public static int Run() {
 			var official = Dict(("front_camber", 0.8f), ("rear_toe", 0.25f));
@@ -43,8 +44,10 @@ namespace TRC.TuneLoader.CodeCheck {
 			Expect(!missing.Matches && missing.Differences.Count == 1, "a setting the car doesn't have is reported");
 
 			LiveSnapshotTests();
+			CourseTests();
+			BattleTests();
 
-			Console.WriteLine(failures_ == 0 ? "Self-test OK" : $"Self-test FAILED: {failures_} problem(s)");
+			Console.WriteLine(failures_ == 0 ? $"Self-test OK ({checks_} checks)" : $"Self-test FAILED: {failures_} of {checks_} checks");
 			return failures_ == 0 ? 0 : 1;
 		}
 
@@ -92,6 +95,7 @@ namespace TRC.TuneLoader.CodeCheck {
 		}
 
 		private static void Expect(bool condition, string what) {
+			checks_++;
 			if (!condition) {
 				failures_++;
 				Console.WriteLine($"FAILED: {what}");

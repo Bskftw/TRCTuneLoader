@@ -1,7 +1,30 @@
 using System.Collections.Generic;
 using System.Globalization;
+using UnityEngine;
 
 namespace TRC.TuneLoader {
+	/// <summary>Where the player's car is and how fast it goes, while driving.</summary>
+	public struct CarPose {
+		public Vector3 Position;
+		public Vector3 Forward;
+		public float SpeedKmh;
+		public int CarId;
+	}
+
+	/// <summary>The map the player is on.</summary>
+	public sealed class MapInfo {
+		/// <summary>
+		/// "workshop:&lt;id&gt;" or "modio:&lt;id&gt;" for Workshop and mod.io maps, "carx:&lt;track id&gt;" for CarX's own,
+		/// or a shared key like "project-dream" for a map uploaded more than once (see CourseLibrary.Recognize).
+		/// </summary>
+		public string Key = "";
+		public string Name = "";
+		public bool External;
+
+		/// <summary>The upload's own key when <see cref="Key"/> is a shared one, else "".</summary>
+		public string UploadKey = "";
+	}
+
 	/// <summary>The player's car as the mod sees it.</summary>
 	public sealed class CarInfo {
 		public int CarId;
@@ -118,8 +141,8 @@ namespace TRC.TuneLoader {
 			string drivetrain = string.IsNullOrEmpty(StockDrivetrain) ? Drivetrain : $"{Drivetrain} (CarX drivetrain setting; stock {StockDrivetrain})";
 			string result = EngineSwap ? "not compared"
 				: !Compared ? Note
-				: Differences.Count == 0 ? "engine, gearbox and drivetrain match CarX's own data"
-				: $"{Differences.Count} engine/gearbox/drivetrain value(s) changed outside CarX's tuning (KINO swap or another mod)";
+				: Differences.Count == 0 ? "engine, gearbox, drivetrain and suspension match CarX's own data"
+				: $"{Differences.Count} engine, gearbox, drivetrain or suspension value(s) changed outside CarX's tuning (a KINO swap or air suspension, or another mod)";
 			return $"{Engine} · {drivetrain} · {result}";
 		}
 	}
@@ -185,6 +208,16 @@ namespace TRC.TuneLoader {
 		/// </summary>
 		bool TryCheckLive(CarInfo car, string tuneCode, out List<string> differences, out string note);
 
+		/// <summary>True when a live reference for this car, setup and tune code was recorded this session.</summary>
+		bool HasReference(CarInfo car, string tuneCode);
+
+		/// <summary>
+		/// On the track: records the car CarX built there as the live reference for this tune code (for a car
+		/// that went straight to the track, like joining a room or swapping car in one). Call it only when the
+		/// saved setup is the official one, shortly after the car arrives.
+		/// </summary>
+		bool TryRecordReferenceOnTrack(CarInfo car, string tuneCode, out string error);
+
 		/// <summary>Everyone in the online room, including the player, with the setups CarX shares.</summary>
 		bool TryGetRoomPlayers(out List<RoomPlayer> players, out string error);
 
@@ -202,6 +235,24 @@ namespace TRC.TuneLoader {
 		/// tune on it (slider positions by setting name, like <see cref="TryReadCurrentTune"/> gives).
 		/// </summary>
 		bool TryCheckDrivetrain(CarInfo car, IDictionary<string, float> tune, out DrivetrainCheck check, out string error);
+
+		/// <summary>Where the player's own car is while driving (false in the garage and menus). Called every frame, so it never logs.</summary>
+		bool TryGetCarPose(out CarPose pose);
+
+		/// <summary>The map the player is driving on.</summary>
+		bool TryGetMap(out MapInfo map, out string error);
+
+		/// <summary>
+		/// Moves the player's own car to a point on the map, facing <paramref name="forward"/>, with CarX's own
+		/// placement (the one its respawn and teleport-to-player use), under the same rules as CarX's respawn.
+		/// </summary>
+		bool TryMoveCarTo(Vector3 position, Vector3 forward, out string error);
+
+		/// <summary>
+		/// Whether any part of the player's car (its middle or a corner) is above one of these road colliders
+		/// (instance IDs), on the road or in the air over it. False when not driving. Called every frame.
+		/// </summary>
+		bool TryCheckOverRoad(ICollection<int> roadColliders, out bool overRoad);
 	}
 
 	/// <summary>
@@ -275,6 +326,13 @@ namespace TRC.TuneLoader {
 			return false;
 		}
 
+		public bool HasReference(CarInfo car, string tuneCode) => false;
+
+		public bool TryRecordReferenceOnTrack(CarInfo car, string tuneCode, out string error) {
+			error = message_;
+			return false;
+		}
+
 		public bool TryGetRoomPlayers(out List<RoomPlayer> players, out string error) {
 			players = new List<RoomPlayer>();
 			error = message_;
@@ -296,6 +354,27 @@ namespace TRC.TuneLoader {
 		public bool TryCheckDrivetrain(CarInfo car, IDictionary<string, float> tune, out DrivetrainCheck check, out string error) {
 			check = null;
 			error = message_;
+			return false;
+		}
+
+		public bool TryGetCarPose(out CarPose pose) {
+			pose = default;
+			return false;
+		}
+
+		public bool TryGetMap(out MapInfo map, out string error) {
+			map = null;
+			error = message_;
+			return false;
+		}
+
+		public bool TryMoveCarTo(Vector3 position, Vector3 forward, out string error) {
+			error = message_;
+			return false;
+		}
+
+		public bool TryCheckOverRoad(ICollection<int> roadColliders, out bool overRoad) {
+			overRoad = false;
 			return false;
 		}
 	}

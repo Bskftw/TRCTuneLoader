@@ -2,6 +2,45 @@
 
 All versions of TRC Tune Loader, newest first. "Not tested in game yet" means the version builds and its automatic tests pass, but nobody has tried it in CarX yet.
 
+## 0.10.0 (Oct 23 2026)
+
+Partly tested in game: the course builder and a time attack on Project Dream worked, and KINO's air suspension and hydraulics were caught by the live check. The rest is not tested yet. The first part of TRC ranked battles: courses and time attack.
+
+**New: Time attack tab**
+- **Courses here**: every course on the map you're driving. Official TRC courses come with the mod; maps can also carry their own start, finish and path objects; and you can make your own practice courses. Each course has a course code, the same for everyone on the same course.
+- **Time attack**: press Time attack, stop behind the start line, and a 3-2-1-GO countdown starts. Moving before GO is a jump start. The clock starts at GO and stops at the finish line, timed to the thousandth. The start and finish lines show on the road when you're within 100 m.
+- **Teleport to start**: puts your car just behind the start line with CarX's own placement and gets the run ready again. Same rules as CarX's respawn.
+- **Timer**: just the time, with a thin line for how far along you are. Drag it anywhere while the window is open; Options puts it back at the top.
+- A run is stopped for a shortcut, leaving the course, resetting the car, changing car or changing the game speed.
+- A time counts as TRC spec when your car is TRC spec at the start and the finish and no mod is flagged.
+- **My times**: your best time on each course for each car and TRC tune set (the same car on two sets has two times), plus how many runs you've done. Every run is saved in `kino\mods\TRCTuneLoader\TimeAttack\runs.csv` with the tune set it used.
+- **Course builder**, one step at a time: set the start line, drive the course, set the finish line, then name and save it. Your own courses are for practice.
+- **Start and finish lines** are drawn in the world (a strip on the road and a post at each end), so your car hides them and they stay put when the camera moves.
+- **Map courses** (Project Dream): TRC start and finish objects in the map make a downhill course and its uphill twin. TRC road objects stop a run when the whole car leaves the road for 0.5 s (in the air above the road still counts as on it). Start and finish signs hidden in the map appear while their course runs. **Record path** learns a map course's road by driving it once.
+
+**New: battles**
+- **Battle** (in the Time attack tab): challenge another TRC Tune Loader player in the room to a **side-by-side race** or a **cat and mouse** on a course of the map. A course of your own goes to them with the challenge.
+- Both line up in their spot (or teleport to it); when both are ready, **3-2-1-GO** shows on both screens at the same moment. A jump start calls the countdown off for both.
+- Race: the faster time wins (closer than 0.1 s is a dead heat). Cat and mouse: the chaser wins by passing and staying ahead to the finish, the leader by finishing 1.5 s or more ahead; otherwise swap places and go again.
+- **TRC spec** battles need both cars TRC spec on the same tune set with no flagged mods; **Open** battles take any setup. Every battle is saved in `battles.csv`.
+
+**New: catching KINO's air suspension and hydraulics**
+- The engine & drivetrain check now also compares the suspension (spring travel, stiffness, fast and slow bump and rebound, front and rear) with CarX's own data plus the tune. In the test, KINO's air suspension and hydraulics changed the front stiffness, bump and rebound.
+- The stance check now looks at all four wheels' heights, not just one, so a single lowered corner shows up too.
+- The live check also compares each wheel's suspension in the physics engine.
+
+**Fixed**
+- Joining a room (or switching car in one) without pressing Check in the garage first left the car "not fully checked". The live check now records what to compare with by itself: on the main garage screen, or a few seconds after the car reaches the track.
+
+**New: About tab**
+- The story of TRC and WingsX, the TRC Ultimate Grip Tunes, Project Dream and what's coming, with a button to the mod's page.
+- The tour starts with a short word about TRC, the tunes and Project Dream. Because the tour changed (TRC intro, Time attack, battles), everyone sees it once more after updating; Skip works as always.
+
+**Changed**
+- The tour has a step for the Time attack tab.
+- Stance messages say the stance isn't stock instead of blaming a body kit, since KINO can change it too.
+- The mod now writes its own log, `kino\mods\TRCTuneLoader\TRCTuneLoader.log` (the last session's is kept as `TRCTuneLoader.previous.log`). Everything still goes to KSL's `kino\output.log` too.
+
 ## 0.9.0 (Oct 22 2026)
 
 Tested in game. New options, picked by TRC.

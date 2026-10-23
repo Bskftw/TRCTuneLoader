@@ -16,7 +16,7 @@ namespace TRC.TuneLoader {
 		private const float WindowWidth = 720f;
 		private const float WindowHeight = 640f;
 		private const float StatusRefreshSeconds = 2.0f;
-		private static readonly string[] TabNames = { "My car", "Tune sets", "Players", "Mod check", "Backups", "Options" };
+		private static readonly string[] TabNames = { "My car", "Tune sets", "Players", "Mod check", "Backups", "Time attack", "Options", "About" };
 
 		// UGUI's EventSystem lives in UnityEngine.UI; found by name so the mod doesn't need that DLL.
 		private static readonly PropertyInfo CurrentEventSystem =
@@ -54,7 +54,7 @@ namespace TRC.TuneLoader {
 			try {
 				logo_ = Kino.Utils.LoadEmbeddedTexture(Assembly.GetExecutingAssembly(), "TRC.TuneLoader.Resources.trc_logo.png");
 			} catch (Exception e) {
-				Kino.Log.Warning($"Couldn't load the TRC logo: {e.Message}");
+				TrcLog.Warning($"Couldn't load the TRC logo: {e.Message}");
 			}
 			LoadOptions();
 		}
@@ -118,7 +118,7 @@ namespace TRC.TuneLoader {
 					RestoreEventSystem();
 				}
 			} catch (Exception e) {
-				Kino.Log.Warning($"Window input: {e.Message}");
+				TrcLog.Warning($"Window input: {e.Message}");
 			}
 		}
 
@@ -133,10 +133,11 @@ namespace TRC.TuneLoader {
 			try {
 				HandleShortcutEvent(Event.current);
 			} catch (Exception e) {
-				Kino.Log.Error(e);
+				TrcLog.Error(e);
 			}
 			bool hud = !windowOpen_ && OnTrack && (showBadge_ || autoCheck_);
-			if (!windowOpen_ && !hud) {
+			bool courseHud = CourseHudVisible;
+			if (!windowOpen_ && !hud && !courseHud) {
 				return;
 			}
 
@@ -152,8 +153,13 @@ namespace TRC.TuneLoader {
 				float screenWidth = Screen.width / scale;
 				float screenHeight = Screen.height / scale;
 
+				if (courseHud) {
+					DrawCourseHud(screenWidth, screenHeight, scale);
+				}
 				if (hud) {
 					DrawHud(screenWidth, screenHeight);
+				}
+				if (!windowOpen_) {
 					return;
 				}
 
@@ -168,7 +174,7 @@ namespace TRC.TuneLoader {
 				windowRect_ = GUI.Window(WindowId, windowRect_, DrawWindow, GUIContent.none, Theme.Window);
 				mouseOverWindow_ = windowRect_.Contains(Event.current.mousePosition);
 			} catch (Exception e) {
-				Kino.Log.Error(e);
+				TrcLog.Error(e);
 			} finally {
 				GUI.skin = previousSkin;
 				GUI.matrix = previousMatrix;
@@ -190,7 +196,9 @@ namespace TRC.TuneLoader {
 					case 2: DrawPlayersTab(); break;
 					case 3: DrawModCheckTab(); break;
 					case 4: DrawBackupsTab(); break;
-					default: DrawOptionsTab(); break;
+					case CoursesTab: DrawCoursesTab(); break;
+					case OptionsTab: DrawOptionsTab(); break;
+					default: DrawAboutTab(); break;
 				}
 			}
 			GUILayout.EndVertical();
@@ -222,7 +230,9 @@ namespace TRC.TuneLoader {
 		private void DrawTabs() {
 			GUILayout.BeginHorizontal(TabArea);
 			for (int i = 0; i < TabNames.Length; i++) {
-				string label = i == 2 && players_.Count > 0 ? $"Players ({players_.Count})" : TabNames[i];
+				string label = i == 2 && players_.Count > 0 ? $"Players ({players_.Count})"
+					: i == CoursesTab && invites_.Count > 0 ? $"{TabNames[i]} ({invites_.Count})"
+					: TabNames[i];
 				if (GUILayout.Button(label, i == tab_ ? Theme.TabActive : Theme.Tab)) {
 					tab_ = i;
 					OnTabOpened(i);
@@ -243,6 +253,7 @@ namespace TRC.TuneLoader {
 				case 2: nextPlayersRefresh_ = 0; nextReportRequest_ = 0; break;
 				case 3: modCheck_.Refresh(); break;
 				case 4: backupResult_ = ""; RefreshBackups(); break;
+				case CoursesTab: deletePending_ = null; break;
 			}
 		}
 
@@ -339,7 +350,7 @@ namespace TRC.TuneLoader {
 				carStatus_ = car_ != null ? CheckOwnCar(recordInGarage: false) : null;
 			} catch (Exception e) {
 				carStatus_ = null;
-				Kino.Log.Error(e);
+				TrcLog.Error(e);
 			}
 		}
 
@@ -353,11 +364,11 @@ namespace TRC.TuneLoader {
 			} else if (!status.Saved.Matches) {
 				GUILayout.Label($"Not TRC spec: {status.Saved.Differences.Count} difference(s) from {status.Official.Name}", Theme.PillBad);
 			} else if (status.StanceDifferences.Count > 0) {
-				GUILayout.Label($"Not TRC spec: {SetLabel(status.Official)} saved, but a body kit changes the car's stance. Press Check my tune for details.", Theme.PillBad);
+				GUILayout.Label($"Not TRC spec: {SetLabel(status.Official)} saved, but the car's stance (ride height, track width or axles) isn't stock. Press Check my tune for details.", Theme.PillBad);
 			} else if (status.DrivetrainChanged) {
 				GUILayout.Label($"Not TRC spec: {SetLabel(status.Official)} saved, but {DrivetrainProblem(status.Drivetrain)}. Press Check my tune for details.", Theme.PillBad);
 			} else if (!status.LiveChecked) {
-				GUILayout.Label($"{SetLabel(status.Official)} spec saved. Press Check my tune in the garage once to verify the live car.", Theme.PillWarn);
+				GUILayout.Label($"{SetLabel(status.Official)} spec saved. The live car is checked a few seconds after it reaches the garage or the track.", Theme.PillWarn);
 			} else if (status.LiveDifferences.Count > 0) {
 				GUILayout.Label($"{SetLabel(status.Official)} saved, but the live car differs in {status.LiveDifferences.Count} place(s)", Theme.PillBad);
 			} else {
@@ -544,7 +555,7 @@ namespace TRC.TuneLoader {
 				lines.Add($"Their own check: setup {(report.SetupOfficial ? $"{report.SetupSet} spec" : $"modified ({report.SetupDifferences})")}, code {report.SetupCode}; " +
 					$"stance {(report.StanceDifferences == 0 ? "stock" : $"changed by a body kit ({report.StanceDifferences})")}; live car {LiveText(report)}");
 				if (!string.IsNullOrEmpty(report.Engine)) {
-					string changed = report.DrivetrainDifferences == 0 ? "matches CarX's own data" : $"<color={Theme.BadHex}>{report.DrivetrainDifferences} value(s) changed outside CarX's tuning (KINO swap or another mod)</color>";
+					string changed = report.DrivetrainDifferences == 0 ? "matches CarX's own data" : $"<color={Theme.BadHex}>{report.DrivetrainDifferences} value(s) changed outside CarX's tuning (a KINO swap or air suspension, or another mod)</color>";
 					lines.Add($"Their engine & drivetrain: {report.Engine}, {report.Drivetrain}; {changed}");
 				}
 				lines.Add($"KSL: all mods verified {(report.AllVerified ? "yes" : "no")}, protected mode {(report.ProtectedMode ? "on" : "off")}");

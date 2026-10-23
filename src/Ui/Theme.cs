@@ -39,7 +39,9 @@ namespace TRC.TuneLoader {
 		public static GUIStyle PillGood, PillBad, PillWarn, PillNeutral;
 		public static GUIStyle BadgeGood, BadgeBad, BadgeWarn, Popup;
 		public static GUIStyle ScrollBar, ScrollThumb;
-		public static Texture2D AccentLine, Divider;
+		public static GUIStyle Field;
+		public static GUIStyle HudPanel, HudPill, HudOutline, HudSmall, HudTimer, HudBig, MarkerStart, MarkerFinish;
+		public static Texture2D AccentLine, Divider, StartLine, FinishLine, ProgressBack;
 
 		/// <summary>A copy of Unity's skin with TRC scrollbars and plain scroll areas, used only while the window draws.</summary>
 		public static GUISkin Skin;
@@ -116,8 +118,42 @@ namespace TRC.TuneLoader {
 			ScrollBar = new GUIStyle { normal = { background = Solid(Panel) }, fixedWidth = 8, margin = new RectOffset(4, 0, 0, 0) };
 			ScrollThumb = new GUIStyle { normal = { background = Rounded(Control, Control, 3) }, border = new RectOffset(4, 4, 4, 4), fixedWidth = 8 };
 
+			Field = Box(Rounded(Panel, Control, 6), 6, new RectOffset(10, 10, 7, 7));
+			Field.fontSize = 13;
+			Field.normal.textColor = Theme.Text;
+			Field.hover.background = Rounded(Panel, Muted, 6);
+			Field.hover.textColor = Theme.Text;
+			Field.focused.background = Rounded(Panel, Accent, 6);
+			Field.focused.textColor = Theme.Text;
+			Field.clipping = TextClipping.Clip;
+			Field.margin = new RectOffset(0, 6, 3, 3);
+
+			// Over the track while time attack or the course tool runs.
+			Texture2D hudBackground = Rounded(new Color(Background.r, Background.g, Background.b, 0.78f), new Color(Border.r, Border.g, Border.b, 0.78f), 8);
+			HudPanel = Box(hudBackground, 8, new RectOffset(0, 0, 0, 0));
+			HudPill = Box(hudBackground, 8, new RectOffset(14, 14, 8, 9));
+			HudPill.fontSize = 13;
+			HudPill.wordWrap = true;
+			HudPill.richText = true;
+			HudPill.alignment = TextAnchor.MiddleCenter;
+			HudPill.normal.textColor = Theme.Text;
+			HudOutline = Box(Rounded(Color.clear, Accent, 8), 8, new RectOffset(0, 0, 0, 0));
+			HudSmall = TextStyle(11, Muted);
+			HudSmall.alignment = TextAnchor.UpperCenter;
+			HudTimer = TextStyle(28, Theme.Text, FontStyle.Bold);
+			HudTimer.alignment = TextAnchor.MiddleCenter;
+			HudTimer.wordWrap = false;
+			HudBig = TextStyle(110, AccentText, FontStyle.Bold);
+			HudBig.alignment = TextAnchor.MiddleCenter;
+			HudBig.wordWrap = false;
+			MarkerStart = Badge(Good, GoodText);
+			MarkerFinish = Badge(AccentSoft, AccentText);
+
 			AccentLine = Solid(Accent);
 			Divider = Solid(Border);
+			StartLine = Solid(GoodText);
+			FinishLine = Solid(Accent);
+			ProgressBack = Solid(Control);
 
 			Skin = Object.Instantiate(GUI.skin);
 			Skin.hideFlags = HideFlags.HideAndDontSave;
