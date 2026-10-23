@@ -2,6 +2,26 @@
 
 All versions of TRC Tune Loader, newest first. "Not tested in game yet" means the version builds and its automatic tests pass, but nobody has tried it in CarX yet.
 
+## 0.10.1 (Oct 23 2026)
+
+Not tested in game yet. Fixes battle challenges. In 0.10.0 a battle worked in game on Akina Downhill (a side-by-side race), but only on courses without a path. Both drivers need 0.10.1 to battle.
+
+**Fixed**
+- A challenge on a course with a path (a map course whose path you recorded, or a course of your own) never got to the other driver. Challenges are now about a quarter of the size and go in small pieces, and every new copy fills in any pieces the last one lost.
+- Challenging each other at the same moment declined both challenges. Now both show, and when you both picked the same course, format and mode, they become one battle by themselves.
+- A challenge didn't show on screen while the other driver was in a time attack or recording a course. It now shows under the timer.
+- Accepting a challenge while your own was still waiting didn't take yours back on the other driver's screen.
+- Names coloured letter by letter were cut off in challenges. They now show as plain text.
+
+**Changed**
+- Cat and mouse: the leader needs a 1.5 s lead to win while you both have your first lead, then 1 s for your second, then 0.5 s until someone wins (TRC's call). A battle without a winner is a draw after 10 runs instead of 6.
+- The "Ahead by" / "Behind by" gap in a battle no longer jumps around: the other car's position is worked out for the same moment as yours (it used to be up to a fifth of a second old, several metres at speed) and the number moves smoothly. "Side by side" shows only when you're within 2 m.
+- The challenger now sees whether the challenge got there: "got your challenge, waiting for them to accept", "can't accept it" with the reason, or "still sending".
+- Opening the window while a challenge is waiting goes straight to Time attack, Battle.
+- A battle no longer ends the moment your car is out of reach (up to 3 s is fine, like during a teleport).
+- When a battle starts, other challenges still waiting are answered "already in a battle".
+- The mod's log records every step of a battle (sent, got there, accepted, lined up, countdown), so problems can be found.
+
 ## 0.10.0 (Oct 23 2026)
 
 Partly tested in game: the course builder and a time attack on Project Dream worked, and KINO's air suspension and hydraulics were caught by the live check. The rest is not tested yet. The first part of TRC ranked battles: courses and time attack.

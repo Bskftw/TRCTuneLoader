@@ -77,6 +77,11 @@ namespace TRC.TuneLoader {
 			savedCursorLock_ = Cursor.lockState;
 			nextStatusRefresh_ = 0;
 			RefreshCar();
+			// A challenge is waiting: open right where it's answered.
+			if (invites_.Count > 0 && tourSeen_) {
+				tab_ = CoursesTab;
+				coursesView_ = 1;
+			}
 			OnTabOpened(tab_);
 			if (!tourSeen_ && tourStep_ < 0) {
 				StartTour();

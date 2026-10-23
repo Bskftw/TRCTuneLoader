@@ -16,7 +16,9 @@ namespace TRC.TuneLoader {
 	/// One battle between two TRC Tune Loader users, as one of them sees it. Both run the same logic on their
 	/// own PC and talk through <see cref="BattleMessage"/>s; the mod passes messages in and out and feeds the car.
 	///
-	///  1. The host challenges; the guest accepts (both on the same course, the same map).
+	///  1. The host challenges until the guest's mod says it got the challenge (Seen); the guest accepts (both on
+	///     the same course, the same map). Two drivers who challenge each other at once to the same battle get
+	///     one battle (<see cref="YieldsTo"/>).
 	///  2. Both drive to their start box (side by side for a race; the leader in front for cat and mouse) and
 	///     stop. Each mod reports ready; in a TRC spec battle only with a TRC spec car, both on the same set.
 	///  3. The host picks GO a moment ahead on its clock; the guest turns it into its own clock with the clock
@@ -37,6 +39,12 @@ namespace TRC.TuneLoader {
 		private const double InviteSeconds = 45;
 		private const double ChallengeResendSeconds = 3;
 
+		/// <summary>After this long without a Seen, the challenger is told it hasn't got there yet.</summary>
+		private const double NotSeenSeconds = 6;
+
+		/// <summary>Two challenges are the same battle when their lines are this close (each driver may have recorded their own path).</summary>
+		private const float SameLineMetres = 1f;
+
 		/// <summary>Both must stay ready this long before the host starts the countdown.</summary>
 		private const double ReadyHoldSeconds = 1;
 
@@ -49,8 +57,11 @@ namespace TRC.TuneLoader {
 		/// <summary>How long to wait for the other driver's result once one is in.</summary>
 		private const double ResultWaitSeconds = 180;
 
-		/// <summary>After this many runs without a winner, the battle is a draw.</summary>
-		public const int MaxRuns = 6;
+		/// <summary>
+		/// After this many runs without a winner, the battle is a draw. Cat and mouse goes on "until someone wins"
+		/// (the lead needed shrinks to 0.5 s), so this is only a backstop.
+		/// </summary>
+		public const int MaxRuns = 10;
 
 		/// <summary>Start boxes, in metres behind the start line.</summary>
 		private const float RaceBoxBack = 12f;
@@ -98,13 +109,32 @@ namespace TRC.TuneLoader {
 		/// <summary>The battle ended because this driver left it.</summary>
 		public bool ILeft { get; private set; }
 
+		/// <summary>The challenge got to the other driver's mod (host only).</summary>
+		public bool PeerSeen { get; private set; }
+
+		/// <summary>Why the other driver can't accept the challenge, when their mod said so (host only).</summary>
+		public string PeerProblem { get; private set; } = "";
+
 		public bool MyReady { get; private set; }
 		public bool PeerReady { get; private set; }
 		public BattleCar MyCar { get; private set; }
 		public BattleCar PeerCar { get; private set; } = new BattleCar();
 
-		/// <summary>The other driver's metres along the course in the current run.</summary>
+		/// <summary>The other driver's metres along the course in the current run, as of their last heartbeat.</summary>
 		public float PeerProgress { get; private set; }
+
+		/// <summary>
+		/// Where the other driver is now: their last progress moved on by their speed for as long as it took to
+		/// get here, so it can be compared with this driver's live position (heartbeats come 5 times a second,
+		/// late by the connection).
+		/// </summary>
+		public float PeerProgressAt(double now) {
+			if (peerProgressAt_ < 0 || offsets_.Count == 0) {
+				return PeerProgress;
+			}
+			double age = Math.Max(0, Math.Min(1, now - (peerProgressAt_ - ClockOffset)));
+			return PeerProgress + (float)(peerSpeed_ * age);
+		}
 
 		/// <summary>A TRC spec battle where both cars were TRC spec at every start and finish.</summary>
 		public bool Counted { get; private set; }
@@ -141,15 +171,19 @@ namespace TRC.TuneLoader {
 		private double endedAt_ = -1;
 		private Phase peerPhase_;
 		private int peerRunIndex_ = -1;
+		/// <summary>When the other driver measured <see cref="PeerProgress"/>, on their clock.</summary>
+		private double peerProgressAt_ = -1;
+		private double peerSpeed_;
 
 		private BattleSession(uint id, bool host, ulong me, string myName, ulong peer, string peerName, Course course,
 			BattleFormat format, bool open, Func<BattleCar> checkMyCar, double now) {
 			Id = id;
 			IsHost = host;
 			Me = me;
-			myName_ = myName ?? "";
+			myName_ = BattleMessage.PlainName(myName);
 			Peer = peer;
-			PeerName = string.IsNullOrEmpty(peerName) ? "the other driver" : peerName;
+			peerName = BattleMessage.PlainName(peerName);
+			PeerName = peerName.Length == 0 ? "the other driver" : peerName;
 			Course = course;
 			Format = format;
 			Open = open;
@@ -166,7 +200,7 @@ namespace TRC.TuneLoader {
 				State = Phase.Inviting,
 			};
 			session.SendChallenge(now);
-			session.Message = $"Waiting for {session.PeerName} to answer";
+			session.Message = $"Sending the challenge to {session.PeerName}";
 			return session;
 		}
 
@@ -179,6 +213,25 @@ namespace TRC.TuneLoader {
 			session.Message = $"{session.PeerName} challenges you";
 			return session;
 		}
+
+		/// <summary>
+		/// Whether this challenge is the other driver challenging this one to the same battle at the same time: same
+		/// course lines, format and mode, while this one still waits for an answer.
+		/// </summary>
+		public bool Crosses(BattleMessage challenge) =>
+			IsHost && State == Phase.Inviting && challenge != null && challenge.Kind == BattleKind.Challenge &&
+			challenge.From == Peer && challenge.To == Me && challenge.Format == Format && challenge.Open == Open &&
+			(challenge.Course != null ? SameLines(challenge.Course, Course) : challenge.CourseCode == Course.Code);
+
+		/// <summary>
+		/// For crossed challenges, the one from the lower Steam ID stands, so both sides agree without asking:
+		/// true when this driver should take their own back and accept <paramref name="challenge"/>.
+		/// </summary>
+		public bool YieldsTo(BattleMessage challenge) => Crosses(challenge) && challenge.From < Me;
+
+		private static bool SameLines(Course a, Course b) =>
+			a.MapKey == b.MapKey &&
+			Vector3.Distance(a.Start.Center, b.Start.Center) < SameLineMetres && Vector3.Distance(a.Finish.Center, b.Finish.Center) < SameLineMetres;
 
 		/// <summary>Messages to send now (taken out of the session).</summary>
 		public List<BattleMessage> TakeOutbox() {
@@ -225,6 +278,16 @@ namespace TRC.TuneLoader {
 			lastHeard_ = now;
 
 			switch (message.Kind) {
+				case BattleKind.Seen:
+					if (IsHost && State == Phase.Inviting) {
+						PeerSeen = true;
+						PeerProblem = message.Accept ? "" : message.Reason;
+						Message = PeerProblem.Length > 0
+							? $"{PeerName} got your challenge but can't accept it: {PeerProblem}"
+							: $"{PeerName} got your challenge. Waiting for them to accept";
+					}
+					break;
+
 				case BattleKind.Answer:
 					if (IsHost && State == Phase.Inviting) {
 						if (message.Accept) {
@@ -274,9 +337,15 @@ namespace TRC.TuneLoader {
 			switch (State) {
 				case Phase.Inviting:
 					if (now - createdAt_ > InviteSeconds) {
-						End(Phase.Ended, $"{PeerName} didn't answer", now);
-					} else if (now - lastChallengeSent_ >= ChallengeResendSeconds) {
-						SendChallenge(now);
+						End(Phase.Ended, PeerSeen ? $"{PeerName} didn't answer" : $"The challenge never got to {PeerName}", now);
+					} else if (!PeerSeen) {
+						// Sent again until their mod says it's there; the pieces of each copy fill in the last one's gaps.
+						if (now - lastChallengeSent_ >= ChallengeResendSeconds) {
+							SendChallenge(now);
+						}
+						if (now - createdAt_ > NotSeenSeconds) {
+							Message = $"Still sending: {PeerName}'s TRC Tune Loader hasn't confirmed the challenge yet";
+						}
 					}
 					return;
 
@@ -373,6 +442,8 @@ namespace TRC.TuneLoader {
 			MyCar = null;
 			MyReady = false;
 			PeerProgress = 0f;
+			peerProgressAt_ = -1;
+			peerSpeed_ = 0;
 		}
 
 		private void BackToGrid(string message) {
@@ -496,7 +567,8 @@ namespace TRC.TuneLoader {
 				RunIndex++;
 				NewRun();
 				State = Phase.Gridding;
-				string next = Format == BattleFormat.CatAndMouse ? (IAmLeader ? "You lead the next run" : "You chase in the next run") : "Line up for the next run";
+				string lead = BattleRules.LeaderGapFor(RunIndex) < BattleRules.LeaderGapFor(RunIndex - 1) ? $" (the leader now needs {BattleRules.LeaderGapFor(RunIndex):0.0} s)" : "";
+				string next = Format == BattleFormat.CatAndMouse ? (IAmLeader ? $"You lead the next run{lead}" : $"You chase in the next run{lead}") : "Line up for the next run";
 				Message = $"{run.Text}. {next}";
 			}
 		}
@@ -523,7 +595,16 @@ namespace TRC.TuneLoader {
 			PeerReady = sameRun && message.Ready;
 			PeerCar = new BattleCar { Spec = message.Spec, TuneSet = message.TuneSet, TuneCode = message.TuneCode, Car = message.Car };
 			if (sameRun) {
-				PeerProgress = message.Progress;
+				double at = message.SentAt;
+				double since = at - peerProgressAt_;
+				if (peerProgressAt_ >= 0 && since > 0.05 && since < 1.5) {
+					double speed = Math.Max(0, (message.Progress - PeerProgress) / since);
+					peerSpeed_ += (speed - peerSpeed_) * 0.5;
+				}
+				if (since > 0 || peerProgressAt_ < 0) {
+					PeerProgress = message.Progress;
+					peerProgressAt_ = at;
+				}
 			}
 			if (message.Result != null && message.Result.Run == RunIndex && peerResult_ == null && (State == Phase.Running || State == Phase.Countdown)) {
 				peerResult_ = message.Result;

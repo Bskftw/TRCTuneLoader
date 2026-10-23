@@ -22,8 +22,9 @@ namespace TRC.TuneLoader {
 	/// Side-by-side race: the faster time wins. Closer than <see cref="DeadHeatSeconds"/> is a dead heat, run again.
 	///
 	/// Cat and mouse: the chaser wins the run by passing the leader and staying ahead to the finish (finishing
-	/// first). The leader wins by finishing <see cref="LeaderGapSeconds"/> or more ahead. Anything in between has
-	/// no winner: swap places and go again. The first run with a winner wins the battle.
+	/// first). The leader wins by finishing <see cref="LeaderGapFor"/> or more ahead: 1.5 s while both drivers
+	/// have their first lead, 1 s for their second, then 0.5 s (TRC, Oct 23). Anything in between has no winner:
+	/// swap places and go again. The first run with a winner wins the battle.
 	///
 	/// In both, a driver who doesn't finish (shortcut, off the road, reset...) loses the run to one who does.
 	/// </summary>
@@ -33,6 +34,11 @@ namespace TRC.TuneLoader {
 		/// <summary>The chaser must finish at least this much ahead to have passed: closer is too close to call over the network.</summary>
 		public const double PassMarginSeconds = 0.05;
 		public const double LeaderGapSeconds = 1.5;
+		private const double LeaderGapStep = 0.5;
+		private const double LeaderGapMin = 0.5;
+
+		/// <summary>The lead the leader needs in run <paramref name="index"/> (0-based): less after each pair of runs without a winner.</summary>
+		public static double LeaderGapFor(int index) => Math.Max(LeaderGapMin, LeaderGapSeconds - LeaderGapStep * (index / 2));
 
 		public static BattleRun Decide(BattleFormat format, int index, ulong leader, ulong me, ulong peer, string peerName, RunResult mine, RunResult theirs) {
 			var run = new BattleRun { Index = index, Leader = leader, Mine = mine, Theirs = theirs };
@@ -66,16 +72,17 @@ namespace TRC.TuneLoader {
 
 			if (led.Finished && chased.Finished) {
 				double gap = chased.Time - led.Time;
+				double needed = LeaderGapFor(index);
 				if (gap < -PassMarginSeconds) {
 					run.Winner = chaser;
 					run.Text = chaser == me ? "You passed and stayed ahead to the finish: you win" : $"{peerName} passed and stayed ahead to the finish: {peerName} wins";
-				} else if (gap >= LeaderGapSeconds) {
+				} else if (gap >= needed) {
 					run.Winner = leader;
 					run.Text = $"{Name(leader)} pulled {TimeAttackRun.FormatTime(gap)} s away: {(leader == me ? "you win" : $"{peerName} wins")}";
 				} else {
 					run.Text = gap < PassMarginSeconds
 						? "Too close to call at the finish: no winner, swap places"
-						: $"Gap {TimeAttackRun.FormatTime(gap)} s, under {LeaderGapSeconds:0.0} s: no winner, swap places";
+						: $"Gap {TimeAttackRun.FormatTime(gap)} s, under {needed:0.0} s: no winner, swap places";
 				}
 			} else if (led.Finished) {
 				run.Winner = leader;

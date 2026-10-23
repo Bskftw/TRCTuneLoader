@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using System.Text.RegularExpressions;
 using UnityEngine;
 
 namespace TRC.TuneLoader {
@@ -25,6 +26,9 @@ namespace TRC.TuneLoader {
 
 		/// <summary>Either way: leaving the battle.</summary>
 		Leave = 6,
+
+		/// <summary>Guest to host, for every copy of a challenge: it got here, and whether it can be accepted (Reason says why not).</summary>
+		Seen = 7,
 	}
 
 	/// <summary>One driver's result for one run of a battle.</summary>
@@ -47,7 +51,8 @@ namespace TRC.TuneLoader {
 	/// channel can't be aimed reliably), so each says who it's from and for, and the other players ignore it.
 	/// </summary>
 	public sealed class BattleMessage {
-		public const byte Protocol = 1;
+		/// <summary>2 since 0.10.1: small pieces, the path packed in centimetres, and Seen.</summary>
+		public const byte Protocol = 2;
 
 		public BattleKind Kind;
 		public uint BattleId;
@@ -111,6 +116,7 @@ namespace TRC.TuneLoader {
 						break;
 					case BattleKind.Answer:
 					case BattleKind.Leave:
+					case BattleKind.Seen:
 						writer.Write(Accept);
 						writer.Write(Clip(Reason));
 						break;
@@ -175,6 +181,7 @@ namespace TRC.TuneLoader {
 							break;
 						case BattleKind.Answer:
 						case BattleKind.Leave:
+						case BattleKind.Seen:
 							message.Accept = reader.ReadBoolean();
 							message.Reason = Clip(reader.ReadString());
 							break;
@@ -227,6 +234,16 @@ namespace TRC.TuneLoader {
 			return text.Length <= MaxText ? text : text.Substring(0, MaxText);
 		}
 
+		private static readonly Regex RichText = new Regex(
+			@"</?(color|b|i|u|s|size|material|quad|font|mark|sup|sub|alpha|cspace|mspace|voffset|link|style|noparse)(=[^<>]*)?>",
+			RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+		/// <summary>
+		/// A player name without its colour and style tags (CarX names can colour every letter, which makes them
+		/// too long to send whole and breaks when cut).
+		/// </summary>
+		public static string PlainName(string name) => RichText.Replace(name ?? "", "").Trim();
+
 		/// <summary>
 		/// The course as it is after Build (rounded to file precision), so the guest rebuilds exactly the same
 		/// course, with the same code.
@@ -241,13 +258,79 @@ namespace TRC.TuneLoader {
 			writer.Write(course.HasPath);
 			writer.Write(course.HasPath ? course.Path.Count : 0);
 			if (course.HasPath) {
-				foreach (Vector3 point in course.Path) {
-					writer.Write(point.x);
-					writer.Write(point.y);
-					writer.Write(point.z);
-				}
+				WritePath(writer, course.Path);
 			}
 		}
+
+		/// <summary>
+		/// The path in whole centimetres (Build rounds every point to those), sent as how much each step differs
+		/// from the step before. Along a road those are a few centimetres, so most take one byte per axis: about a
+		/// quarter of the size of plain numbers. A long Touge path still takes several KB, so it's split in pieces.
+		/// </summary>
+		private static void WritePath(BinaryWriter writer, List<Vector3> path) {
+			long[] last = null;
+			var step = new long[3];
+			foreach (Vector3 point in path) {
+				var here = new long[] { Centimetres(point.x), Centimetres(point.y), Centimetres(point.z) };
+				for (int axis = 0; axis < 3; axis++) {
+					if (last == null) {
+						WriteVarint(writer, here[axis]);
+					} else {
+						long next = here[axis] - last[axis];
+						WriteVarint(writer, next - step[axis]);
+						step[axis] = next;
+					}
+				}
+				last = here;
+			}
+		}
+
+		private static List<Vector3> ReadPath(BinaryReader reader, int count) {
+			var path = new List<Vector3>(count);
+			var cm = new long[3];
+			var step = new long[3];
+			for (int i = 0; i < count; i++) {
+				for (int axis = 0; axis < 3; axis++) {
+					if (i == 0) {
+						cm[axis] = ReadVarint(reader);
+					} else {
+						step[axis] += ReadVarint(reader);
+						cm[axis] += step[axis];
+					}
+				}
+				path.Add(new Vector3(Metres(cm[0]), Metres(cm[1]), Metres(cm[2])));
+			}
+			return path;
+		}
+
+		/// <summary>A whole number in as few bytes as it needs: 7 bits a byte, small negative numbers small too (zigzag).</summary>
+		private static void WriteVarint(BinaryWriter writer, long value) {
+			ulong zigzag = (ulong)((value << 1) ^ (value >> 63));
+			while (zigzag >= 0x80) {
+				writer.Write((byte)(zigzag | 0x80));
+				zigzag >>= 7;
+			}
+			writer.Write((byte)zigzag);
+		}
+
+		private static long ReadVarint(BinaryReader reader) {
+			ulong zigzag = 0;
+			for (int shift = 0; ; shift += 7) {
+				if (shift > 63) {
+					throw new InvalidDataException("number too long");
+				}
+				byte b = reader.ReadByte();
+				zigzag |= (ulong)(b & 0x7F) << shift;
+				if (b < 0x80) {
+					break;
+				}
+			}
+			return (long)(zigzag >> 1) ^ -(long)(zigzag & 1);
+		}
+
+		private static long Centimetres(float metres) => (long)Math.Round((double)metres * 100.0, MidpointRounding.AwayFromZero);
+
+		private static float Metres(long centimetres) => (float)(centimetres / 100.0);
 
 		private static Course ReadCourse(BinaryReader reader) {
 			var course = new Course {
@@ -264,11 +347,7 @@ namespace TRC.TuneLoader {
 			if (count < 0 || count > MaxPoints) {
 				throw new InvalidDataException("too many path points");
 			}
-			var path = new List<Vector3>(count);
-			for (int i = 0; i < count; i++) {
-				path.Add(new Vector3(reader.ReadSingle(), reader.ReadSingle(), reader.ReadSingle()));
-			}
-			course.Path = path;
+			course.Path = course.HasPath ? ReadPath(reader, count) : new List<Vector3>();
 			course.Build(resample: false);
 			return course;
 		}

@@ -63,6 +63,10 @@ namespace TRC.TuneLoader {
 		private Vector2 hudPosition_ = DefaultHudPosition;
 		private bool draggingHud_;
 		private Vector2 hudGrab_;
+
+		/// <summary>Where the timer or message went this OnGUI pass (empty when nothing has the spot), so a challenge can show beside it.</summary>
+		private Rect hudRect_;
+		private const float HudGap = 8f;
 		private float teleportReadyAt_;
 
 		private readonly CourseMarkers markers_ = new CourseMarkers();
@@ -834,6 +838,7 @@ namespace TRC.TuneLoader {
 				}
 			}
 
+			hudRect_ = Rect.zero;
 			if (BattleOnTrack) {
 				DrawBattleHud(screenWidth, screenHeight);
 			} else if (run_ != null) {
@@ -845,7 +850,9 @@ namespace TRC.TuneLoader {
 				DrawHudPill(screenWidth, screenHeight, recorder_.State == CourseRecorder.Phase.Recording
 					? $"<b>Recording the course</b> · {TimeAttackRun.Distance(recorder_.Recorded)}\n<color={Theme.MutedHex}>Stop on the finish line, then {shortcut_}: Set finish here</color>"
 					: $"<b>Course recorded</b>\n<color={Theme.MutedHex}>{shortcut_} to name and save it</color>");
-			} else if (invites_.Count > 0) {
+			}
+			// A challenge always shows, even during a time attack or a recording.
+			if (invites_.Count > 0) {
 				DrawInviteHud(screenWidth, screenHeight);
 			}
 		}
@@ -881,6 +888,7 @@ namespace TRC.TuneLoader {
 			float width = Mathf.Max(150f, Theme.HudTimer.CalcSize(new GUIContent("00:00.000")).x + 32f);
 			bool extra = !string.IsNullOrEmpty(below);
 			Rect rect = HudRect(screenWidth, screenHeight, width, extra ? 68f : 50f);
+			hudRect_ = rect;
 			HandleHudDrag(rect, screenWidth, screenHeight);
 			if (Event.current.type != EventType.Repaint) {
 				return;
@@ -903,6 +911,7 @@ namespace TRC.TuneLoader {
 			var content = new GUIContent(text);
 			float width = Mathf.Min(340f, screenWidth - 2 * HudMargin);
 			Rect rect = HudRect(screenWidth, screenHeight, width, Theme.HudPill.CalcHeight(content, width));
+			hudRect_ = rect;
 			HandleHudDrag(rect, screenWidth, screenHeight);
 			if (Event.current.type == EventType.Repaint) {
 				GUI.Label(rect, content, Theme.HudPill);

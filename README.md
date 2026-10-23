@@ -2,7 +2,7 @@
 
 A KSL mod for CarX Drift Racing Online, made for TRC (Touge Racing Community). It puts the official TRC spec tunes on your car in one click, gives every tune a short code the TRC Discord bot uses to verify leaderboard runs, and checks your car, and every car in the room, for anything that isn't TRC spec. It also times your runs on TRC courses with a 3-2-1-GO time attack.
 
-**Version 0.10.0** (Oct 23 2026). What changed in each version: [CHANGELOG.md](CHANGELOG.md).
+**Version 0.10.1** (Oct 23 2026). What changed in each version: [CHANGELOG.md](CHANGELOG.md).
 
 ## Installing
 
@@ -118,9 +118,9 @@ A map course that doesn't know its road yet shows **Record path**: drive through
 
 A run is stopped if you take a shortcut, leave the course, reset the car, change car or the game speed changes. On maps that mark their roads (like Project Dream), the whole car leaving the road for half a second stops it too. Part of the car still over the road, or flying over it off a jump, counts as on the road. **Stop time attack** ends it.
 
-**Battle** challenges another player in the same online room who runs TRC Tune Loader 0.10 or newer:
+**Battle** challenges another player in the same online room who runs TRC Tune Loader 0.10.1 or newer:
 
-1. Pick the opponent, a course on this map, the format and the mode, and press **Challenge**. They see the challenge on screen and answer it in their Time attack tab (Battle). A course of your own is sent to them with the challenge.
+1. Pick the opponent, a course on this map, the format and the mode, and press **Challenge**. They see the challenge on screen and press the shortcut to answer it. A course of your own, or your recorded path, is sent to them with the challenge. You see when it gets to them, and why if they can't accept it. If you both challenge each other at once to the same course, format and mode, it becomes one battle by itself.
 2. Both drive to the start, or press **Teleport to my spot**. In a race you line up side by side (the challenger on the left); in cat and mouse the leader is just behind the line and the chaser further back.
 3. Stop in your spot. When both are ready, **3-2-1-GO** shows on both screens at the same moment (the mods measure the connection between you). Moving before GO calls the countdown off for both.
 4. Each mod times its own car from GO to the finish line, with the same rules as time attack (shortcuts, leaving the road and resets stop your run).
@@ -128,9 +128,9 @@ A run is stopped if you take a shortcut, leave the course, reset the car, change
 | Format | Who wins |
 | --- | --- |
 | Side-by-side race | The faster time. Closer than 0.1 s is a dead heat: run it again. |
-| Cat and mouse | The chaser wins a run by passing and staying ahead to the finish. The leader wins by finishing 1.5 s or more ahead. Otherwise you swap places and go again; the first run with a winner wins. |
+| Cat and mouse | The chaser wins a run by passing and staying ahead to the finish. The leader wins by finishing far enough ahead: 1.5 s while you both have your first lead, 1 s for your second, then 0.5 s. Otherwise you swap places and go again; the first run with a winner wins. |
 
-A driver who doesn't finish loses the run to one who does. **TRC spec** battles need both cars TRC spec on the same tune set, with no flagged mods, at every start and finish; **Open** battles take any setup and don't count. After six runs without a winner it's a draw. If the other driver leaves or stops answering for 10 seconds, the battle ends. Every battle is saved in `kino\mods\TRCTuneLoader\TimeAttack\battles.csv`; ratings come later.
+A driver who doesn't finish loses the run to one who does. **TRC spec** battles need both cars TRC spec on the same tune set, with no flagged mods, at every start and finish; **Open** battles take any setup and don't count. After ten runs without a winner it's a draw. If the other driver leaves or stops answering for 10 seconds, the battle ends. Every battle is saved in `kino\mods\TRCTuneLoader\TimeAttack\battles.csv`; ratings come later.
 
 **Moving the timer:** while a time attack runs, open the window and drag the timer anywhere on the screen. It stays there; Options can put it back at the top.
 
@@ -202,5 +202,6 @@ The mod writes what it does to its own log, `kino\mods\TRCTuneLoader\TRCTuneLoad
 | TRC spec badge, track check pop-up, window size, backup clean-up, Players filter | 0.9 | Yes |
 | Time attack tab: 3-2-1-GO, My times, Course builder, courses from map objects | 0.10 | Course builder and a time attack on Project Dream: yes. Teleport, movable timer, step-by-step builder, map objects: not yet |
 | Suspension check (KINO air suspension and hydraulics), live check recorded by itself | 0.10 | KINO air and hydraulics caught by the live check: yes. Suspension check from CarX data: not yet |
-| Battles: side-by-side race and cat and mouse, synced 3-2-1-GO | 0.10 | Not yet (needs two players) |
+| Battles: side-by-side race and cat and mouse, synced 3-2-1-GO | 0.10 | A side-by-side race on Akina Downhill: yes. Cat and mouse: not yet |
+| Battle challenges on courses with a path, challenging each other at once | 0.10.1 | Not yet |
 

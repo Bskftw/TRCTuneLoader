@@ -12,11 +12,14 @@ namespace TRC.TuneLoader {
 	/// messages go through BattleSync.
 	/// </summary>
 	public partial class TRCTuneLoaderMod {
-		/// <summary>Players need at least this TRC Tune Loader version to battle.</summary>
-		private static readonly System.Version BattleVersion = new System.Version(0, 10, 0);
+		/// <summary>Players need at least this TRC Tune Loader version to battle (battle messages changed in 0.10.1).</summary>
+		private static readonly System.Version BattleVersion = new System.Version(0, 10, 1);
 		private static readonly string[] BattleFormats = { "Side-by-side race", "Cat and mouse" };
 		private static readonly string[] BattleModes = { "TRC spec", "Open" };
 		private const float InviteSeconds = 45f;
+
+		/// <summary>A battle on the track survives the car being out of reach this long (a teleport, a loading hitch).</summary>
+		private const float NoCarGraceSeconds = 3f;
 
 		private readonly BattleSync battleSync_ = new BattleSync();
 		private readonly System.Random battleIds_ = new System.Random();
@@ -25,6 +28,22 @@ namespace TRC.TuneLoader {
 		private float battleEndedAt_ = -1f;
 		private BattleCar lastBattleCar_;
 		private readonly List<(BattleMessage Challenge, float At)> invites_ = new List<(BattleMessage, float)>();
+
+		/// <summary>Challenges already answered or taken back: copies still on the way are ignored.</summary>
+		private readonly HashSet<uint> closedChallenges_ = new HashSet<uint>();
+
+		/// <summary>What the log already says, so it tells each step of a battle once.</summary>
+		private readonly HashSet<string> loggedSteps_ = new HashSet<string>(StringComparer.Ordinal);
+		private string loggedState_ = "";
+		private float noCarSince_ = -1f;
+
+		/// <summary>The gap shown over the track (metres, + = ahead), eased so it doesn't jump with every heartbeat.</summary>
+		private float shownGap_;
+		private bool shownGapSet_;
+		private const float GapEaseSeconds = 0.5f;
+
+		/// <summary>Closer than this (about half a car) shows as side by side.</summary>
+		private const float SideBySideMetres = 2f;
 
 		private ulong pickedOpponent_;
 		private string pickedCourse_ = "";
@@ -47,6 +66,7 @@ namespace TRC.TuneLoader {
 		/// <summary>Called from Update every frame (after UpdateCourses, which reads the car).</summary>
 		private void UpdateBattles() {
 			double now = BattleNow;
+			battleSync_.Pump(now);
 			foreach (BattleMessage message in battleSync_.Drain()) {
 				Route(message, now);
 			}
@@ -57,8 +77,14 @@ namespace TRC.TuneLoader {
 			}
 
 			if (battle_.Started && battle_.Active && !hasPose_) {
-				battle_.Leave(now);
-				battleResult_ = "You left the track, so you left the battle.";
+				if (noCarSince_ < 0f) {
+					noCarSince_ = Time.unscaledTime;
+				} else if (Time.unscaledTime - noCarSince_ > NoCarGraceSeconds) {
+					battle_.Leave(now);
+					battleResult_ = "You left the track, so you left the battle.";
+				}
+			} else {
+				noCarSince_ = -1f;
 			}
 			if (hasPose_ || !battle_.Started) {
 				bool? onRoad = null;
@@ -68,7 +94,12 @@ namespace TRC.TuneLoader {
 				battle_.Tick(now, pose_.Position, pose_.Forward, pose_.SpeedKmh, Time.timeScale, onRoad);
 			}
 			foreach (BattleMessage message in battle_.TakeOutbox()) {
-				battleSync_.Send(message);
+				SendBattle(message);
+			}
+			LogBattleState();
+			UpdateShownGap(now);
+			if (battle_.Started && battle_.Active && invites_.Count > 0) {
+				CloseInvitesForBattle();
 			}
 
 			if (!battle_.Active && battleEndedAt_ < 0) {
@@ -90,25 +121,115 @@ namespace TRC.TuneLoader {
 				return;
 			}
 			if (message.Kind == BattleKind.Challenge) {
-				if (battle_ != null && battle_.Id == message.BattleId) {
-					return; // the host sends it again until answered
-				}
-				if (battle_ != null && battle_.Active) {
-					battleSync_.Send(new BattleMessage {
-						Kind = BattleKind.Answer, BattleId = message.BattleId, From = MySteamId, To = message.From, Reason = "already in a battle",
-					});
-					return;
-				}
-				if (!invites_.Exists(i => i.Challenge.BattleId == message.BattleId)) {
-					invites_.Add((message, Time.unscaledTime));
-					TrcLog.Info($"Battle challenge from {message.FromName}: {message.CourseCode}, {BattleFormats[(int)message.Format]}, {(message.Open ? "Open" : "TRC spec")}.");
-				}
+				RouteChallenge(message);
 				return;
 			}
+			LogReceived(message);
 			if (message.Kind == BattleKind.Leave) {
-				invites_.RemoveAll(i => i.Challenge.BattleId == message.BattleId && i.Challenge.From == message.From);
+				int taken = invites_.FindIndex(i => i.Challenge.BattleId == message.BattleId && i.Challenge.From == message.From);
+				if (taken >= 0) {
+					string name = BattleMessage.PlainName(invites_[taken].Challenge.FromName);
+					invites_.RemoveAt(taken);
+					closedChallenges_.Add(message.BattleId);
+					bool inBattleWithThem = battle_ != null && battle_.Active && battle_.Started && battle_.Peer == message.From;
+					if (!inBattleWithThem) {
+						battleResult_ = $"{name} took their challenge back.";
+					}
+				}
 			}
 			battle_?.Receive(message, now);
+		}
+
+		/// <summary>
+		/// A challenge for this player (every copy: the host sends it until our Seen gets there). It's answered
+		/// "already in a battle" only during a battle; while this player's own challenge waits, it's shown like
+		/// any other, and when it's the same battle the other way round, the two become one.
+		/// </summary>
+		private void RouteChallenge(BattleMessage challenge) {
+			if (closedChallenges_.Contains(challenge.BattleId) || (battle_ != null && battle_.Id == challenge.BattleId)) {
+				return;
+			}
+			string name = BattleMessage.PlainName(challenge.FromName);
+			if (battle_ != null && battle_.Active && battle_.Started) {
+				closedChallenges_.Add(challenge.BattleId);
+				SendBattle(new BattleMessage {
+					Kind = BattleKind.Answer, BattleId = challenge.BattleId, From = MySteamId, To = challenge.From, Reason = "already in a battle",
+				});
+				TrcLog.Info($"Battle {challenge.BattleId}: challenge from {name} declined by itself, you're in a battle.");
+				return;
+			}
+
+			Course course = CourseForChallenge(challenge, out string problem);
+			SendBattle(new BattleMessage {
+				Kind = BattleKind.Seen, BattleId = challenge.BattleId, From = MySteamId, To = challenge.From, Accept = course != null, Reason = problem,
+			});
+			if (invites_.Exists(i => i.Challenge.BattleId == challenge.BattleId)) {
+				return;
+			}
+			invites_.Add((challenge, Time.unscaledTime));
+			string courseName = challenge.Course?.Name ?? course?.Name ?? "";
+			TrcLog.Info($"Battle {challenge.BattleId}: challenge from {name} on {courseName} ({challenge.CourseCode}), " +
+				$"{BattleFormats[(int)challenge.Format]}, {(challenge.Open ? "Open" : "TRC spec")}.{(course == null ? $" Can't accept: {problem}." : "")}");
+
+			if (course != null && battle_ != null && battle_.YieldsTo(challenge)) {
+				TrcLog.Info($"Battle {challenge.BattleId}: you and {name} challenged each other to the same battle, so it goes ahead on {name}'s challenge.");
+				AnswerChallenge(challenge, true);
+			}
+		}
+
+		/// <summary>
+		/// A battle started: challenges still waiting are answered "already in a battle" (the opponent's own,
+		/// left over from challenging each other, just goes), so none pops up during the battle.
+		/// </summary>
+		private void CloseInvitesForBattle() {
+			foreach (var (challenge, _) in invites_) {
+				closedChallenges_.Add(challenge.BattleId);
+				if (challenge.From != battle_.Peer) {
+					SendBattle(new BattleMessage {
+						Kind = BattleKind.Answer, BattleId = challenge.BattleId, From = MySteamId, To = challenge.From, Reason = "already in a battle",
+					});
+				}
+			}
+			invites_.Clear();
+		}
+
+		private void SendBattle(BattleMessage message) {
+			int packets = battleSync_.Send(message);
+			if (message.Kind != BattleKind.Heartbeat && loggedSteps_.Add($"sent {message.BattleId} {message.Kind}")) {
+				string how = packets == 0 ? " (KSL didn't send it)" : packets > 1 ? $" ({packets} packets)" : "";
+				TrcLog.Info($"Battle {message.BattleId}: sent {message.Kind}{how}.");
+			}
+		}
+
+		/// <summary>The first message of each kind in a battle goes in the log.</summary>
+		private void LogReceived(BattleMessage message) {
+			if (!loggedSteps_.Add($"got {message.BattleId} {message.Kind}")) {
+				return;
+			}
+			string detail = message.Kind == BattleKind.Answer ? (message.Accept ? ": accepted" : $": declined{(message.Reason.Length > 0 ? $" ({message.Reason})" : "")}")
+				: message.Kind == BattleKind.Seen ? (message.Accept ? ": the challenge got there" : $": the challenge got there, but they can't accept it ({message.Reason})")
+				: message.Kind == BattleKind.Heartbeat ? " (the battle connection works)"
+				: "";
+			TrcLog.Info($"Battle {message.BattleId}: got {message.Kind}{detail}.");
+		}
+
+		private void UpdateShownGap(double now) {
+			if (battle_.State != BattleSession.Phase.Running || battle_.Run == null || !battle_.Run.Active) {
+				shownGapSet_ = false;
+				return;
+			}
+			float gap = battle_.Run.Progress - battle_.PeerProgressAt(now);
+			shownGap_ = shownGapSet_ ? shownGap_ + (gap - shownGap_) * (1f - Mathf.Exp(-Time.unscaledDeltaTime / GapEaseSeconds)) : gap;
+			shownGapSet_ = true;
+		}
+
+		private void LogBattleState() {
+			string state = $"{battle_.Id} {battle_.State} {battle_.RunIndex}";
+			if (state == loggedState_ || !battle_.Active) {
+				return;
+			}
+			loggedState_ = state;
+			TrcLog.Info($"Battle {battle_.Id}: {battle_.State}, run {battle_.RunIndex + 1}. {battle_.Message}");
 		}
 
 		/// <summary>What the battle needs to know about this player's car: TRC spec (no flagged mods either), set, code and car.</summary>
@@ -143,11 +264,13 @@ namespace TRC.TuneLoader {
 			battleLogged_ = false;
 			battleEndedAt_ = -1f;
 			battleResult_ = "";
-			TrcLog.Info($"Battle {id}: challenged {opponent.Player.Name} on {course.Name} ({course.Code}), {BattleFormats[pickedFormat_]}, {BattleModes[pickedMode_]}.");
+			TrcLog.Info($"Battle {id}: challenged {battle_.PeerName} ({opponent.Player.SteamId}) on {course.Name} ({course.Code}, {course.Path.Count} path points), " +
+				$"{BattleFormats[pickedFormat_]}, {BattleModes[pickedMode_]}.");
 		}
 
 		private void AnswerChallenge(BattleMessage challenge, bool accept) {
 			invites_.RemoveAll(i => i.Challenge.BattleId == challenge.BattleId);
+			closedChallenges_.Add(challenge.BattleId);
 			double now = BattleNow;
 			Course course = CourseForChallenge(challenge, out string problem);
 			var session = BattleSession.FromChallenge(challenge, MySteamId, MyName(), course ?? new Course(), CheckBattleCar, now);
@@ -155,14 +278,20 @@ namespace TRC.TuneLoader {
 			if (!accept || course == null) {
 				session.Decline(accept ? problem : "", now);
 				foreach (BattleMessage message in session.TakeOutbox()) {
-					battleSync_.Send(message);
+					SendBattle(message);
 				}
 				battleResult_ = accept ? $"Couldn't accept: {problem}" : "";
+				TrcLog.Info($"Battle {challenge.BattleId}: {(accept ? $"couldn't accept: {problem}" : "declined")}.");
 				return;
 			}
 
 			if (battle_ != null && battle_.Active) {
+				// Taking back this player's own challenge (or leaving a battle): that message has to go out before the session is dropped.
 				battle_.Leave(now);
+				foreach (BattleMessage message in battle_.TakeOutbox()) {
+					SendBattle(message);
+				}
+				TrcLog.Info($"Battle {battle_.Id} vs {battle_.PeerName}: {battle_.Message}, to accept {session.PeerName}'s challenge.");
 			}
 			StopOtherCourseWork();
 			battle_ = session;
@@ -170,7 +299,7 @@ namespace TRC.TuneLoader {
 			battleLogged_ = false;
 			battleEndedAt_ = -1f;
 			battleResult_ = "";
-			TrcLog.Info($"Battle {challenge.BattleId}: accepted {challenge.FromName}'s challenge on {course.Name} ({course.Code}).");
+			TrcLog.Info($"Battle {challenge.BattleId}: accepted {battle_.PeerName}'s challenge on {course.Name} ({course.Code}).");
 			CloseWindow();
 		}
 
@@ -252,7 +381,7 @@ namespace TRC.TuneLoader {
 		private void DrawInvite(BattleMessage challenge) {
 			Course course = CourseForChallenge(challenge, out string problem);
 			GUILayout.BeginVertical(Theme.Guide);
-			GUILayout.Label($"{challenge.FromName} challenges you", Theme.Heading);
+			GUILayout.Label($"{BattleMessage.PlainName(challenge.FromName)} challenges you", Theme.Heading);
 			string courseName = challenge.Course?.Name ?? course?.Name ?? challenge.CourseCode;
 			GUILayout.Label($"{courseName} · {BattleFormats[(int)challenge.Format]} · {(challenge.Open ? "Open" : "TRC spec")}", Theme.Body);
 			if (course == null) {
@@ -359,7 +488,7 @@ namespace TRC.TuneLoader {
 			GUILayout.Label("Format", Theme.SectionLabel);
 			pickedFormat_ = Choice(BattleFormats, pickedFormat_);
 			GUILayout.Label(pickedFormat_ == 1
-				? $"Runs swap who leads. The chaser wins a run by passing and staying ahead to the finish; the leader wins by finishing {BattleRules.LeaderGapSeconds:0.0} s or more ahead. Otherwise swap and go again."
+				? $"Runs swap who leads. The chaser wins a run by passing and staying ahead to the finish; the leader wins by finishing {BattleRules.LeaderGapSeconds:0.0} s or more ahead (1.0 s after both have led once, then 0.5 s). Otherwise swap and go again."
 				: "Side by side from a standing start. The faster time to the finish wins.", Theme.Small);
 			GUILayout.Label("Mode", Theme.SectionLabel);
 			pickedMode_ = Choice(BattleModes, pickedMode_);
@@ -396,19 +525,33 @@ namespace TRC.TuneLoader {
 				title += $" · {(b.IAmLeader ? "you lead" : "you chase")}";
 			}
 			if (b.State == BattleSession.Phase.Running && run.Active) {
-				float gap = run.Progress - b.PeerProgress;
-				string place = Mathf.Abs(gap) < 1f ? "Side by side" : gap > 0 ? $"Ahead by {gap:0} m" : $"Behind by {-gap:0} m";
+				float gap = shownGap_;
+				string place = Mathf.Abs(gap) < SideBySideMetres ? "Side by side" : gap > 0 ? $"Ahead by {gap:0} m" : $"Behind by {-gap:0} m";
 				DrawTimer(screenWidth, screenHeight, run, place);
 			} else {
 				DrawHudPill(screenWidth, screenHeight, $"{title}\n<color={Theme.MutedHex}>{b.Message}</color>");
 			}
 		}
 
-		/// <summary>A challenge waiting for an answer, while driving.</summary>
+		/// <summary>
+		/// A challenge waiting for an answer, while driving. When a time attack or a recording already has the
+		/// timer's spot, the challenge shows just under it (or over it, near the bottom of the screen).
+		/// </summary>
 		private void DrawInviteHud(float screenWidth, float screenHeight) {
 			BattleMessage challenge = invites_[invites_.Count - 1].Challenge;
-			DrawHudPill(screenWidth, screenHeight,
-				$"<b>{challenge.FromName} challenges you</b>\n<color={Theme.MutedHex}>{BattleFormats[(int)challenge.Format]} · press {shortcut_} to answer (Time attack, Battle)</color>");
+			string text = $"<b>{BattleMessage.PlainName(challenge.FromName)} challenges you</b>\n<color={Theme.MutedHex}>{BattleFormats[(int)challenge.Format]} · press {shortcut_} to answer</color>";
+			if (hudRect_.width <= 0f) {
+				DrawHudPill(screenWidth, screenHeight, text);
+				return;
+			}
+			var content = new GUIContent(text);
+			float width = Mathf.Min(340f, screenWidth - 2 * HudMargin);
+			float height = Theme.HudPill.CalcHeight(content, width);
+			float x = Mathf.Clamp(hudRect_.center.x - width / 2f, 0f, Mathf.Max(0f, screenWidth - width));
+			float y = hudRect_.yMax + HudGap + height <= screenHeight ? hudRect_.yMax + HudGap : Mathf.Max(0f, hudRect_.y - HudGap - height);
+			if (Event.current.type == EventType.Repaint) {
+				GUI.Label(new Rect(x, y, width, height), content, Theme.HudPill);
+			}
 		}
 	}
 }
