@@ -42,6 +42,10 @@ namespace TRC.TuneLoader {
 		private static readonly float[] LineWidths = { 8f, 12f, 16f, 20f, 30f };
 		private static readonly string[] CourseViews = { "Courses here", "Battle", "My times", "Course builder" };
 		private static readonly string[] CourseKinds = { "Touge", "Highway" };
+		private static readonly string[] CourseShapes = { "Point to point", "Circuit" };
+
+		/// <summary>A flying start on a circuit teleports the car this far (metres) before the line, for a run-up.</summary>
+		private const float FlyingRunUpMetres = 150f;
 
 		private readonly CourseLibrary courses_ = new CourseLibrary();
 		private readonly CourseRecorder recorder_ = new CourseRecorder();
@@ -70,7 +74,11 @@ namespace TRC.TuneLoader {
 		private float teleportReadyAt_;
 
 		private readonly CourseMarkers markers_ = new CourseMarkers();
+		private readonly PathDots dots_ = new PathDots();
 		private bool markersLogged_;
+
+		/// <summary>A course whose path is shown as dots on the road (Show path), or null.</summary>
+		private Course pathShownFor_;
 
 		/// <summary>Record path on a map course, while it runs (and for a few seconds after it's saved).</summary>
 		private PathRecorder pathRecorder_;
@@ -90,6 +98,7 @@ namespace TRC.TuneLoader {
 		private Vector2 timesScroll_;
 		private string newCourseName_ = "";
 		private int newCourseKind_;
+		private int newCourseShape_;
 		private float newCourseWidth_ = CourseGeometry.DefaultWidth;
 
 		private string CoursesFolder => Path.Combine(modFolder_, CoursesFolderName);
@@ -150,6 +159,7 @@ namespace TRC.TuneLoader {
 			Course battleCourse = battle_ != null && battle_.Started && battle_.Active ? battle_.Course : null;
 			Course course = hasPose_ ? battleCourse ?? run_?.Course ?? pathRecorder_?.Course : null;
 			ShowSigns(course);
+			UpdatePathDots();
 
 			CourseGate start = course != null ? course.Start : recorder_.Start;
 			CourseGate finish = course != null ? course.Finish : recorder_.Finish;
@@ -223,9 +233,27 @@ namespace TRC.TuneLoader {
 			finishHasSign_ = false;
 		}
 
+		/// <summary>
+		/// The path as dots on the road: what the course builder or Record path has recorded so far, or a course
+		/// picked with Show path. Never during a battle.
+		/// </summary>
+		private void UpdatePathDots() {
+			IList<Vector3> points = !hasPose_ || InBattle ? null
+				: recorder_.State != CourseRecorder.Phase.Idle ? recorder_.Points
+				: pathRecorder_ != null && pathRecorder_.State != PathRecorder.Phase.ToStart ? pathRecorder_.Points
+				: pathShownFor_?.Path;
+			Camera camera = points != null ? HudCamera() : null;
+			if (camera == null) {
+				dots_.Clear();
+				return;
+			}
+			dots_.Show(points, camera.transform.position);
+		}
+
 		/// <summary>Called from OnDestroy: nothing the mod made or showed stays in the map.</summary>
 		private void CleanUpCourses() {
 			markers_.Clear();
+			dots_.Clear();
 			RestoreSigns();
 		}
 
@@ -245,8 +273,10 @@ namespace TRC.TuneLoader {
 					if (run_ != null) {
 						TrcLog.Info($"Time attack on {run_.Course.Name} stopped: left the map.");
 						courseResult_ = "Time attack stopped: you left the map.";
+						EndCircuitRunEarly("stopped: left the map");
 						run_ = null;
 					}
+					pathShownFor_ = null;
 					if (recorder_.State != CourseRecorder.Phase.Idle) {
 						recorder_.Clear();
 						courseResult_ = "Course builder cleared: you left the map.";
@@ -300,20 +330,24 @@ namespace TRC.TuneLoader {
 				return;
 			}
 			pathRecorder_ = null;
-			run_ = new TimeAttackRun(course);
+			pathShownFor_ = null;
+			run_ = new TimeAttackRun(course, course.IsCircuit ? PickedLaps : 1, PickedFlying);
 			runStart_ = null;
 			runResultUntil_ = 0;
+			ResetRunExtras();
 			courseResult_ = "";
-			TrcLog.Info($"Time attack ready on {course.Name} ({course.Code}, {course.SourceName}).");
+			string laps = course.IsCircuit ? (run_.Laps == 0 ? ", unlimited laps" : $", {run_.Laps} lap(s)") : "";
+			TrcLog.Info($"Time attack ready on {course.Name} ({course.Code}, {course.SourceName}, {(run_.Flying ? "flying" : "standing")} start{laps}, {course.SectorEnds.Length} sectors).");
 			CloseWindow();
 		}
 
 		private void StopTimeAttack() {
+			courseResult_ = "";
 			if (run_ != null) {
 				TrcLog.Info($"Time attack on {run_.Course.Name} stopped by the player.");
+				EndCircuitRunEarly("stopped by the player");
 			}
 			run_ = null;
-			courseResult_ = "";
 		}
 
 		// ---- Record path ----
@@ -351,8 +385,7 @@ namespace TRC.TuneLoader {
 		private void SaveRecordedPath() {
 			try {
 				Course recorded = pathRecorder_.Build($"steam:{Kino.Info.SteamId.ToString(CultureInfo.InvariantCulture)}");
-				foreach (Course old in courses_.Custom.Where(c => c.MapKey == recorded.MapKey &&
-					Vector3.Distance(c.Start.Center, recorded.Start.Center) <= 1f && Vector3.Distance(c.Finish.Center, recorded.Finish.Center) <= 1f).ToList()) {
+				foreach (Course old in courses_.Custom.Where(c => c.IsCircuit == recorded.IsCircuit && c.SameLines(recorded)).ToList()) {
 					CourseLibrary.DeleteCustom(old, out _);
 				}
 				string path = CourseLibrary.SaveCustom(CoursesFolder, recorded);
@@ -383,22 +416,29 @@ namespace TRC.TuneLoader {
 				// Checked while the car stands still, so it doesn't cost a frame at GO.
 				runStart_ = CheckRunCar();
 			}
+			if (run_.Flying && now == TimeAttackRun.Phase.ToStart && (runStart_ == null || runStart_.CarId != pose_.CarId)) {
+				// A flying start has no standstill: the car is checked on the way to the line instead.
+				runStart_ = CheckRunCar();
+			}
 			if (now == TimeAttackRun.Phase.Running && runStart_ != null && pose_.CarId != runStart_.CarId) {
 				run_.Cancel("You changed car, so the run was stopped.");
 				now = run_.State;
 			}
 
+			HandleRunProgress();
 			if (before == TimeAttackRun.Phase.Running && now == TimeAttackRun.Phase.Finished) {
 				FinishRun();
 			} else if (before != TimeAttackRun.Phase.Cancelled && now == TimeAttackRun.Phase.Cancelled) {
 				TrcLog.Info($"Time attack on {run_.Course.Name} stopped: {run_.Message}");
-				runResultText_ = run_.Message;
+				string laps = LapSummary(run_);
+				runResultText_ = laps.Length > 0 ? $"{run_.Message}\n<color={Theme.MutedHex}>{laps}</color>" : run_.Message;
 				runResultUntil_ = Time.unscaledTime + ResultSeconds;
 			}
 
 			if (!run_.Active && Time.unscaledTime >= runResultUntil_) {
 				run_.Restart();
 				runStart_ = null;
+				ResetRunExtras();
 			}
 		}
 
@@ -429,32 +469,21 @@ namespace TRC.TuneLoader {
 			RunCheck start = runStart_ ?? end;
 			Course course = run_.Course;
 
-			var record = new TimeAttackRecord {
-				When = DateTime.Now,
-				CourseCode = course.Code,
-				CourseName = course.Name,
-				MapKey = course.MapKey,
-				MapName = course.MapName,
-				OfficialCourse = course.Official,
-				CarId = start.CarId,
-				Car = start.Car,
-				Setup = start.Setup,
-				TuneCode = start.Code,
-				TuneSet = start.Set,
-				Spec = SpecWord(start.State, end.State),
-				FlaggedMods = Math.Max(start.Flagged, end.Flagged),
-				TimeMs = (long)Math.Round(run_.Result * 1000.0, MidpointRounding.AwayFromZero),
-				LoaderVersion = Version,
-			};
+			TimeAttackRecord record = RecordFor(start, end.State, (long)Math.Round(run_.Result * 1000.0, MidpointRounding.AwayFromZero));
+			record.FlaggedMods = Math.Max(start.Flagged, end.Flagged);
+			record.Flying = run_.Flying;
+			record.Laps = run_.Laps;
+			LapTime only = !course.IsCircuit && run_.LapTimes.Count == 1 ? run_.LapTimes[0] : null;
+			if (only != null) {
+				record.SectorMs = only.Sectors.Select(s => (long)Math.Round(s * 1000.0, MidpointRounding.AwayFromZero)).ToArray();
+			}
 
-			// Compared with the same car on the same TRC tune set: each car and set has its own times.
-			TimeAttackRecord best = TimeAttackLog.BestFor(times_, course.Code, record.CarId, record.TuneSet, specOnly: record.IsSpec);
-			try {
-				TimeAttackLog.Append(TimesFolder, record);
-				times_.Add(record);
-			} catch (Exception e) {
-				courseResult_ = $"Couldn't save the time: {e.Message}";
-				TrcLog.Error(e);
+			// Compared with the same car on the same TRC tune set, started the same way: each has its own times.
+			TimeKind kind = RunKind(run_);
+			TimeAttackRecord best = TimeAttackLog.BestFor(times_, course.Code, record.CarId, record.TuneSet, record.IsSpec, kind);
+			SaveRecord(record);
+			if (only != null) {
+				TimeAttackTraces.SaveIfFaster(TimesFolder, TimeAttackTraces.Key(course.Code, record.CarId, record.TuneSet, kind), only.Trace, record.TimeMs);
 			}
 
 			string compare = best == null ? $"first time in this car{(record.TuneSet.Length > 0 ? $" on {record.TuneSet}" : "")}"
@@ -463,10 +492,13 @@ namespace TRC.TuneLoader {
 			string status = !record.IsSpec ? $"<color={Theme.BadHex}>{DoesntCount(record)}</color>"
 				: course.Official ? $"<color={Theme.GoodHex}>{record.TuneSet} spec</color>"
 				: $"{record.TuneSet} spec · practice course";
-			runResultText_ = $"<b>{TimeAttackRun.FormatTime(record.Seconds)}</b>\n{compare} · {status}";
+			string laps = LapSummary(run_);
+			string sectors = only != null && only.Sectors.Length > 1 ? $"\n<color={Theme.MutedHex}>{string.Join(" · ", only.Sectors.Select((s, i) => $"S{i + 1} {TimeAttackRun.FormatTime(s)}"))}</color>" : "";
+			runResultText_ = $"<b>{TimeAttackRun.FormatTime(record.Seconds)}</b>\n{compare} · {status}{(laps.Length > 0 ? $"\n<color={Theme.MutedHex}>{laps}</color>" : "")}{sectors}";
 			runResultUntil_ = Time.unscaledTime + ResultSeconds;
 			TrcLog.Info($"Time attack on {course.Name} ({course.Code}): {TimeAttackRun.FormatTime(record.Seconds)} in {record.Car}, " +
-				$"tune {record.TuneCode} {record.TuneSet}, {record.Spec}, flagged mods {record.FlaggedMods}, jump starts {run_.JumpStarts}.");
+				$"tune {record.TuneCode} {record.TuneSet}, {record.Spec}, flagged mods {record.FlaggedMods}, {(run_.Flying ? "flying" : "standing")} start, " +
+				$"jump starts {run_.JumpStarts}{(laps.Length > 0 ? $", {laps}" : "")}{(only != null ? $", sectors {string.Join(" / ", only.Sectors.Select(s => TimeAttackRun.FormatTime(s)))}" : "")}.");
 		}
 
 		/// <summary>"spec" only when the car was TRC spec at both the start and the finish.</summary>
@@ -493,7 +525,7 @@ namespace TRC.TuneLoader {
 				courseResult_ = "Stop the car on the start line first.";
 				return;
 			}
-			if (!recorder_.SetStart(pose_.Position, pose_.Forward, newCourseWidth_, out string error)) {
+			if (!recorder_.SetStart(pose_.Position, pose_.Forward, newCourseWidth_, out string error, circuit: newCourseShape_ == 1)) {
 				courseResult_ = error;
 				return;
 			}
@@ -610,6 +642,9 @@ namespace TRC.TuneLoader {
 			}
 
 			List<Course> here = courses_.ForMap(map_.Key);
+			if (run_ == null && here.Count > 0) {
+				DrawStartOptions(here.Any(c => c.IsCircuit));
+			}
 			GUILayout.BeginVertical(Theme.Card, GUILayout.ExpandHeight(true));
 			coursesScroll_ = GUILayout.BeginScrollView(coursesScroll_);
 			if (here.Count == 0) {
@@ -640,7 +675,7 @@ namespace TRC.TuneLoader {
 			GUILayout.BeginVertical();
 			string length = course.Usable ? TimeAttackRun.Distance(course.Length) : "can't be used yet";
 			GUILayout.Label($"<b>{course.Name}</b>  <color={Theme.MutedHex}>{course.KindName} · {length} · {course.SourceName}</color>", Theme.Body);
-			GUILayout.Label($"Course code {course.Code}{BestText(course)}", Theme.Small);
+			GUILayout.Label($"Course code {course.Code}{BestText(course)}{(course.Usable ? $" · {course.SectorEnds.Length} sectors" : "")}", Theme.Small);
 			foreach (string problem in course.Problems) {
 				GUILayout.Label($"<color={Theme.WarnHex}>{problem}</color>", Theme.Small);
 			}
@@ -657,21 +692,19 @@ namespace TRC.TuneLoader {
 				GUILayout.Button(course.HasPath ? "Record again" : "Record path", Theme.Button)) {
 				StartRecordPath(course);
 			}
+			GUI.enabled = enabled && course.HasPath && hasPose_;
+			if (GUILayout.Button(pathShownFor_ == course ? "Hide path" : "Show path", Theme.Button)) {
+				pathShownFor_ = pathShownFor_ == course ? null : course;
+			}
 			GUI.enabled = enabled;
 
-			if (course.Source == CourseSource.Custom) {
-				if (deletePending_ == course) {
-					if (GUILayout.Button("Delete it", Theme.ButtonPrimary)) {
-						DeleteCourse(course);
-					}
-					if (GUILayout.Button("Keep", Theme.Button)) {
-						deletePending_ = null;
-					}
-				} else if (GUILayout.Button("Delete", Theme.Button)) {
-					deletePending_ = course;
-				}
+			if (course.Source == CourseSource.Custom && GUILayout.Button(editing_ == course ? "Done" : "Edit", Theme.Button)) {
+				StartEditing(editing_ == course ? null : course);
 			}
 			GUILayout.EndHorizontal();
+			if (editing_ == course) {
+				DrawCourseEditor(course);
+			}
 			GUILayout.Space(4);
 			DividerLine();
 			GUILayout.Space(4);
@@ -689,40 +722,14 @@ namespace TRC.TuneLoader {
 		private string RunStatusText() {
 			switch (run_.State) {
 				case TimeAttackRun.Phase.Running:
-					return $"Running: {TimeAttackRun.FormatTime(run_.Elapsed)}, {TimeAttackRun.Distance(run_.Progress)} of {TimeAttackRun.Distance(run_.Course.Length)}.";
+					string lap = run_.Course.IsCircuit ? $" Lap {run_.Lap}{(run_.Laps > 0 ? $" of {run_.Laps}" : "")}{(run_.BestLap != null ? $", best {TimeAttackRun.FormatTime(run_.BestLap.Time)}" : "")}." : "";
+					return $"Running: {TimeAttackRun.FormatTime(run_.Elapsed)}, {TimeAttackRun.Distance(run_.Progress)} of {TimeAttackRun.Distance(run_.Course.Length)}.{lap}";
 				case TimeAttackRun.Phase.Finished:
 				case TimeAttackRun.Phase.Cancelled:
 					return runResultText_.Replace("\n", " · ");
 				default:
 					return $"{run_.Message}. Close this window ({shortcut_}) to drive.";
 			}
-		}
-
-		private void DrawMyTimes() {
-			GUILayout.Label("Saved on this PC. Each car and TRC tune set has its own times. A time counts as TRC spec when your car was TRC spec " +
-				"at the start and the finish, with no flagged mods.", Theme.Small);
-			var lines = new List<string>();
-			foreach (var course in times_.GroupBy(r => r.CourseCode).OrderByDescending(g => g.Max(r => r.When))) {
-				TimeAttackRecord last = course.OrderBy(r => r.When).Last();
-				lines.Add($"--- {last.CourseName} · {last.MapName}{(last.OfficialCourse ? " · official" : "")} ---");
-
-				// One line per car and tune set, fastest TRC spec time first.
-				foreach (var carSet in course.GroupBy(r => (r.CarId, r.TuneSet))
-					.OrderBy(g => g.Where(r => r.IsSpec).Select(r => r.TimeMs).DefaultIfEmpty(long.MaxValue).Min())
-					.ThenBy(g => g.Min(r => r.TimeMs))) {
-					TimeAttackRecord fastest = carSet.OrderBy(r => r.TimeMs).First();
-					TimeAttackRecord spec = carSet.Where(r => r.IsSpec).OrderBy(r => r.TimeMs).FirstOrDefault();
-					string set = fastest.TuneSet.Length > 0 ? fastest.TuneSet : "no TRC tune set";
-					string best = spec != null ? $"<color={Theme.GoodHex}><b>{TimeAttackRun.FormatTime(spec.Seconds)}</b></color>" : "no TRC spec time";
-					string notCounted = fastest != spec ? $" · fastest not counted {TimeAttackRun.FormatTime(fastest.Seconds)} ({DoesntCount(fastest)})" : "";
-					lines.Add($"<b>{fastest.Car}</b> · {set}: {best}{notCounted} <color={Theme.MutedHex}>· {carSet.Count()} run(s)</color>");
-				}
-				lines.Add($"<color={Theme.MutedHex}>Last run {last.When:MMM d, HH:mm} · course code {course.Key}</color>");
-			}
-			if (lines.Count == 0) {
-				lines.Add("No times yet. Pick a course in Courses here and press Time attack.");
-			}
-			DrawLines(ref timesScroll_, lines);
 		}
 
 		/// <summary>The course builder, one step at a time: 1 start line, 2 drive, 3 finish line, 4 name and save.</summary>
@@ -737,11 +744,12 @@ namespace TRC.TuneLoader {
 				return;
 			}
 
+			bool circuit = recorder_.State == CourseRecorder.Phase.Idle ? newCourseShape_ == 1 : recorder_.Circuit;
 			int step = recorder_.State == CourseRecorder.Phase.Idle ? 1
 				: recorder_.State == CourseRecorder.Phase.Done ? 4
-				: recorder_.Recorded < CourseGeometry.MinLength ? 2
+				: circuit || recorder_.Recorded < CourseGeometry.MinLength ? 2
 				: 3;
-			DrawBuilderSteps(step);
+			DrawBuilderSteps(step, circuit);
 
 			GUILayout.BeginVertical(Theme.Card);
 			switch (step) {
@@ -750,8 +758,13 @@ namespace TRC.TuneLoader {
 					if (recorder_.Problem.Length > 0) {
 						GUILayout.Label(recorder_.Problem, Theme.PillWarn);
 					}
+					GUILayout.Label("Kind of course", Theme.SectionLabel);
+					newCourseShape_ = Choice(CourseShapes, newCourseShape_);
+					GUILayout.Label(newCourseShape_ == 1
+						? "A circuit is a loop: set the start line, drive once round, and drive back through the start line. It closes by itself there."
+						: "Point to point: set the start line, drive the course, then stop on the finish line and set it.", Theme.Small);
 					GUILayout.Label("Stop with the middle of your car on the start line, facing the way the course goes.", Theme.Body);
-					GUILayout.Label("Line width (start and finish)", Theme.SectionLabel);
+					GUILayout.Label(newCourseShape_ == 1 ? "Line width" : "Line width (start and finish)", Theme.SectionLabel);
 					int widthIndex = Array.IndexOf(LineWidths, newCourseWidth_);
 					int pickedWidth = Choice(LineWidths.Select(w => $"{w:0} m").ToArray(), widthIndex);
 					if (pickedWidth != widthIndex && pickedWidth >= 0) {
@@ -763,16 +776,24 @@ namespace TRC.TuneLoader {
 
 				case 2:
 				case 3:
-					GUILayout.Label(step == 2 ? "Step 2 · Drive the course" : "Step 3 · Finish line", Theme.Heading);
-					GUILayout.Label($"Recording the route: <b>{TimeAttackRun.Distance(recorder_.Recorded)}</b>", Theme.Body);
-					GUILayout.Label(step == 2
-						? $"Close this window ({shortcut_}) and drive the course down the middle of the road. Resetting the car loses the route."
-						: "Stop with the middle of your car on the finish line, then press Set finish here.", Theme.Body);
-					GUILayout.Space(4);
-					bool enabled = GUI.enabled;
-					GUI.enabled = enabled && step == 3;
-					BuilderButtons("Set finish here", SetCourseFinish, startOver: true);
-					GUI.enabled = enabled;
+					GUILayout.Label(circuit ? "Step 2 · Drive the loop" : step == 2 ? "Step 2 · Drive the course" : "Step 3 · Finish line", Theme.Heading);
+					GUILayout.Label($"Recording the route: <b>{TimeAttackRun.Distance(recorder_.Recorded)}</b> (the light-blue dots on the road)", Theme.Body);
+					if (circuit) {
+						GUILayout.Label(recorder_.Recorded < CourseGeometry.CircuitMinLength
+							? $"Close this window ({shortcut_}) and drive the loop down the middle of the road. A lap must be at least {CourseGeometry.CircuitMinLength:0} m. Resetting the car loses the route."
+							: $"Drive back through the start line, the way you set off, to close the loop ({TimeAttackRun.Distance(recorder_.DistanceToStart)} from it now).", Theme.Body);
+						GUILayout.Space(4);
+						BuilderButtons("Start over", () => { recorder_.Clear(); courseResult_ = ""; }, startOver: false);
+					} else {
+						GUILayout.Label(step == 2
+							? $"Close this window ({shortcut_}) and drive the course down the middle of the road. Resetting the car loses the route."
+							: "Stop with the middle of your car on the finish line, then press Set finish here.", Theme.Body);
+						GUILayout.Space(4);
+						bool enabled = GUI.enabled;
+						GUI.enabled = enabled && step == 3;
+						BuilderButtons("Set finish here", SetCourseFinish, startOver: true);
+						GUI.enabled = enabled;
+					}
 					break;
 
 				default:
@@ -781,10 +802,17 @@ namespace TRC.TuneLoader {
 					GUILayout.FlexibleSpace();
 					GUILayout.Label($"{TimeAttackRun.Distance(recorder_.Recorded)} recorded", Theme.Small);
 					GUILayout.EndHorizontal();
+					if (circuit && TuneRules.Trim(newCourseName_).Length == 0) {
+						newCourseName_ = $"{map_.Name} circuit {courses_.ForMap(map_.Key).Count(c => c.Source == CourseSource.Custom && c.IsCircuit) + 1}";
+					}
 					GUILayout.Label("Name", Theme.SectionLabel);
 					newCourseName_ = GUILayout.TextField(newCourseName_ ?? "", 60, Theme.Field);
-					GUILayout.Label("Kind", Theme.SectionLabel);
-					newCourseKind_ = Choice(CourseKinds, newCourseKind_);
+					if (circuit) {
+						GUILayout.Label("A circuit: the loop is closed.", Theme.Small);
+					} else {
+						GUILayout.Label("Kind", Theme.SectionLabel);
+						newCourseKind_ = Choice(CourseKinds, newCourseKind_);
+					}
 					GUILayout.Space(4);
 					BuilderButtons("Save course", SaveCourse, startOver: true);
 					break;
@@ -792,9 +820,12 @@ namespace TRC.TuneLoader {
 			GUILayout.EndVertical();
 		}
 
-		/// <summary>"1 Start › 2 Drive › 3 Finish › 4 Save", with the current step highlighted.</summary>
-		private static void DrawBuilderSteps(int current) {
-			string[] names = { "Start", "Drive", "Finish", "Save" };
+		/// <summary>"1 Start › 2 Drive › 3 Finish › 4 Save" (a circuit: "1 Start › 2 Drive the loop › 3 Save"), with the current step highlighted.</summary>
+		private static void DrawBuilderSteps(int current, bool circuit) {
+			string[] names = circuit ? new[] { "Start", "Drive the loop", "Save" } : new[] { "Start", "Drive", "Finish", "Save" };
+			if (circuit && current == 4) {
+				current = 3;
+			}
 			GUILayout.BeginHorizontal();
 			for (int i = 0; i < names.Length; i++) {
 				int number = i + 1;
@@ -847,9 +878,12 @@ namespace TRC.TuneLoader {
 				string recorded = pathRecorder_.State == PathRecorder.Phase.ToStart ? "" : $" · {TimeAttackRun.Distance(pathRecorder_.Recorded)}";
 				DrawHudPill(screenWidth, screenHeight, $"<b>Record path · {pathRecorder_.Course.Name}</b>{recorded}\n<color={Theme.MutedHex}>{pathRecorder_.Message}</color>");
 			} else if (recorder_.State != CourseRecorder.Phase.Idle) {
+				string next = !recorder_.Circuit ? $"Stop on the finish line, then {shortcut_}: Set finish here"
+					: recorder_.Recorded < CourseGeometry.CircuitMinLength ? "Drive once round the loop"
+					: $"Back through the start line closes the loop: {TimeAttackRun.Distance(recorder_.DistanceToStart)}";
 				DrawHudPill(screenWidth, screenHeight, recorder_.State == CourseRecorder.Phase.Recording
-					? $"<b>Recording the course</b> · {TimeAttackRun.Distance(recorder_.Recorded)}\n<color={Theme.MutedHex}>Stop on the finish line, then {shortcut_}: Set finish here</color>"
-					: $"<b>Course recorded</b>\n<color={Theme.MutedHex}>{shortcut_} to name and save it</color>");
+					? $"<b>Recording the {(recorder_.Circuit ? "circuit" : "course")}</b> · {TimeAttackRun.Distance(recorder_.Recorded)}\n<color={Theme.MutedHex}>{next}</color>"
+					: $"<b>{(recorder_.Circuit ? "Loop closed" : "Course recorded")}</b>\n<color={Theme.MutedHex}>{shortcut_} to name and save it</color>");
 			}
 			// A challenge always shows, even during a time attack or a recording.
 			if (invites_.Count > 0) {
@@ -868,7 +902,7 @@ namespace TRC.TuneLoader {
 
 			switch (run_.State) {
 				case TimeAttackRun.Phase.Running:
-					DrawTimer(screenWidth, screenHeight, run_);
+					DrawRunTimer(screenWidth, screenHeight);
 					break;
 				case TimeAttackRun.Phase.Finished:
 				case TimeAttackRun.Phase.Cancelled:
@@ -881,13 +915,14 @@ namespace TRC.TuneLoader {
 		}
 
 		/// <summary>
-		/// The running clock: just the time, a thin line under it for how far along the course the car is, and
-		/// (in a battle) one short line like "Ahead by 12 m".
+		/// The running clock: the time (<paramref name="main"/>, else the run's), a thin line under it for how far
+		/// along the course the car is, and short lines under that, like "Ahead by 12 m" or "Lap 2/5".
 		/// </summary>
-		private void DrawTimer(float screenWidth, float screenHeight, TimeAttackRun run, string below = null) {
-			float width = Mathf.Max(150f, Theme.HudTimer.CalcSize(new GUIContent("00:00.000")).x + 32f);
-			bool extra = !string.IsNullOrEmpty(below);
-			Rect rect = HudRect(screenWidth, screenHeight, width, extra ? 68f : 50f);
+		private void DrawTimer(float screenWidth, float screenHeight, TimeAttackRun run, string below = null, double? main = null) {
+			int lines = string.IsNullOrEmpty(below) ? 0 : below.Split('\n').Length;
+			float width = Mathf.Max(lines > 0 ? 240f : 150f, Theme.HudTimer.CalcSize(new GUIContent("00:00.000")).x + 32f);
+			bool extra = lines > 0;
+			Rect rect = HudRect(screenWidth, screenHeight, width, 50f + 18f * lines);
 			hudRect_ = rect;
 			HandleHudDrag(rect, screenWidth, screenHeight);
 			if (Event.current.type != EventType.Repaint) {
@@ -895,9 +930,9 @@ namespace TRC.TuneLoader {
 			}
 
 			GUI.Box(rect, GUIContent.none, Theme.HudPanel);
-			GUI.Label(new Rect(rect.x, rect.y + 3f, rect.width, 36f), TimeAttackRun.FormatTime(run.Elapsed), Theme.HudTimer);
+			GUI.Label(new Rect(rect.x, rect.y + 3f, rect.width, 36f), TimeAttackRun.FormatTime(main ?? run.Elapsed), Theme.HudTimer);
 			if (extra) {
-				GUI.Label(new Rect(rect.x, rect.y + 38f, rect.width, 18f), below, Theme.HudSmall);
+				GUI.Label(new Rect(rect.x, rect.y + 38f, rect.width, 18f * lines), below, Theme.HudSmall);
 			}
 			var bar = new Rect(rect.x + 14f, rect.yMax - 9f, rect.width - 28f, 3f);
 			float done = run.Course.Length > 0 ? Mathf.Clamp01(run.Progress / run.Course.Length) : 0f;
@@ -980,16 +1015,28 @@ namespace TRC.TuneLoader {
 				return;
 			}
 			CourseGate start = course.Start;
-			if (!adapter_.TryMoveCarTo(start.Center - start.Forward * StartGridMetres, start.Forward, out string error)) {
+			Vector3 spot = start.Center - start.Forward * StartGridMetres;
+			Vector3 facing = start.Forward;
+			if (run_ != null && run_.Flying && course.IsCircuit && course.HasPath) {
+				// A flying lap needs a run-up: back along the end of the loop.
+				int at = Array.FindIndex(course.Distances, d => d >= course.Length - FlyingRunUpMetres);
+				if (at > 0 && at < course.Path.Count - 1) {
+					spot = course.Path[at];
+					facing = CourseGeometry.Level(course.Path[at + 1] - course.Path[at]);
+				}
+			}
+			if (!adapter_.TryMoveCarTo(spot, facing, out string error)) {
 				courseResult_ = $"Couldn't teleport: {error}";
 				return;
 			}
 			// Restarted in the same frame, so the move isn't taken for a reset in the middle of a run.
 			teleportReadyAt_ = Time.unscaledTime + TeleportCooldownSeconds;
 			if (run_ != null) {
+				EndCircuitRunEarly("restarted");
 				run_.Restart();
 				runStart_ = null;
 				runResultUntil_ = 0;
+				ResetRunExtras();
 			} else {
 				pathRecorder_ = new PathRecorder(course);
 			}

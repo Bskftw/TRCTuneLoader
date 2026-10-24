@@ -13,7 +13,7 @@ namespace TRC.TuneLoader {
 	///   # comments start with #
 	///   [info]
 	///   name     = Akina Downhill
-	///   kind     = touge              (touge or highway)
+	///   kind     = touge              (touge, highway or circuit)
 	///   map      = workshop:123456    (the map's key: see MapInfo)
 	///   map_name = Project Dream
 	///   author   = bskftw
@@ -25,10 +25,11 @@ namespace TRC.TuneLoader {
 	///   width     = 12                (metres)
 	///
 	///   [finish]
-	///   ... same as [start]
+	///   ... same as [start] (not for a circuit: its finish line is its start line)
 	///
 	///   [path]
-	///   12.3, 45.6, -78.9             (points along the middle of the road, start to finish)
+	///   12.3, 45.6, -78.9             (points along the middle of the road, start to finish; a circuit's go
+	///                                  once round, back to the start line)
 	///   ...
 	/// </summary>
 	public static class CourseFile {
@@ -86,7 +87,7 @@ namespace TRC.TuneLoader {
 					case "info":
 						switch (key) {
 							case "name": course.Name = value; break;
-							case "kind": course.Kind = TuneRules.Key(value) == "highway" ? CourseKind.Highway : CourseKind.Touge; break;
+							case "kind": course.Kind = ParseKind(value); break;
 							case "map": course.MapKey = value; break;
 							case "map_name": course.MapName = value; break;
 							case "author": course.Author = value; break;
@@ -109,7 +110,7 @@ namespace TRC.TuneLoader {
 			if (!startSet) {
 				course.Problems.Add("No [start] position");
 			}
-			if (!finishSet) {
+			if (!finishSet && !course.IsCircuit) {
 				course.Problems.Add("No [finish] position");
 			}
 			if (string.IsNullOrEmpty(course.MapKey)) {
@@ -133,14 +134,16 @@ namespace TRC.TuneLoader {
 
 			text.Append("[info]\n");
 			AppendField(text, "name", course.Name);
-			AppendField(text, "kind", course.Kind == CourseKind.Highway ? "highway" : "touge");
+			AppendField(text, "kind", Course.KindWord(course.Kind));
 			AppendField(text, "map", course.MapKey);
 			AppendField(text, "map_name", course.MapName);
 			AppendField(text, "author", course.Author);
 			AppendField(text, "code", course.Code);
 
 			AppendGate(text, "start", course.Start);
-			AppendGate(text, "finish", course.Finish);
+			if (!course.IsCircuit) {
+				AppendGate(text, "finish", course.Finish);
+			}
 
 			if (course.HasPath) {
 				text.Append("\n[path]\n");
@@ -155,6 +158,14 @@ namespace TRC.TuneLoader {
 			Directory.CreateDirectory(Path.GetDirectoryName(path));
 			File.WriteAllText(path, ToText(course), new UTF8Encoding(false));
 			course.FilePath = path;
+		}
+
+		private static CourseKind ParseKind(string value) {
+			switch (TuneRules.Key(value)) {
+				case "highway": return CourseKind.Highway;
+				case "circuit": return CourseKind.Circuit;
+				default: return CourseKind.Touge;
+			}
 		}
 
 		private static bool SetGate(CourseGate gate, string key, string value, int lineNumber, List<string> problems) {

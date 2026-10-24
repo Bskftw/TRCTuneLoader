@@ -6,7 +6,7 @@ using System.Linq;
 using System.Text;
 
 namespace TRC.TuneLoader {
-	/// <summary>One finished time attack, as saved in the run log.</summary>
+	/// <summary>One finished time attack, or one lap of a circuit, as saved in the run log.</summary>
 	public sealed class TimeAttackRecord {
 		public DateTime When;
 		public string CourseCode = "";
@@ -30,13 +30,40 @@ namespace TRC.TuneLoader {
 		public long TimeMs;
 		public string LoaderVersion = "";
 
+		/// <summary>Started at speed through the start line, not from a standstill at GO.</summary>
+		public bool Flying;
+
+		/// <summary>The laps the run was for: 1 for point to point, 0 for unlimited (circuits).</summary>
+		public int Laps = 1;
+
+		/// <summary>One lap of a circuit (its number), not a whole run (0).</summary>
+		public int LapNumber;
+
+		/// <summary>Milliseconds for each sector, in order (empty for runs from before sectors).</summary>
+		public long[] SectorMs = new long[0];
+
 		public bool IsSpec => Spec == TimeAttackLog.SpecWord && FlaggedMods == 0;
+		public bool IsLap => LapNumber > 0;
 		public double Seconds => TimeMs / 1000.0;
 	}
 
+	/// <summary>Which kind of time a record is: whole runs only compare with runs started the same way over the same laps; laps with laps.</summary>
+	public struct TimeKind {
+		public bool Lap;
+		public bool Flying;
+		public int Laps;
+
+		public static TimeKind Of(TimeAttackRecord record) =>
+			record.IsLap ? new TimeKind { Lap = true, Flying = record.Flying } : new TimeKind { Flying = record.Flying, Laps = record.Laps };
+
+		public bool Matches(TimeAttackRecord record) =>
+			record.IsLap == Lap && record.Flying == Flying && (Lap || record.Laps == Laps);
+	}
+
 	/// <summary>
-	/// Every finished time attack, one line each in TimeAttack/runs.csv next to the mod. Lines are only
-	/// ever added, so the file is the player's full history.
+	/// Every finished time attack, one line each in TimeAttack/runs.csv next to the mod, and every valid lap of a
+	/// circuit. Lines are only ever added, so the file is the player's full history. Columns added later go at
+	/// the end, so older lines still read (as standing-start, point-to-point runs).
 	/// </summary>
 	public static class TimeAttackLog {
 		public const string SpecWord = "spec";
@@ -45,7 +72,11 @@ namespace TRC.TuneLoader {
 		private static readonly string[] Columns = {
 			"date", "course_code", "course", "map", "map_name", "official_course", "car_id", "car", "setup",
 			"tune_code", "tune_set", "spec", "flagged_mods", "time_ms", "loader_version",
+			"start", "laps", "lap", "sectors_ms",
 		};
+
+		/// <summary>The first columns, which every line has (lines from before 0.11 have only these).</summary>
+		private const int OldColumns = 15;
 
 		public static void Append(string folder, TimeAttackRecord record) {
 			Directory.CreateDirectory(folder);
@@ -63,6 +94,10 @@ namespace TRC.TuneLoader {
 				record.FlaggedMods.ToString(CultureInfo.InvariantCulture),
 				record.TimeMs.ToString(CultureInfo.InvariantCulture),
 				record.LoaderVersion,
+				record.Flying ? "flying" : "standing",
+				record.Laps.ToString(CultureInfo.InvariantCulture),
+				record.LapNumber.ToString(CultureInfo.InvariantCulture),
+				string.Join("|", record.SectorMs.Select(ms => ms.ToString(CultureInfo.InvariantCulture))),
 			};
 			text.Append(string.Join(",", fields.Select(Quote))).Append('\n');
 			File.AppendAllText(path, text.ToString(), new UTF8Encoding(false));
@@ -83,14 +118,14 @@ namespace TRC.TuneLoader {
 					continue;
 				}
 				List<string> f = Split(line);
-				if (f.Count < Columns.Length ||
+				if (f.Count < OldColumns ||
 					!DateTime.TryParseExact(f[0], "yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime when) ||
 					!long.TryParse(f[13], NumberStyles.None, CultureInfo.InvariantCulture, out long ms)) {
 					continue;
 				}
 				int.TryParse(f[6], NumberStyles.Integer, CultureInfo.InvariantCulture, out int carId);
 				int.TryParse(f[12], NumberStyles.None, CultureInfo.InvariantCulture, out int flagged);
-				records.Add(new TimeAttackRecord {
+				var record = new TimeAttackRecord {
 					When = when,
 					CourseCode = f[1],
 					CourseName = f[2],
@@ -106,26 +141,83 @@ namespace TRC.TuneLoader {
 					FlaggedMods = flagged,
 					TimeMs = ms,
 					LoaderVersion = f[14],
-				});
+				};
+				if (f.Count >= Columns.Length) {
+					record.Flying = f[15] == "flying";
+					int.TryParse(f[16], NumberStyles.None, CultureInfo.InvariantCulture, out record.Laps);
+					int.TryParse(f[17], NumberStyles.None, CultureInfo.InvariantCulture, out record.LapNumber);
+					record.SectorMs = f[18].Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries)
+						.Select(t => long.TryParse(t, NumberStyles.None, CultureInfo.InvariantCulture, out long v) ? v : -1)
+						.ToArray();
+					if (record.SectorMs.Any(v => v < 0)) {
+						record.SectorMs = new long[0];
+					}
+				}
+				records.Add(record);
 			}
 			return records;
 		}
 
-		/// <summary>The fastest run on this course that counts (TRC spec, nothing flagged), or null.</summary>
+		/// <summary>The fastest whole run (or, on a circuit, lap) on this course that counts (TRC spec, nothing flagged), or null.</summary>
 		public static TimeAttackRecord BestSpec(IEnumerable<TimeAttackRecord> records, string courseCode) =>
-			records.Where(r => r.CourseCode == courseCode && r.IsSpec).OrderBy(r => r.TimeMs).FirstOrDefault();
+			Headline(records.Where(r => r.CourseCode == courseCode && r.IsSpec));
 
-		/// <summary>The fastest run on this course, spec or not, or null.</summary>
+		/// <summary>The fastest run (or lap) on this course, spec or not, or null.</summary>
 		public static TimeAttackRecord Best(IEnumerable<TimeAttackRecord> records, string courseCode) =>
-			records.Where(r => r.CourseCode == courseCode).OrderBy(r => r.TimeMs).FirstOrDefault();
+			Headline(records.Where(r => r.CourseCode == courseCode));
+
+		/// <summary>The time to show for a course: its best lap when it has laps (circuits), else its best standing-start run.</summary>
+		private static TimeAttackRecord Headline(IEnumerable<TimeAttackRecord> records) {
+			List<TimeAttackRecord> list = records.ToList();
+			return list.Where(r => r.IsLap && r.Flying).OrderBy(r => r.TimeMs).FirstOrDefault()
+				?? list.Where(r => !r.IsLap && !r.Flying).OrderBy(r => r.TimeMs).FirstOrDefault()
+				?? list.OrderBy(r => r.TimeMs).FirstOrDefault();
+		}
 
 		/// <summary>
-		/// The fastest run on this course in this car with this TRC tune set ("" for runs that matched none), counted
-		/// runs only when <paramref name="specOnly"/>, or null. Each car and set has its own times.
+		/// The fastest time of this kind (<paramref name="kind"/>) on this course in this car with this TRC tune set,
+		/// counted ones only when <paramref name="specOnly"/>, or null.
+		/// </summary>
+		public static TimeAttackRecord BestFor(IEnumerable<TimeAttackRecord> records, string courseCode, int carId, string tuneSet, bool specOnly, TimeKind kind) =>
+			records.Where(r => r.CourseCode == courseCode && r.CarId == carId && r.TuneSet == tuneSet && (!specOnly || r.IsSpec) && kind.Matches(r))
+				.OrderBy(r => r.TimeMs).FirstOrDefault();
+
+		/// <summary>
+		/// The best time each sector has been driven in (of this kind, in this car on this set), added up: what a
+		/// run made of your best sectors would take. Null when no time of this kind has sectors (or they differ in count).
+		/// </summary>
+		public static long? TheoreticalBestMs(IEnumerable<TimeAttackRecord> records, string courseCode, int carId, string tuneSet, TimeKind kind, int sectors) {
+			List<long[]> all = records.Where(r => r.CourseCode == courseCode && r.CarId == carId && r.TuneSet == tuneSet && kind.Matches(r) && r.SectorMs.Length == sectors && sectors > 0)
+				.Select(r => r.SectorMs).ToList();
+			if (all.Count == 0) {
+				return null;
+			}
+			long sum = 0;
+			for (int i = 0; i < sectors; i++) {
+				sum += all.Min(s => s[i]);
+			}
+			return sum;
+		}
+
+		/// <summary>The best time for each sector so far (of this kind), for the colours of the splits: null where there's none.</summary>
+		public static long?[] BestSectorsMs(IEnumerable<TimeAttackRecord> records, Func<TimeAttackRecord, bool> which, int sectors) {
+			var best = new long?[sectors];
+			foreach (TimeAttackRecord r in records.Where(which).Where(r => r.SectorMs.Length == sectors)) {
+				for (int i = 0; i < sectors; i++) {
+					if (best[i] == null || r.SectorMs[i] < best[i]) {
+						best[i] = r.SectorMs[i];
+					}
+				}
+			}
+			return best;
+		}
+
+		/// <summary>
+		/// The fastest standing-start run on this course in this car with this TRC tune set ("" for runs that matched
+		/// none), counted runs only when <paramref name="specOnly"/>, or null. Each car and set has its own times.
 		/// </summary>
 		public static TimeAttackRecord BestFor(IEnumerable<TimeAttackRecord> records, string courseCode, int carId, string tuneSet, bool specOnly) =>
-			records.Where(r => r.CourseCode == courseCode && r.CarId == carId && r.TuneSet == tuneSet && (!specOnly || r.IsSpec))
-				.OrderBy(r => r.TimeMs).FirstOrDefault();
+			BestFor(records, courseCode, carId, tuneSet, specOnly, new TimeKind { Laps = 1 });
 
 		private static string Quote(string field) {
 			field = (field ?? "").Replace("\r", " ").Replace("\n", " ");

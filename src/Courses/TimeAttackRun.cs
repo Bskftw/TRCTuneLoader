@@ -1,15 +1,53 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using UnityEngine;
 
 namespace TRC.TuneLoader {
+	/// <summary>One lap of a run (a point-to-point run is one lap): its time, its sectors, and whether it counts.</summary>
+	public sealed class LapTime {
+		/// <summary>1 for the first lap.</summary>
+		public int Number;
+		public double Time;
+
+		/// <summary>Seconds for each sector of the lap, in order.</summary>
+		public double[] Sectors = new double[0];
+
+		/// <summary>False when the lap was spoiled (practice only: a shortcut, leaving the road...), with why.</summary>
+		public bool Valid = true;
+		public string Invalid = "";
+
+		/// <summary>The lap began at a standing start (the first lap of a standing run), so it's slower than a flying lap.</summary>
+		public bool Standing;
+
+		/// <summary>Lap time at every <see cref="TimeAttackRun.TraceStep"/> metres along the lap: what the live delta compares with.</summary>
+		public float[] Trace = new float[0];
+	}
+
+	/// <summary>A sector just finished, to flash on screen.</summary>
+	public struct SectorSplit {
+		/// <summary>0 for the first sector.</summary>
+		public int Index;
+		public int Lap;
+
+		/// <summary>Seconds for the sector itself.</summary>
+		public double Time;
+	}
+
 	/// <summary>
 	/// One time attack on a course, fed the car's position every frame.
 	///
 	/// Standing start: the car stops behind the start line, a 3-2-1-GO countdown runs, and the clock starts
-	/// at GO. Moving during the countdown is a jump start. The run ends when the car crosses the finish line
-	/// after following the path (the exact moment is worked out between frames), and is stopped by a
-	/// shortcut, leaving the course, a reset, or a change of game speed.
+	/// at GO. Moving during the countdown is a jump start. Flying start: the clock starts when the car crosses
+	/// the start line, at any speed. The run ends when the car crosses the finish line after following the
+	/// path (the exact moment is worked out between frames); on a circuit, crossing the start line again after
+	/// a lap starts the next lap, until the laps are done (or for as long as the driver likes, with unlimited
+	/// laps). Each lap is split into sectors (Course.SectorEnds).
+	///
+	/// A shortcut, leaving the course, a reset or a change of game speed stops the run. With unlimited laps on a
+	/// circuit (practice) only the lap is spoiled: it's marked invalid and the run goes on. In battles
+	/// (<see cref="AllowResets"/>) a reset is fine as long as it doesn't put the car further along the course.
 	///
 	/// It knows nothing about CarX: the mod feeds it positions, so the self-test can drive it too.
 	/// </summary>
@@ -17,6 +55,9 @@ namespace TRC.TuneLoader {
 		public enum Phase { ToStart, Countdown, Running, Finished, Cancelled }
 
 		public const float CountdownSeconds = 3f;
+
+		/// <summary>The lap time is kept every this many metres along the lap, for the live delta.</summary>
+		public const float TraceStep = 10f;
 
 		/// <summary>How long the car must stand still behind the line before the countdown starts.</summary>
 		private const float StillSeconds = 1f;
@@ -30,13 +71,15 @@ namespace TRC.TuneLoader {
 		private const float GridDepth = 25f;
 		private const float GridHeight = 4f;
 
-		/// <summary>The finish only counts once the car is this far along the path, so it can't be reached the wrong way.</summary>
+		/// <summary>The finish (or the end of a lap) only counts once the car is this far along the path, so it can't be reached the wrong way.</summary>
 		private const float FinishShare = 0.85f;
 		private const double MaxRunSeconds = 1800;
+		private const double MaxPracticeSeconds = 4 * 3600;
 
 		/// <summary>Further from the path than this (metres) for longer than <see cref="OffCourseSeconds"/> stops the run.</summary>
 		private const float OffCourseTouge = 25f;
 		private const float OffCourseHighway = 40f;
+		private const float OffCourseCircuit = 30f;
 		private const double OffCourseSeconds = 2;
 
 		/// <summary>The whole car off the course's road meshes (TRC Main road) for longer than this stops the run.</summary>
@@ -48,12 +91,27 @@ namespace TRC.TuneLoader {
 		/// <summary>A jump of more than this (metres) in one frame, much more than the car's speed allows, is a reset.</summary>
 		private const float ResetMetres = 25f;
 
+		/// <summary>In a battle, a reset may put the car this far (metres) further along the course, no more.</summary>
+		public const float ResetAheadMetres = 15f;
+
 		/// <summary>The car is looked for this many path segments (about 2 m each) behind and ahead of where it was.</summary>
 		private const int LookBehind = 10;
 		private const int LookAhead = 60;
 
+		/// <summary>After a reset, the car is first looked for this far back along the path (segments), where resets put it.</summary>
+		private const int ResetLookBehind = 200;
+
 		public Course Course { get; }
 		public Phase State { get; private set; } = Phase.ToStart;
+
+		/// <summary>Laps to drive: 1 for a point-to-point course, 0 for unlimited (circuits).</summary>
+		public int Laps { get; }
+
+		/// <summary>The clock starts when the car crosses the start line, instead of at GO from a standstill.</summary>
+		public bool Flying { get; }
+
+		/// <summary>Unlimited laps on a circuit: a spoiled lap is marked invalid and the run goes on.</summary>
+		public bool Practice => Course.IsCircuit && Laps == 0;
 
 		/// <summary>What to tell the driver right now ("Drive to the start: 320 m", "Jump start!", ...).</summary>
 		public string Message { get; private set; } = "Drive to the start";
@@ -70,19 +128,54 @@ namespace TRC.TuneLoader {
 		/// <summary>The time from GO to the finish line, in seconds, once finished.</summary>
 		public double Result { get; private set; }
 
-		/// <summary>Metres along the course.</summary>
+		/// <summary>Metres along the course (along this lap, on a circuit).</summary>
 		public float Progress { get; private set; }
+
+		/// <summary>Metres driven along the course in the whole run, over every lap: what battles compare.</summary>
+		public float TotalProgress => (Lap - 1) * Course.Length + Progress;
 
 		public float DistanceToStart { get; private set; }
 
 		/// <summary>How many jump starts this run has had.</summary>
 		public int JumpStarts { get; private set; }
 
+		/// <summary>How many resets a battle let through.</summary>
+		public int Resets { get; private set; }
+
+		/// <summary>The lap being driven: 1 for the first.</summary>
+		public int Lap { get; private set; } = 1;
+
+		/// <summary>Seconds since the lap began.</summary>
+		public double LapElapsed => Elapsed - lapStart_;
+
+		/// <summary>Every finished lap, in order.</summary>
+		public List<LapTime> LapTimes { get; } = new List<LapTime>();
+
+		/// <summary>The fastest valid lap so far, or null.</summary>
+		public LapTime BestLap => LapTimes.Where(l => l.Valid).OrderBy(l => l.Time).FirstOrDefault();
+
+		/// <summary>Whether the lap being driven still counts, and why not.</summary>
+		public bool LapValid { get; private set; } = true;
+		public string LapInvalid { get; private set; } = "";
+
+		/// <summary>The sector being driven (0 for the first) and the last one finished.</summary>
+		public int Sector { get; private set; }
+		public SectorSplit? LastSplit { get; private set; }
+
+		/// <summary>
+		/// The lap to compare with for the live delta: lap time at every <see cref="TraceStep"/> m (a best lap's
+		/// or best run's <see cref="LapTime.Trace"/>). Null for none.
+		/// </summary>
+		public float[] Reference { get; set; }
+
 		/// <summary>
 		/// For battles: the countdown doesn't start by itself once the car stands still; it starts when
 		/// <see cref="StartCountdown"/> is called (both drivers ready, GO at the same moment for both).
 		/// </summary>
 		public bool ExternalStart { get; set; }
+
+		/// <summary>For battles: a reset doesn't stop the run, unless it puts the car further along the course.</summary>
+		public bool AllowResets { get; set; }
 
 		/// <summary>The car stands still in its start box, facing the right way (for battles, with <see cref="ExternalStart"/>).</summary>
 		public bool ReadyToStart { get; private set; }
@@ -104,15 +197,43 @@ namespace TRC.TuneLoader {
 		private float lastSpeed_;
 		private float lastProgress_;
 		private int segment_;
+		private bool hasLast_;
 
-		public TimeAttackRun(Course course) {
+		/// <summary>When the lap began, in seconds since GO.</summary>
+		private double lapStart_;
+		private readonly List<double> splits_ = new List<double>();
+		private readonly List<float> trace_ = new List<float>();
+
+		public TimeAttackRun(Course course, int laps = 1, bool flying = false) {
 			Course = course;
+			Laps = course.IsCircuit ? Math.Max(0, laps) : 1;
+			Flying = flying;
+			Message = flying ? "Drive through the start line to start the clock" : "Drive to the start";
 		}
 
 		public bool Active => State == Phase.ToStart || State == Phase.Countdown || State == Phase.Running;
 
 		/// <summary>True for a second after GO, to show it on screen.</summary>
-		public bool ShowGo(double now) => State == Phase.Running && now - goTime_ < 1.0;
+		public bool ShowGo(double now) => State == Phase.Running && !Flying && now - goTime_ < 1.0;
+
+		/// <summary>
+		/// Seconds ahead (negative) or behind (positive) the <see cref="Reference"/> lap at this point of the lap,
+		/// or null without one.
+		/// </summary>
+		public double? Delta {
+			get {
+				if (State != Phase.Running || Reference == null || Reference.Length < 2) {
+					return null;
+				}
+				float at = Progress / TraceStep;
+				int i = Mathf.FloorToInt(at);
+				if (i < 0 || i + 1 >= Reference.Length) {
+					return null;
+				}
+				double then = Reference[i] + (Reference[i + 1] - Reference[i]) * (at - i);
+				return LapElapsed - then;
+			}
+		}
 
 		/// <param name="now">Game time in seconds (it stops while the game is paused).</param>
 		/// <param name="timeScale">The game's speed: 1 normally, 0 while paused. Anything else stops a run.</param>
@@ -124,7 +245,11 @@ namespace TRC.TuneLoader {
 			speedKmh = Mathf.Abs(speedKmh);
 			switch (State) {
 				case Phase.ToStart:
-					WaitAtStart(now, position, forward, speedKmh);
+					if (Flying) {
+						WaitForFlyingStart(now, position, speedKmh);
+					} else {
+						WaitAtStart(now, position, forward, speedKmh);
+					}
 					break;
 				case Phase.Countdown:
 					CountDown(now, position, speedKmh);
@@ -164,16 +289,24 @@ namespace TRC.TuneLoader {
 		/// <summary>Back to the start for another go, after finishing or being stopped.</summary>
 		public void Restart() {
 			State = Phase.ToStart;
-			Message = "Drive to the start";
+			Message = Flying ? "Drive through the start line to start the clock" : "Drive to the start";
 			ReadyToStart = false;
 			CountdownNumber = 0;
 			Elapsed = 0;
 			Result = 0;
 			Progress = 0;
+			Lap = 1;
+			LapTimes.Clear();
+			LapValid = true;
+			LapInvalid = "";
+			Sector = 0;
+			LastSplit = null;
+			Resets = 0;
 			stillSince_ = -1;
 			jumpUntil_ = -1;
 			offSince_ = -1;
 			offRoadSince_ = -1;
+			hasLast_ = false;
 		}
 
 		private void WaitAtStart(double now, Vector3 position, Vector3 forward, float speedKmh) {
@@ -222,6 +355,23 @@ namespace TRC.TuneLoader {
 			Message = now < jumpUntil_ ? "Jump start! Stop behind the line to try again" : hint;
 		}
 
+		/// <summary>Flying start: the clock starts at the moment the car crosses the start line (worked out between frames).</summary>
+		private void WaitForFlyingStart(double now, Vector3 position, float speedKmh) {
+			DistanceToStart = Vector3.Distance(position, Course.Start.Center);
+			if (hasLast_ && Vector3.Distance(position, lastPosition_) <= ResetMetres &&
+				CourseGeometry.Crossed(Course.Start, lastPosition_, position, out float fraction)) {
+				goTime_ = lastTime_ + fraction * (now - lastTime_);
+				BeginRunning(now, position, speedKmh);
+				return;
+			}
+			hasLast_ = true;
+			lastPosition_ = position;
+			lastTime_ = now;
+			Message = DistanceToStart > 60f
+				? $"Drive through the start line to start the clock: {Distance(DistanceToStart)}"
+				: "Drive through the start line to start the clock";
+		}
+
 		private void CountDown(double now, Vector3 position, float speedKmh) {
 			if (speedKmh > JumpKmh || Vector3.Distance(position, anchor_) > JumpMetres) {
 				State = Phase.ToStart;
@@ -247,9 +397,13 @@ namespace TRC.TuneLoader {
 				return;
 			}
 
+			goTime_ = countdownStart_ + CountdownSeconds;
+			BeginRunning(now, position, speedKmh);
+		}
+
+		private void BeginRunning(double now, Vector3 position, float speedKmh) {
 			State = Phase.Running;
 			CountdownNumber = 0;
-			goTime_ = countdownStart_ + CountdownSeconds;
 			Elapsed = now - goTime_;
 			lastPosition_ = position;
 			lastTime_ = now;
@@ -259,7 +413,20 @@ namespace TRC.TuneLoader {
 			lastProgress_ = Progress = at.Progress;
 			offSince_ = -1;
 			offRoadSince_ = -1;
+			Lap = 1;
+			BeginLap(0);
 			Message = "";
+		}
+
+		/// <summary>A new lap starting <paramref name="at"/> seconds after GO.</summary>
+		private void BeginLap(double at) {
+			lapStart_ = at;
+			LapValid = true;
+			LapInvalid = "";
+			Sector = 0;
+			splits_.Clear();
+			trace_.Clear();
+			trace_.Add(0f);
 		}
 
 		private void Run(double now, Vector3 position, float speedKmh, float timeScale, bool? onRoad) {
@@ -275,25 +442,54 @@ namespace TRC.TuneLoader {
 
 			float moved = Vector3.Distance(position, lastPosition_);
 			float possible = Mathf.Max(lastSpeed_, speedKmh) / 3.6f * (float)dt;
-			if (moved > ResetMetres && moved > possible * 3f + 5f) {
-				Cancel("The car was reset or moved, so the run was stopped.");
+			bool reset = moved > ResetMetres && moved > possible * 3f + 5f;
+			PathPosition at;
+			if (reset) {
+				// Found again near where the car was (resets put it back on the road behind), else anywhere on the path.
+				at = CourseGeometry.Project(Course.Path, Course.Distances, position, segment_ - ResetLookBehind, segment_ + LookAhead);
+				if (at.Offset > OffCourseLimit) {
+					at = CourseGeometry.Project(Course.Path, Course.Distances, position, 0, Course.Path.Count);
+				}
+				if (Practice) {
+					Spoil("the car was reset");
+				} else if (!AllowResets) {
+					Cancel("The car was reset or moved, so the run was stopped.");
+					return;
+				} else if (at.Progress > lastProgress_ + ResetAheadMetres || at.Offset > OffCourseLimit) {
+					Cancel("The reset put the car further along the course, so the run was stopped.");
+					return;
+				} else {
+					Resets++;
+				}
+				offSince_ = -1;
+				offRoadSince_ = -1;
+				Moved(now, position, speedKmh, at, resetTo: true);
 				return;
 			}
 
-			PathPosition at = CourseGeometry.Project(Course.Path, Course.Distances, position, segment_ - LookBehind, segment_ + LookAhead);
+			at = CourseGeometry.Project(Course.Path, Course.Distances, position, segment_ - LookBehind, segment_ + LookAhead);
+			if (Practice && at.Offset > OffCourseLimit * 3f) {
+				// Far off the course in practice: find the car again wherever it comes back to.
+				PathPosition anywhere = CourseGeometry.Project(Course.Path, Course.Distances, position, 0, Course.Path.Count);
+				if (anywhere.Offset < at.Offset) {
+					at = anywhere;
+					lastProgress_ = at.Progress;
+				}
+			}
 			if (Course.HasPath) {
 				if (at.Progress - lastProgress_ > moved + ShortcutMargin) {
-					Cancel("Shortcut: the car got ahead along the course faster than it drove.");
-					return;
+					if (!Fail("Shortcut: the car got ahead along the course faster than it drove.", "shortcut")) {
+						return;
+					}
 				}
-				float limit = Course.Kind == CourseKind.Highway ? OffCourseHighway : OffCourseTouge;
-				if (at.Offset > limit) {
+				if (at.Offset > OffCourseLimit) {
 					if (offSince_ < 0) {
 						offSince_ = now;
 					}
-					if (now - offSince_ > OffCourseSeconds || at.Offset > limit * 3f) {
-						Cancel("You left the course, so the run was stopped.");
-						return;
+					if (now - offSince_ > OffCourseSeconds || at.Offset > OffCourseLimit * 3f) {
+						if (!Fail("You left the course, so the run was stopped.", "left the course")) {
+							return;
+						}
 					}
 				} else {
 					offSince_ = -1;
@@ -305,8 +501,9 @@ namespace TRC.TuneLoader {
 					offRoadSince_ = now;
 				}
 				if (now - offRoadSince_ > OffRoadSeconds) {
-					Cancel("You left the road, so the run was stopped.");
-					return;
+					if (!Fail("You left the road, so the run was stopped.", "left the road")) {
+						return;
+					}
 				}
 			} else if (onRoad == true) {
 				offRoadSince_ = -1;
@@ -314,25 +511,106 @@ namespace TRC.TuneLoader {
 
 			bool farEnough = Mathf.Max(at.Progress, lastProgress_) >= Course.Length * FinishShare;
 			if (farEnough && CourseGeometry.Crossed(Course.Finish, lastPosition_, position, out float fraction)) {
-				Result = lastTime_ + fraction * dt - goTime_;
-				Elapsed = Result;
-				Progress = Course.Length;
-				State = Phase.Finished;
-				Message = $"Finished: {FormatTime(Result)}";
+				double crossed = lastTime_ + fraction * dt - goTime_;
+				Track(crossed, Course.Length);
+				EndLap(crossed);
+				if (Laps != 0 && LapTimes.Count >= Laps) {
+					Result = crossed;
+					Elapsed = Result;
+					Progress = Course.Length;
+					State = Phase.Finished;
+					Message = $"Finished: {FormatTime(Result)}";
+					return;
+				}
+				// The next lap starts right here, at the start of the path.
+				Lap++;
+				BeginLap(crossed);
+				at = CourseGeometry.Project(Course.Path, Course.Distances, position, 0, LookAhead);
+				Moved(now, position, speedKmh, at, resetTo: true);
 				return;
 			}
 
-			if (Elapsed > MaxRunSeconds) {
-				Cancel("Over 30 minutes, so the run was stopped.");
+			if (Elapsed > (Practice ? MaxPracticeSeconds : MaxRunSeconds)) {
+				Cancel(Practice ? "Over 4 hours, so the practice was stopped." : "Over 30 minutes, so the run was stopped.");
 				return;
 			}
 
+			Moved(now, position, speedKmh, at, resetTo: false);
+		}
+
+		private float OffCourseLimit => Course.Kind == CourseKind.Highway ? OffCourseHighway : Course.IsCircuit ? OffCourseCircuit : OffCourseTouge;
+
+		/// <summary>The car moved on to <paramref name="at"/>: sectors and the trace catch up, then this frame is the last one seen.</summary>
+		private void Moved(double now, Vector3 position, float speedKmh, PathPosition at, bool resetTo) {
+			if (!resetTo && at.Progress > lastProgress_) {
+				// The moment the car passed each point is worked out along the way it moved this frame.
+				double dt = now - lastTime_;
+				float from = lastProgress_;
+				float to = at.Progress;
+				double TimeAt(float distance) => lastTime_ - goTime_ + dt * (distance - from) / (to - from);
+				while (Sector < Course.SectorEnds.Length - 1 && Course.SectorEnds[Sector] <= to) {
+					Split(TimeAt(Math.Max(from, Course.SectorEnds[Sector])));
+				}
+				while (trace_.Count * TraceStep <= to) {
+					trace_.Add((float)(TimeAt(Math.Max(from, trace_.Count * TraceStep)) - lapStart_));
+				}
+			}
 			segment_ = at.Segment;
 			Progress = at.Progress;
 			lastPosition_ = position;
 			lastTime_ = now;
 			lastSpeed_ = speedKmh;
 			lastProgress_ = at.Progress;
+		}
+
+		/// <summary>Records <paramref name="crossed"/> for any sectors and trace points up to <paramref name="distance"/> not passed yet (at the line).</summary>
+		private void Track(double crossed, float distance) {
+			while (trace_.Count * TraceStep <= distance) {
+				trace_.Add((float)(crossed - lapStart_));
+			}
+		}
+
+		private void Split(double at) {
+			double started = splits_.Count == 0 ? lapStart_ : splits_[splits_.Count - 1];
+			splits_.Add(at);
+			LastSplit = new SectorSplit { Index = Sector, Lap = Lap, Time = at - started };
+			Sector++;
+		}
+
+		private void EndLap(double crossed) {
+			while (splits_.Count < Course.SectorEnds.Length) {
+				Split(crossed);
+			}
+			var sectors = new double[splits_.Count];
+			for (int i = 0; i < splits_.Count; i++) {
+				sectors[i] = splits_[i] - (i == 0 ? lapStart_ : splits_[i - 1]);
+			}
+			LapTimes.Add(new LapTime {
+				Number = Lap,
+				Time = crossed - lapStart_,
+				Sectors = sectors,
+				Valid = LapValid,
+				Invalid = LapInvalid,
+				Standing = Lap == 1 && !Flying,
+				Trace = trace_.ToArray(),
+			});
+		}
+
+		/// <summary>A rule was broken: in practice the lap is spoiled and the run goes on (true); otherwise the run stops (false).</summary>
+		private bool Fail(string stop, string spoil) {
+			if (!Practice) {
+				Cancel(stop);
+				return false;
+			}
+			Spoil(spoil);
+			return true;
+		}
+
+		private void Spoil(string why) {
+			if (LapValid) {
+				LapValid = false;
+				LapInvalid = why;
+			}
 		}
 
 		/// <summary>"1:23.456", or "23.456" under a minute.</summary>
@@ -347,6 +625,10 @@ namespace TRC.TuneLoader {
 				? $"{minutes.ToString(CultureInfo.InvariantCulture)}:{rest.ToString("00.000", CultureInfo.InvariantCulture)}"
 				: rest.ToString("0.000", CultureInfo.InvariantCulture);
 		}
+
+		/// <summary>"+0.125" or "-1.200": a gap in seconds, with its sign.</summary>
+		public static string FormatGap(double seconds) =>
+			(seconds < 0 ? "-" : "+") + Math.Abs(seconds).ToString("0.000", CultureInfo.InvariantCulture);
 
 		/// <summary>"320 m" or "4.2 km".</summary>
 		public static string Distance(float metres) =>

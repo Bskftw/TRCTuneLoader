@@ -28,6 +28,9 @@ namespace TRC.TuneLoader.CodeCheck {
 			/// <summary>Moves 1 m forward once during this countdown (a jump start), when set.</summary>
 			public int JumpInCountdown = -1;
 			public bool Jumped;
+
+			/// <summary>Metres added to where the car would be (a reset or a jump ahead), from the frame it's set.</summary>
+			public float Skip;
 			public double Clock(double t) => t + ClockOrigin;
 		}
 
@@ -48,6 +51,8 @@ namespace TRC.TuneLoader.CodeCheck {
 			CatAndMouseBattle();
 			LeaderNeedsLessEachRound();
 			GapIsMeasuredAtTheSameMoment();
+			OpponentOutIsToldAtOnce();
+			RaceSpotsAndChaserBox();
 			JumpStartCallsOffTheCountdown();
 			DifferentSetsDontStart();
 			SilentOpponentHasLeft();
@@ -261,7 +266,7 @@ namespace TRC.TuneLoader.CodeCheck {
 						}
 						double since = now - p.Go;
 						double a = p.Acceleration(s.RunIndex);
-						p.Position = s.MySpot() + forward * (float)(0.5 * a * since * since);
+						p.Position = s.MySpot() + forward * (float)(0.5 * a * since * since + p.Skip);
 						speed = (float)(a * since * 3.6);
 					}
 
@@ -359,6 +364,45 @@ namespace TRC.TuneLoader.CodeCheck {
 				}
 			});
 			Expect(worstNew < 1.5f && worstOld > 3f, $"the gap compares both cars at the same moment (off by {worstNew:0.0} m at most, was {worstOld:0.0} m)");
+		}
+
+		private static void OpponentOutIsToldAtOnce() {
+			// The guest's car is reset 80 m further along at 150 m: its run stops. The host hears it at once and wins by finishing.
+			Course course = StraightCourse();
+			string toldWhileRunning = "";
+			var (host, guest) = PlayBattle(course, BattleFormat.Race, 14, open: true, onFrame: (t, h, g) => {
+				if (g.Session?.Run?.State == TimeAttackRun.Phase.Running && g.Session.Run.Progress > 150f && g.Skip == 0f) {
+					g.Skip = 80f;
+				}
+				if (h.Session?.State == BattleSession.Phase.Running && h.Session.PeerOut.Length > 0 && toldWhileRunning.Length == 0) {
+					toldWhileRunning = h.Session.PeerOut;
+				}
+			});
+			Expect(toldWhileRunning.Contains("finish to win"), $"a driver hears straight away when the other driver's run stops ({toldWhileRunning})");
+			Expect(host.Session.Winner == HostId && guest.Session.Winner == HostId, $"and wins by finishing ({host.Session.Message})");
+		}
+
+		private static void RaceSpotsAndChaserBox() {
+			Course course = StraightCourse();
+			var host = BattleSession.Challenge(15, HostId, "Host", GuestId, "Guest", course, BattleFormat.Race, true, () => new BattleCar(), 0);
+			var guest = BattleSession.FromChallenge(BattleMessage.Decode(host.TakeOutbox()[0].Encode()), GuestId, "Guest", course, () => new BattleCar(), 0);
+			float apart = Vector3.Distance(host.MySpot(), guest.MySpot());
+			Expect(Math.Abs(apart - 4f) < 0.01f, $"race spots on a 12 m line are 4 m apart, 1 m closer each than before ({apart:0.00} m)");
+
+			guest.Accept(0);
+			Expect(guest.Run.GridFront == 0f || guest.Run.GridFront == 5f, "the guest's box is set when it accepts");
+			var chase = BattleSession.Challenge(16, HostId, "Host", GuestId, "Guest", course, BattleFormat.CatAndMouse, true, () => new BattleCar(), 0);
+			var mouse = BattleSession.FromChallenge(BattleMessage.Decode(chase.TakeOutbox()[0].Encode()), GuestId, "Guest", course, () => new BattleCar(), 0);
+			mouse.Accept(0);
+			BattleSession chaser = mouse.IAmLeader ? null : mouse;
+			if (chaser == null) {
+				foreach (BattleMessage m in mouse.TakeOutbox()) {
+					chase.Receive(BattleMessage.Decode(m.Encode()), 0.1);
+				}
+				chaser = chase;
+			}
+			Expect(chaser.Run.GridFront == 5f && Vector3.Distance(chaser.MySpot(), course.Start.Center) == 10f,
+				$"the chaser lines up from 5 m back, with its spot 10 m back ({chaser.Run.GridFront} m, spot {Vector3.Distance(chaser.MySpot(), course.Start.Center):0.0} m)");
 		}
 
 		private static void JumpStartCallsOffTheCountdown() {

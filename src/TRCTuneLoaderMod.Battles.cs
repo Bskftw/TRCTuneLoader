@@ -12,8 +12,9 @@ namespace TRC.TuneLoader {
 	/// messages go through BattleSync.
 	/// </summary>
 	public partial class TRCTuneLoaderMod {
-		/// <summary>Players need at least this TRC Tune Loader version to battle (battle messages changed in 0.10.1).</summary>
-		private static readonly System.Version BattleVersion = new System.Version(0, 10, 1);
+		/// <summary>Players need at least this TRC Tune Loader version to battle (battle messages changed in 0.10.1 and 0.11.0).</summary>
+		private static readonly System.Version BattleVersion = new System.Version(0, 11, 0);
+		private static readonly int[] BattleLapChoices = { 1, 2, 3, 5 };
 		private static readonly string[] BattleFormats = { "Side-by-side race", "Cat and mouse" };
 		private static readonly string[] BattleModes = { "TRC spec", "Open" };
 		private const float InviteSeconds = 45f;
@@ -49,6 +50,7 @@ namespace TRC.TuneLoader {
 		private string pickedCourse_ = "";
 		private int pickedFormat_;
 		private int pickedMode_;
+		private int pickedBattleLaps_;
 		private string battleResult_ = "";
 		private Vector2 battleScroll_;
 
@@ -218,7 +220,7 @@ namespace TRC.TuneLoader {
 				shownGapSet_ = false;
 				return;
 			}
-			float gap = battle_.Run.Progress - battle_.PeerProgressAt(now);
+			float gap = battle_.Run.TotalProgress - battle_.PeerProgressAt(now);
 			shownGap_ = shownGapSet_ ? shownGap_ + (gap - shownGap_) * (1f - Mathf.Exp(-Time.unscaledDeltaTime / GapEaseSeconds)) : gap;
 			shownGapSet_ = true;
 		}
@@ -260,7 +262,7 @@ namespace TRC.TuneLoader {
 			StopOtherCourseWork();
 			uint id = (uint)battleIds_.Next(1, int.MaxValue);
 			battle_ = BattleSession.Challenge(id, MySteamId, MyName(), opponent.Player.SteamId, opponent.Player.Name, course,
-				(BattleFormat)pickedFormat_, pickedMode_ == 1, CheckBattleCar, BattleNow);
+				(BattleFormat)pickedFormat_, pickedMode_ == 1, CheckBattleCar, BattleNow, laps: BattleLapChoices[pickedBattleLaps_]);
 			battleLogged_ = false;
 			battleEndedAt_ = -1f;
 			battleResult_ = "";
@@ -323,8 +325,7 @@ namespace TRC.TuneLoader {
 				return null;
 			}
 			if (challenge.Course != null) {
-				Course local = courses_.ForMap(map_.Key).FirstOrDefault(c => c.Source == CourseSource.Map &&
-					Vector3.Distance(c.Start.Center, course.Start.Center) < 1f && Vector3.Distance(c.Finish.Center, course.Finish.Center) < 1f);
+				Course local = courses_.ForMap(map_.Key).FirstOrDefault(c => c.Source == CourseSource.Map && c.IsCircuit == course.IsCircuit && c.SameLines(course));
 				if (local != null) {
 					course.RoadKey = local.RoadKey;
 					course.RoadColliders = local.RoadColliders;
@@ -407,7 +408,8 @@ namespace TRC.TuneLoader {
 			GUILayout.BeginVertical(Theme.Guide);
 			GUILayout.Label($"Battle vs {b.PeerName}", Theme.Heading);
 			string role = b.Format == BattleFormat.CatAndMouse ? $" · run {b.RunIndex + 1}: you {(b.IAmLeader ? "lead" : "chase")}" : $" · run {b.RunIndex + 1}";
-			GUILayout.Label($"{b.Course.Name} · {BattleFormats[(int)b.Format]} · {(b.Open ? "Open" : "TRC spec")}{(b.Active ? role : "")}", Theme.Small);
+			string laps = b.Course.IsCircuit ? $" · {b.Laps} lap{(b.Laps == 1 ? "" : "s")}" : "";
+			GUILayout.Label($"{b.Course.Name}{laps} · {BattleFormats[(int)b.Format]} · {(b.Open ? "Open" : "TRC spec")}{(b.Active ? role : "")}", Theme.Small);
 			GUILayout.Label(b.Message, b.Active ? Theme.Body : b.Winner == b.Me ? Theme.PillGood : b.Winner == b.Peer ? Theme.PillBad : Theme.PillNeutral);
 
 			foreach (BattleRun run in b.Runs) {
@@ -436,7 +438,13 @@ namespace TRC.TuneLoader {
 				if (peer != null && b.Course.Usable && GUILayout.Button("Rematch", Theme.ButtonPrimary)) {
 					pickedFormat_ = (int)b.Format;
 					pickedMode_ = b.Open ? 1 : 0;
+					pickedBattleLaps_ = Math.Max(0, Array.IndexOf(BattleLapChoices, b.Laps));
 					ChallengePlayer(peer, b.Course);
+				}
+				// A course that came with the challenge (theirs, not one this PC has): keep it to practise on.
+				if (!b.IsHost && b.Course.Source == CourseSource.Custom && string.IsNullOrEmpty(b.Course.FilePath) &&
+					GUILayout.Button("Save this course", Theme.Button)) {
+					SaveChallengeCourse(b.Course, $"{b.PeerName}'s course");
 				}
 				if (GUILayout.Button("Close", Theme.Button)) {
 					battle_ = null;
@@ -490,6 +498,10 @@ namespace TRC.TuneLoader {
 			GUILayout.Label(pickedFormat_ == 1
 				? $"Runs swap who leads. The chaser wins a run by passing and staying ahead to the finish; the leader wins by finishing {BattleRules.LeaderGapSeconds:0.0} s or more ahead (1.0 s after both have led once, then 0.5 s). Otherwise swap and go again."
 				: "Side by side from a standing start. The faster time to the finish wins.", Theme.Small);
+			if (courses.FirstOrDefault(c => c.Code == pickedCourse_)?.IsCircuit == true) {
+				GUILayout.Label("Laps", Theme.SectionLabel);
+				pickedBattleLaps_ = Choice(BattleLapChoices.Select(l => l.ToString(CultureInfo.InvariantCulture)).ToArray(), pickedBattleLaps_);
+			}
 			GUILayout.Label("Mode", Theme.SectionLabel);
 			pickedMode_ = Choice(BattleModes, pickedMode_);
 			GUILayout.Label(pickedMode_ == 0 ? "Both cars TRC spec, on the same tune set, with no flagged mods." : "Any setup. It doesn't count.", Theme.Small);
@@ -527,6 +539,12 @@ namespace TRC.TuneLoader {
 			if (b.State == BattleSession.Phase.Running && run.Active) {
 				float gap = shownGap_;
 				string place = Mathf.Abs(gap) < SideBySideMetres ? "Side by side" : gap > 0 ? $"Ahead by {gap:0} m" : $"Behind by {-gap:0} m";
+				if (b.Course.IsCircuit) {
+					place = $"Lap {run.Lap}/{b.Laps} · {place}";
+				}
+				if (b.PeerOut.Length > 0) {
+					place += $"\n<color={Theme.GoodHex}>{b.PeerOut}</color>";
+				}
 				DrawTimer(screenWidth, screenHeight, run, place);
 			} else {
 				DrawHudPill(screenWidth, screenHeight, $"{title}\n<color={Theme.MutedHex}>{b.Message}</color>");

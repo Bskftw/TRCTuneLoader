@@ -25,6 +25,7 @@ namespace TRC.TuneLoader.CodeCheck {
 			UphillIsDownhillReversed();
 			OffRoadIsStopped();
 			RecordedPathIsAdopted();
+			CircuitTests();
 		}
 
 		private static void UphillIsDownhillReversed() {
@@ -367,6 +368,39 @@ namespace TRC.TuneLoader.CodeCheck {
 					TimeAttackLog.BestFor(records, "CRS-0000-0001", 3, "TRC V3.0", specOnly: true)?.TimeMs == 185000,
 					"the same car on another TRC tune set has its own best time");
 				Expect(TimeAttackRun.FormatTime(192.3454) == "3:12.345" && TimeAttackRun.FormatTime(9.5) == "9.500", "times print as m:ss.fff");
+				Expect(records[0].Laps == 1 && !records[0].Flying && !records[0].IsLap, "a run from before laps reads as a standing point-to-point run");
+
+				// Laps and sectors (0.11): a flying lap of a 5-lap run, and two laps whose best sectors make a faster theoretical lap.
+				TimeAttackLog.Append(folder, new TimeAttackRecord {
+					When = new DateTime(2026, 10, 24, 12, 0, 0), CourseCode = "CRS-0000-0002", CourseName = "Ring", CarId = 3, TuneSet = "TRC Revival",
+					Spec = TimeAttackLog.SpecWord, TimeMs = 60000, Flying = true, Laps = 5, LapNumber = 2, SectorMs = new long[] { 19000, 21000, 20000 },
+				});
+				TimeAttackLog.Append(folder, new TimeAttackRecord {
+					When = new DateTime(2026, 10, 24, 12, 1, 0), CourseCode = "CRS-0000-0002", CourseName = "Ring", CarId = 3, TuneSet = "TRC Revival",
+					Spec = TimeAttackLog.SpecWord, TimeMs = 60500, Flying = true, Laps = 5, LapNumber = 3, SectorMs = new long[] { 20000, 19500, 21000 },
+				});
+				TimeAttackLog.Append(folder, new TimeAttackRecord {
+					When = new DateTime(2026, 10, 24, 12, 5, 0), CourseCode = "CRS-0000-0002", CourseName = "Ring", CarId = 3, TuneSet = "TRC Revival",
+					Spec = TimeAttackLog.SpecWord, TimeMs = 305000, Laps = 5,
+				});
+				records = TimeAttackLog.Load(folder);
+				TimeAttackRecord lap = records.FirstOrDefault(r => r.LapNumber == 2);
+				Expect(records.Count == 6 && lap != null && lap.Flying && lap.Laps == 5 && lap.SectorMs.SequenceEqual(new long[] { 19000, 21000, 20000 }),
+					"laps come back with their lap number, start and sectors");
+				var lapKind = new TimeKind { Lap = true, Flying = true };
+				Expect(TimeAttackLog.BestFor(records, "CRS-0000-0002", 3, "TRC Revival", true, lapKind)?.TimeMs == 60000 &&
+					TimeAttackLog.BestFor(records, "CRS-0000-0002", 3, "TRC Revival", true, new TimeKind { Laps = 5 })?.TimeMs == 305000,
+					"best laps and best 5-lap runs are kept apart");
+				Expect(TimeAttackLog.TheoreticalBestMs(records, "CRS-0000-0002", 3, "TRC Revival", lapKind, 3) == 19000 + 19500 + 20000,
+					"the theoretical best adds up the best of each sector");
+				Expect(TimeAttackLog.BestSpec(records, "CRS-0000-0002")?.TimeMs == 60000, "a circuit's headline time is its best lap");
+
+				string key = TimeAttackTraces.Key("CRS-0000-0002", 3, "TRC Revival", lapKind);
+				bool first = TimeAttackTraces.SaveIfFaster(folder, key, new[] { 0f, 1.5f, 3.25f }, 60000);
+				bool slower = TimeAttackTraces.SaveIfFaster(folder, key, new[] { 0f, 1.6f, 3.4f }, 61000);
+				var saved = TimeAttackTraces.Load(folder, key);
+				Expect(first && !slower && saved != null && saved.Value.TimeMs == 60000 && saved.Value.Trace.SequenceEqual(new[] { 0f, 1.5f, 3.25f }),
+					"the delta's best lap is kept until a faster one comes");
 			} finally {
 				try {
 					Directory.Delete(folder, true);

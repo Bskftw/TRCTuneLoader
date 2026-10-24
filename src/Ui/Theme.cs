@@ -32,6 +32,9 @@ namespace TRC.TuneLoader {
 		public const string WarnHex = "#FAC775";
 		public const string AccentHex = "#F4C0D1";
 
+		/// <summary>The best a sector or lap has ever been driven (like purple sectors in racing).</summary>
+		public const string PurpleHex = "#C9A7FF";
+
 		public static GUIStyle Window, Title, Subtitle, Tab, TabActive, Close;
 		public static GUIStyle Heading, Body, Small, SectionLabel, Group;
 		public static GUIStyle Chip, ChipActive, Button, ButtonPrimary;

@@ -63,15 +63,23 @@ namespace TRC.TuneLoader {
 		/// </summary>
 		public const int MaxRuns = 10;
 
-		/// <summary>Start boxes, in metres behind the start line.</summary>
+		/// <summary>
+		/// Start boxes, in metres behind the start line. In cat and mouse the leader's box ends where the chaser's
+		/// begins (TRC, Oct 24: the chaser lines up from 5 m back), so the chaser can never be in front.
+		/// </summary>
 		private const float RaceBoxBack = 12f;
-		private const float LeaderBoxBack = 9f;
-		private const float ChaserBoxFront = 10f;
+		private const float LeaderBoxBack = 5f;
+		private const float ChaserBoxFront = 5f;
 		private const float ChaserBoxBack = 30f;
 
 		/// <summary>Teleport spots: metres behind the start line, and for a race how far to each side of the middle.</summary>
 		public const float FrontSpot = 4f;
-		public const float ChaserSpot = 16f;
+		public const float LeaderSpot = 2.5f;
+		public const float ChaserSpot = 10f;
+
+		/// <summary>A race's two spots are this far (metres) in from the middle of each half of the line (TRC: closer together).</summary>
+		private const float RaceSpotsCloser = 1f;
+		private const float MinRaceSpotSide = 1.2f;
 
 		private const int OffsetSamples = 15;
 
@@ -81,6 +89,9 @@ namespace TRC.TuneLoader {
 		public ulong Peer { get; }
 		public string PeerName { get; }
 		public BattleFormat Format { get; }
+
+		/// <summary>Laps per run on a circuit (1 on any other course).</summary>
+		public int Laps { get; }
 
 		/// <summary>An Open battle: cars don't have to be TRC spec, and it never counts.</summary>
 		public bool Open { get; }
@@ -119,6 +130,9 @@ namespace TRC.TuneLoader {
 		public bool PeerReady { get; private set; }
 		public BattleCar MyCar { get; private set; }
 		public BattleCar PeerCar { get; private set; } = new BattleCar();
+
+		/// <summary>The other driver's run stopped before the finish (and why): this driver only has to finish to win it. "" otherwise.</summary>
+		public string PeerOut { get; private set; } = "";
 
 		/// <summary>The other driver's metres along the course in the current run, as of their last heartbeat.</summary>
 		public float PeerProgress { get; private set; }
@@ -176,7 +190,7 @@ namespace TRC.TuneLoader {
 		private double peerSpeed_;
 
 		private BattleSession(uint id, bool host, ulong me, string myName, ulong peer, string peerName, Course course,
-			BattleFormat format, bool open, Func<BattleCar> checkMyCar, double now) {
+			BattleFormat format, bool open, int laps, Func<BattleCar> checkMyCar, double now) {
 			Id = id;
 			IsHost = host;
 			Me = me;
@@ -186,6 +200,7 @@ namespace TRC.TuneLoader {
 			PeerName = peerName.Length == 0 ? "the other driver" : peerName;
 			Course = course;
 			Format = format;
+			Laps = course.IsCircuit ? Math.Max(1, laps) : 1;
 			Open = open;
 			Counted = !open;
 			checkMyCar_ = checkMyCar;
@@ -195,8 +210,8 @@ namespace TRC.TuneLoader {
 
 		/// <summary>Challenges <paramref name="peer"/>. The course goes with the challenge unless it's official (they have it too).</summary>
 		public static BattleSession Challenge(uint id, ulong me, string myName, ulong peer, string peerName, Course course,
-			BattleFormat format, bool open, Func<BattleCar> checkMyCar, double now) {
-			var session = new BattleSession(id, true, me, myName, peer, peerName, course, format, open, checkMyCar, now) {
+			BattleFormat format, bool open, Func<BattleCar> checkMyCar, double now, int laps = 1) {
+			var session = new BattleSession(id, true, me, myName, peer, peerName, course, format, open, laps, checkMyCar, now) {
 				State = Phase.Inviting,
 			};
 			session.SendChallenge(now);
@@ -207,7 +222,7 @@ namespace TRC.TuneLoader {
 		/// <summary>A challenge someone sent this player, with the course it's on (found here, or sent with it).</summary>
 		public static BattleSession FromChallenge(BattleMessage challenge, ulong me, string myName, Course course, Func<BattleCar> checkMyCar, double now) {
 			var session = new BattleSession(challenge.BattleId, false, me, myName, challenge.From, challenge.FromName, course,
-				challenge.Format, challenge.Open, checkMyCar, now) {
+				challenge.Format, challenge.Open, challenge.Laps, checkMyCar, now) {
 				State = Phase.Invited,
 			};
 			session.Message = $"{session.PeerName} challenges you";
@@ -403,10 +418,11 @@ namespace TRC.TuneLoader {
 		public Vector3 MySpot() {
 			CourseGate start = Course.Start;
 			if (Format == BattleFormat.CatAndMouse) {
-				return start.Center - start.Forward * (IAmLeader ? FrontSpot : ChaserSpot);
+				return start.Center - start.Forward * (IAmLeader ? LeaderSpot : ChaserSpot);
 			}
 			// Race: the host on the left half, the guest on the right.
-			return start.Center - start.Forward * FrontSpot + start.Right * (start.Width / 4f) * (IsHost ? -1f : 1f);
+			float side = Mathf.Max(MinRaceSpotSide, start.Width / 4f - RaceSpotsCloser);
+			return start.Center - start.Forward * FrontSpot + start.Right * side * (IsHost ? -1f : 1f);
 		}
 
 		private void SendChallenge(double now) {
@@ -415,6 +431,7 @@ namespace TRC.TuneLoader {
 			challenge.FromName = myName_;
 			challenge.Format = Format;
 			challenge.Open = Open;
+			challenge.Laps = Laps;
 			challenge.CourseCode = Course.Code;
 			challenge.Course = Course.Official ? null : Course;
 			outbox_.Add(challenge);
@@ -428,7 +445,8 @@ namespace TRC.TuneLoader {
 		}
 
 		private void NewRun() {
-			Run = new TimeAttackRun(Course) { ExternalStart = true };
+			// A reset doesn't end a battle run: a driver who messes up can still win if the other does too.
+			Run = new TimeAttackRun(Course, Laps) { ExternalStart = true, AllowResets = true };
 			if (Format == BattleFormat.CatAndMouse && !IAmLeader) {
 				Run.GridFront = ChaserBoxFront;
 				Run.GridBack = ChaserBoxBack;
@@ -442,6 +460,7 @@ namespace TRC.TuneLoader {
 			MyCar = null;
 			MyReady = false;
 			PeerProgress = 0f;
+			PeerOut = "";
 			peerProgressAt_ = -1;
 			peerSpeed_ = 0;
 		}
@@ -611,6 +630,11 @@ namespace TRC.TuneLoader {
 				if (firstResultAt_ < 0) {
 					firstResultAt_ = now;
 				}
+				// Told straight away, not only once this driver finishes too.
+				if (!peerResult_.Finished && myResult_ == null) {
+					string why = peerResult_.Reason.TrimEnd('.');
+					PeerOut = $"{PeerName} is out{(why.Length > 0 ? $" ({why})" : "")}: finish to win";
+				}
 			}
 		}
 
@@ -628,7 +652,7 @@ namespace TRC.TuneLoader {
 			beat.TuneSet = MyCar?.TuneSet ?? "";
 			beat.TuneCode = MyCar?.TuneCode ?? "";
 			beat.Car = MyCar?.Car ?? "";
-			beat.Progress = Run?.Progress ?? 0f;
+			beat.Progress = Run?.TotalProgress ?? 0f;
 			beat.RunIndex = RunIndex;
 			beat.Phase = (byte)State;
 			beat.Result = lastResult_;

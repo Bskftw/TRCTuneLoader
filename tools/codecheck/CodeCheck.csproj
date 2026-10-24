@@ -31,6 +31,7 @@
     <Compile Include="..\..\src\Courses\CourseRecorder.cs" Link="src\Courses\CourseRecorder.cs" />
     <Compile Include="..\..\src\Courses\TimeAttackRun.cs" Link="src\Courses\TimeAttackRun.cs" />
     <Compile Include="..\..\src\Courses\TimeAttackLog.cs" Link="src\Courses\TimeAttackLog.cs" />
+    <Compile Include="..\..\src\Courses\TimeAttackTraces.cs" Link="src\Courses\TimeAttackTraces.cs" />
     <Compile Include="..\..\src\Battles\BattleChunks.cs" Link="src\Battles\BattleChunks.cs" />
     <Compile Include="..\..\src\Battles\BattleMessage.cs" Link="src\Battles\BattleMessage.cs" />
     <Compile Include="..\..\src\Battles\BattleRules.cs" Link="src\Battles\BattleRules.cs" />

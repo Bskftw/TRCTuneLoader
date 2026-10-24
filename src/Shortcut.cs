@@ -12,6 +12,9 @@ namespace TRC.TuneLoader {
 	internal sealed class Shortcut {
 		public static readonly Shortcut Default = new Shortcut(true, false, false, KeyCode.T);
 
+		/// <summary>The time attack restart key: Ctrl + R.</summary>
+		public static readonly Shortcut RestartDefault = new Shortcut(true, false, false, KeyCode.R);
+
 		private static readonly KeyCode[] NotAllowed = {
 			KeyCode.None, KeyCode.Escape,
 			KeyCode.LeftControl, KeyCode.RightControl, KeyCode.LeftShift, KeyCode.RightShift,
@@ -38,10 +41,15 @@ namespace TRC.TuneLoader {
 		public static Shortcut FromEvent(Event e) =>
 			e != null && IsUsableKey(e.keyCode) ? new Shortcut(e.control, e.shift, e.alt, e.keyCode) : null;
 
-		/// <summary>A saved shortcut ("Ctrl+Shift+F8"), or <see cref="Default"/> when the text isn't one.</summary>
-		public static Shortcut Parse(string text) {
+		/// <summary>A saved shortcut ("Ctrl+Shift+F8"), or <paramref name="fallback"/> (<see cref="Default"/>) when the text isn't one.</summary>
+		public static Shortcut Parse(string text, Shortcut fallback = null) {
+			Shortcut parsed = ParseOrNull(text);
+			return parsed ?? fallback ?? Default;
+		}
+
+		private static Shortcut ParseOrNull(string text) {
 			if (string.IsNullOrWhiteSpace(text)) {
-				return Default;
+				return null;
 			}
 
 			bool ctrl = false, shift = false, alt = false;
@@ -53,12 +61,12 @@ namespace TRC.TuneLoader {
 					case "alt": alt = true; break;
 					default:
 						if (key != KeyCode.None || !Enum.TryParse(part, true, out key) || !IsUsableKey(key)) {
-							return Default;
+							return null;
 						}
 						break;
 				}
 			}
-			return key == KeyCode.None ? Default : new Shortcut(ctrl, shift, alt, key);
+			return key == KeyCode.None ? null : new Shortcut(ctrl, shift, alt, key);
 		}
 
 		/// <summary>True for the key press of this shortcut with exactly its modifiers held.</summary>

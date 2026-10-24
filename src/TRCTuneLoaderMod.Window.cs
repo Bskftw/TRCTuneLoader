@@ -96,6 +96,7 @@ namespace TRC.TuneLoader {
 			windowOpen_ = false;
 			mouseOverWindow_ = false;
 			capturingShortcut_ = false;
+			capturingRestart_ = false;
 			if (tourStep_ >= 0) {
 				EndTour();
 			}

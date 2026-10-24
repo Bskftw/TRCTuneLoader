@@ -2,6 +2,47 @@
 
 All versions of TRC Tune Loader, newest first. "Not tested in game yet" means the version builds and its automatic tests pass, but nobody has tried it in CarX yet.
 
+## 0.11.0 (Oct 24 2026)
+
+Not tested in game yet. Circuits, laps and sectors. Both drivers need 0.11.0 to battle.
+
+**New: circuits**
+- A third kind of course next to touge and highway: a loop whose start line is also the finish line.
+- **Laps:** pick 1, 3, 5, 10 or **Unlimited** above the course list. The timer shows the lap time, the lap ("Lap 2/5"), the total and your best lap, and each lap time flashes as you cross the line.
+- **Unlimited laps is practice:** a lap with a shortcut, off the road or with a reset just doesn't count (shown in red), and you keep driving. Only your best lap is kept.
+- **Lap summary** at the end: how many laps, the best, the average and how even they were.
+- **Course builder:** pick Point to point or Circuit. For a circuit, set the start line, drive once round (at least 200 m) and back through the start line: the loop closes by itself.
+- Maps can have circuits too (`TRC Start <name> Circuit`, no finish object), and each gets a reverse circuit, driven the other way.
+- Battles on circuits: pick the laps (1, 2, 3 or 5) with the challenge.
+
+**New: flying start**
+- Pick **Flying** instead of Standing: the clock starts as you cross the start line, at any speed. For a flying lap of a circuit, Teleport to start puts you a bit before the line for a run-up.
+- Flying times are kept apart from standing ones.
+
+**New: sectors and the live delta**
+- Every course is split into sectors: 3, plus one for every 2 km over 6 km. Maps can mark their own (`TRC <course> Sector 1`, `Sector 2`, ...).
+- Each sector's time flashes as you finish it: purple for the best it's ever been driven, green for your best in this car, red when slower. Your sectors show with the result.
+- **Live delta:** once you have a best time in this car on this tune set, the timer shows how far ahead (green) or behind (red) of it you are right now.
+- **Theoretical best:** in My times, your best sectors added up, when that's faster than your best time.
+
+**New: restart key**
+- **Ctrl + R** during a time attack sends your car back to the start line, ready to go again, without opening the window. Change it in Options.
+
+**New: course builder and course editing**
+- What you record shows as light-blue dots on the road. **Show path** in Courses here shows any course's road the same way.
+- **Edit** on your own courses: rename, change the line width, flip the direction (a circuit: drive it the other way), record the path again, or delete.
+- If a point-to-point course ends back at its start, the builder tells you to make it a circuit.
+- After a battle on someone else's course, **Save this course** keeps it to practise on.
+
+**Changed: My times**
+- Three views: **Best times** (by map and course; open a course for a row per car and tune set), **Best laps** (circuits) and **Recent** (your latest 40 times). **TRC spec only** hides times that don't count.
+
+**Changed: battles**
+- A reset no longer ends your run in a battle: mess up, reset and keep going, and you can still win if the other driver messes up too. A reset that puts you further along the course still stops it.
+- When the other driver's run stops (off the road, a shortcut...), you're told straight away: finish to win.
+- Side-by-side race spots are 1 m closer together on each side.
+- Cat and mouse: the chaser lines up from 5 m behind the start line (was 10 m), and the leader within 5 m, so the chaser can't line up in front.
+
 ## 0.10.1 (Oct 23 2026)
 
 Not tested in game yet. Fixes battle challenges. In 0.10.0 a battle worked in game on Akina Downhill (a side-by-side race), but only on courses without a path. Both drivers need 0.10.1 to battle.

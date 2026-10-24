@@ -51,8 +51,8 @@ namespace TRC.TuneLoader {
 	/// channel can't be aimed reliably), so each says who it's from and for, and the other players ignore it.
 	/// </summary>
 	public sealed class BattleMessage {
-		/// <summary>2 since 0.10.1: small pieces, the path packed in centimetres, and Seen.</summary>
-		public const byte Protocol = 2;
+		/// <summary>2 since 0.10.1: small pieces, the path packed in centimetres, and Seen. 3 since 0.11.0: laps, and circuit courses.</summary>
+		public const byte Protocol = 3;
 
 		public BattleKind Kind;
 		public uint BattleId;
@@ -63,6 +63,9 @@ namespace TRC.TuneLoader {
 		public string FromName = "";
 		public BattleFormat Format;
 		public bool Open;
+
+		/// <summary>Laps per run, on a circuit.</summary>
+		public int Laps = 1;
 		public string CourseCode = "";
 
 		/// <summary>The course itself, sent when the guest may not have it (anything but an official course).</summary>
@@ -108,6 +111,7 @@ namespace TRC.TuneLoader {
 						writer.Write(Clip(FromName));
 						writer.Write((byte)Format);
 						writer.Write(Open);
+						writer.Write((byte)Math.Max(1, Math.Min(255, Laps)));
 						writer.Write(Clip(CourseCode));
 						writer.Write(Course != null);
 						if (Course != null) {
@@ -174,6 +178,7 @@ namespace TRC.TuneLoader {
 							message.FromName = Clip(reader.ReadString());
 							message.Format = (BattleFormat)reader.ReadByte();
 							message.Open = reader.ReadBoolean();
+							message.Laps = Math.Max(1, (int)reader.ReadByte());
 							message.CourseCode = Clip(reader.ReadString());
 							if (reader.ReadBoolean()) {
 								message.Course = ReadCourse(reader);
@@ -335,7 +340,7 @@ namespace TRC.TuneLoader {
 		private static Course ReadCourse(BinaryReader reader) {
 			var course = new Course {
 				Name = Clip(reader.ReadString()),
-				Kind = (CourseKind)reader.ReadByte(),
+				Kind = (CourseKind)Math.Min(reader.ReadByte(), (byte)CourseKind.Circuit),
 				MapKey = Clip(reader.ReadString()),
 				MapName = Clip(reader.ReadString()),
 				Source = CourseSource.Custom,

@@ -4,7 +4,8 @@ using UnityEngine;
 namespace TRC.TuneLoader {
 	/// <summary>
 	/// The placement tool: the player stops on the start line and sets it, drives the course down the
-	/// middle of the road while the route is recorded, then stops on the finish line and sets it.
+	/// middle of the road while the route is recorded, then stops on the finish line and sets it. For a
+	/// circuit there's no finish to set: driving back through the start line (after a real lap) closes the loop.
 	/// Like TimeAttackRun, it's fed positions by the mod and knows nothing about CarX.
 	/// </summary>
 	public sealed class CourseRecorder {
@@ -27,6 +28,12 @@ namespace TRC.TuneLoader {
 		/// <summary>Why the recording stopped on its own ("" when it didn't).</summary>
 		public string Problem { get; private set; } = "";
 
+		/// <summary>Recording a circuit: it ends by itself back on the start line.</summary>
+		public bool Circuit { get; private set; }
+
+		/// <summary>How far the car is from the middle of the start line (for a circuit, how far it still has to go to close the loop once it's driven a lap).</summary>
+		public float DistanceToStart { get; private set; }
+
 		private Vector3 lastSeen_;
 
 		public void Clear() {
@@ -39,8 +46,9 @@ namespace TRC.TuneLoader {
 		}
 
 		/// <summary>Sets the start line where the car is, across the way it faces, and starts recording.</summary>
-		public bool SetStart(Vector3 position, Vector3 forward, float width, out string error) {
+		public bool SetStart(Vector3 position, Vector3 forward, float width, out string error, bool circuit = false) {
 			Clear();
+			Circuit = circuit;
 			if (!CourseGate.TryMake(position, forward, width, out CourseGate gate)) {
 				error = "Couldn't tell which way the car faces.";
 				return false;
@@ -63,7 +71,9 @@ namespace TRC.TuneLoader {
 				Problem = "The car was reset or moved, so the route was lost. Set the start again.";
 				return;
 			}
+			Vector3 previous = lastSeen_;
 			lastSeen_ = position;
+			DistanceToStart = Vector3.Distance(position, Start.Center);
 
 			Vector3 last = Points[Points.Count - 1];
 			float step = Vector3.Distance(position, last);
@@ -71,12 +81,23 @@ namespace TRC.TuneLoader {
 				Points.Add(position);
 				Recorded += step;
 			}
+
+			// A circuit closes itself: back through the start line, the right way, after a real lap.
+			if (Circuit && Recorded >= CourseGeometry.CircuitMinLength && CourseGeometry.Crossed(Start, previous, position, out _)) {
+				Finish = new CourseGate { Center = Start.Center, Forward = Start.Forward, Width = Start.Width };
+				Points.Add(Start.Center);
+				State = Phase.Done;
+			}
 		}
 
 		/// <summary>Sets the finish line where the car is and stops recording.</summary>
 		public bool SetFinish(Vector3 position, Vector3 forward, float width, out string error) {
 			if (State != Phase.Recording) {
 				error = "Set the start first.";
+				return false;
+			}
+			if (Circuit) {
+				error = "A circuit has no finish to set: drive back through the start line and it closes by itself.";
 				return false;
 			}
 			if (Recorded < CourseGeometry.MinLength) {
@@ -88,7 +109,9 @@ namespace TRC.TuneLoader {
 				return false;
 			}
 			if (Vector3.Dot(position - Start.Center, Start.Forward) < 0f && Vector3.Distance(position, Start.Center) < 30f) {
-				error = "The finish can't be right behind the start.";
+				error = Recorded >= CourseGeometry.CircuitMinLength
+					? "You're back at the start: that's a loop. Start over and pick Circuit, and it closes by itself here."
+					: "The finish can't be right behind the start.";
 				return false;
 			}
 			Finish = gate;
@@ -102,7 +125,7 @@ namespace TRC.TuneLoader {
 		public Course Build(string name, CourseKind kind, string mapKey, string mapName, string author) {
 			var course = new Course {
 				Name = name,
-				Kind = kind,
+				Kind = Circuit ? CourseKind.Circuit : kind,
 				Source = CourseSource.Custom,
 				MapKey = mapKey,
 				MapName = mapName,
@@ -172,7 +195,9 @@ namespace TRC.TuneLoader {
 					Points.Add(Course.Start.Center);
 					Points.Add(Vector3.Lerp(previous, position, at));
 					Recorded = 0f;
-					Message = "Recording: drive down the middle of the road to the finish line";
+					Message = Course.IsCircuit
+						? "Recording: drive once round down the middle of the road, back through the start line"
+						: "Recording: drive down the middle of the road to the finish line";
 				}
 				return;
 			}
@@ -183,7 +208,7 @@ namespace TRC.TuneLoader {
 				Points.Add(position);
 				Recorded += step;
 			}
-			if (Recorded >= CourseGeometry.MinLength && CourseGeometry.Crossed(Course.Finish, previous, position, out _)) {
+			if (Recorded >= Course.MinLength && CourseGeometry.Crossed(Course.Finish, previous, position, out _)) {
 				Points.Add(Course.Finish.Center);
 				State = Phase.Done;
 				Message = "Path recorded";

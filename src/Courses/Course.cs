@@ -6,7 +6,8 @@ using System.Text;
 using UnityEngine;
 
 namespace TRC.TuneLoader {
-	public enum CourseKind { Touge, Highway }
+	/// <summary>Touge and highway run from a start line to a finish line; a circuit is a loop whose finish line is its start line.</summary>
+	public enum CourseKind { Touge, Highway, Circuit }
 
 	/// <summary>
 	/// Where a course comes from. Official courses are built into the mod (only bskftw ships them);
@@ -94,6 +95,18 @@ namespace TRC.TuneLoader {
 		/// <summary>An uphill course made from a downhill one by swapping its start and finish.</summary>
 		public bool Reversed;
 
+		/// <summary>
+		/// Map courses only: where the map's "TRC &lt;course&gt; Sector N" objects are, in order. The sectors end there
+		/// (and at the finish); without any, the course is split evenly (<see cref="SectorEnds"/>).
+		/// </summary>
+		public List<Vector3> SectorPoints = new List<Vector3>();
+
+		/// <summary>A loop: the finish line is the start line, driven again after a lap.</summary>
+		public bool IsCircuit => Kind == CourseKind.Circuit;
+
+		/// <summary>Metres along the path where each sector ends, the last one at <see cref="Length"/> (worked out in Build).</summary>
+		public float[] SectorEnds { get; private set; } = new float[0];
+
 		/// <summary>Distance along the path at each path point, in metres.</summary>
 		public float[] Distances { get; private set; } = new float[0];
 		public float Length { get; private set; }
@@ -102,7 +115,10 @@ namespace TRC.TuneLoader {
 		public string Code { get; private set; } = "";
 
 		/// <summary>Usable for time attack: both lines are set and the course has some length.</summary>
-		public bool Usable => Path.Count >= 2 && Length >= CourseGeometry.MinLength;
+		public bool Usable => Path.Count >= 2 && Length >= MinLength;
+
+		/// <summary>The shortest a course of this kind can be: a circuit needs a real loop.</summary>
+		public float MinLength => IsCircuit ? CourseGeometry.CircuitMinLength : CourseGeometry.MinLength;
 
 		/// <summary>
 		/// Counts for leaderboards: built into the mod, or objects in a map whose objects TRC trusts, with a real path
@@ -111,7 +127,27 @@ namespace TRC.TuneLoader {
 		public bool Official => HasPath && !PathFromPlayer &&
 			(Source == CourseSource.Official || (Source == CourseSource.Map && CourseLibrary.OfficialMaps.Contains(MapKey)));
 
-		public string KindName => Kind == CourseKind.Highway ? "Highway" : "Touge";
+		public string KindName => KindNames[(int)Kind];
+
+		public static readonly string[] KindNames = { "Touge", "Highway", "Circuit" };
+
+		/// <summary>The lowercase word for a kind, as files and course codes write it.</summary>
+		public static string KindWord(CourseKind kind) => kind == CourseKind.Highway ? "highway" : kind == CourseKind.Circuit ? "circuit" : "touge";
+
+		/// <summary>
+		/// The same course lines as <paramref name="other"/>: same map, start and finish within <paramref name="metres"/>,
+		/// started the same way (so a reversed circuit, which starts on the same line, isn't the same).
+		/// </summary>
+		public bool SameLines(Course other, float metres = 1f) =>
+			other != null && MapKey == other.MapKey &&
+			Vector3.Distance(Start.Center, other.Start.Center) <= metres && Vector3.Distance(Finish.Center, other.Finish.Center) <= metres &&
+			Vector3.Dot(Start.Forward, other.Start.Forward) > 0f;
+
+		/// <summary>The lines of <paramref name="other"/> the other way round: what a reversed (uphill) twin of it has.</summary>
+		public bool ReversedLinesOf(Course other, float metres = 1f) =>
+			other != null && MapKey == other.MapKey &&
+			Vector3.Distance(Start.Center, other.Finish.Center) <= metres && Vector3.Distance(Finish.Center, other.Start.Center) <= metres &&
+			Vector3.Dot(Start.Forward, other.Finish.Forward) < 0f;
 
 		public string SourceName =>
 			Source == CourseSource.Official ? "Official TRC course"
@@ -143,7 +179,9 @@ namespace TRC.TuneLoader {
 				FinishObject = StartObject,
 				PathFromPlayer = PathFromPlayer,
 				Reversed = true,
+				SectorPoints = new List<Vector3>(SectorPoints),
 			};
+			reversed.SectorPoints.Reverse();
 			reversed.Path = new List<Vector3>(Path);
 			reversed.Path.Reverse();
 			reversed.Problems.AddRange(Problems);
@@ -173,6 +211,9 @@ namespace TRC.TuneLoader {
 		/// </summary>
 		public void Build(bool resample = true) {
 			RoundGate(Start);
+			if (IsCircuit) {
+				Finish = new CourseGate { Center = Start.Center, Forward = Start.Forward, Width = Start.Width };
+			}
 			RoundGate(Finish);
 
 			var points = new List<Vector3>();
@@ -196,6 +237,7 @@ namespace TRC.TuneLoader {
 			}
 			Distances = CourseGeometry.Cumulative(Path);
 			Length = Distances.Length > 0 ? Distances[Distances.Length - 1] : 0f;
+			SectorEnds = CourseGeometry.SectorEnds(Path, Distances, SectorPoints);
 			Code = CourseCode.Compute(this);
 		}
 
@@ -219,7 +261,7 @@ namespace TRC.TuneLoader {
 		public static string Compute(Course course) {
 			var text = new StringBuilder();
 			text.Append("map=").Append(course.MapKey ?? "").Append('\n');
-			text.Append("kind=").Append(course.Kind == CourseKind.Highway ? "highway" : "touge").Append('\n');
+			text.Append("kind=").Append(Course.KindWord(course.Kind)).Append('\n');
 			AppendGate(text, "start", course.Start);
 			AppendGate(text, "finish", course.Finish);
 			text.Append("path=").Append(course.HasPath ? course.Path.Count.ToString(CultureInfo.InvariantCulture) : "none").Append('\n');

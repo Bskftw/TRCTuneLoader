@@ -20,10 +20,15 @@ namespace TRC.TuneLoader {
 	///   TRC Mainroad Akina          the road's mesh (with its collider); split roads are numbered like
 	///   TRC Mainroad Akina.001      "TRC Mainroad Akina.001". Every course whose name starts with "Akina" runs
 	///                               on it, and driving off it stops a time attack.
+	///   TRC Akina Downhill Sector 1 optional: where sector 1 ends (sector 2 at "... Sector 2", and so on; the
+	///                               last sector ends at the finish). Without them the course is split evenly.
+	///   TRC Start Tsukuba Circuit   a circuit: a loop whose start line is also its finish line, so it has no
+	///                               finish object. Its path comes from Record path (once round).
 	///
 	/// A course whose name ends in "Downhill" also gets an uphill twin ("Akina Uphill") with the start and
-	/// finish swapped, unless the map has its own "TRC Start Akina Uphill". A course with "Highway" in its name
-	/// is a highway course; any other is touge.
+	/// finish swapped, unless the map has its own "TRC Start Akina Uphill". A circuit gets a reverse twin
+	/// ("Tsukuba Circuit Reverse") the same way. A course with "Circuit" in its name is a circuit, one with
+	/// "Highway" a highway course; any other is touge.
 	/// </summary>
 	public static class CourseScanner {
 		private const string StartWord = "start";
@@ -32,6 +37,9 @@ namespace TRC.TuneLoader {
 		private const string RoadWord = "mainroad";
 		private const string DownhillWord = "downhill";
 		private const string UphillWord = "uphill";
+		private const string SectorWord = "sector";
+		private const string CircuitWord = "circuit";
+		private const string ReverseWord = "reverse";
 
 		/// <summary>Path points closer than this (metres) are one point: the two edges of the strip.</summary>
 		private const float MergeDistance = 1.2f;
@@ -44,6 +52,7 @@ namespace TRC.TuneLoader {
 			public Transform Start;
 			public Transform Finish;
 			public Transform Path;
+			public SortedDictionary<int, Transform> Sectors = new SortedDictionary<int, Transform>();
 			public List<string> Duplicates = new List<string>();
 		}
 
@@ -65,6 +74,17 @@ namespace TRC.TuneLoader {
 				}
 
 				string[] words = Words(name);
+				if (TryParseSector(words, out string sectorKey, out int sectorNumber)) {
+					if (!found.TryGetValue(sectorKey, out Parts owner)) {
+						found[sectorKey] = owner = new Parts { Name = sectorKey };
+					}
+					if (owner.Sectors.ContainsKey(sectorNumber)) {
+						owner.Duplicates.Add($"Two objects are named '{name}': the first one found is used.");
+					} else {
+						owner.Sectors[sectorNumber] = transform;
+					}
+					continue;
+				}
 				if (!TryParse(words, out string role, out int rest)) {
 					// Anything with TRC in its name that isn't understood goes to the log, to help find a naming slip.
 					if (name.IndexOf("trc", StringComparison.OrdinalIgnoreCase) >= 0) {
@@ -121,6 +141,10 @@ namespace TRC.TuneLoader {
 						courses.Add(course.ReversedAs(name));
 					}
 				}
+				// "Tsukuba Circuit" also gives "Tsukuba Circuit Reverse": the same line, driven round the other way.
+				if (course.IsCircuit && words[words.Length - 1] != ReverseWord && !found.ContainsKey(pair.Key + " " + ReverseWord)) {
+					courses.Add(course.ReversedAs(course.Name + " Reverse"));
+				}
 			}
 
 			timer.Stop();
@@ -159,6 +183,20 @@ namespace TRC.TuneLoader {
 				return false;
 			}
 			return true;
+		}
+
+		/// <summary>"trc akina downhill sector 2" → course "akina downhill", sector 2.</summary>
+		private static bool TryParseSector(string[] words, out string key, out int number) {
+			key = "";
+			number = 0;
+			int trc = Array.IndexOf(words, "trc");
+			int last = words.Length - 1;
+			if (trc < 0 || last - trc < 3 || words[last - 1] != SectorWord ||
+				!int.TryParse(words[last], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out number)) {
+				return false;
+			}
+			key = string.Join(" ", words.Skip(trc + 1).Take(last - 1 - (trc + 1)));
+			return key.Length > 0;
 		}
 
 		/// <summary>"trc mainroad akina.001" → "akina": the road's name without the number Unity or Blender add to split meshes.</summary>
@@ -210,7 +248,9 @@ namespace TRC.TuneLoader {
 		private static Course Build(Parts parts, string mapKey, string mapName) {
 			var course = new Course {
 				Name = parts.Name,
-				Kind = parts.Name.IndexOf("highway", StringComparison.OrdinalIgnoreCase) >= 0 ? CourseKind.Highway : CourseKind.Touge,
+				Kind = parts.Name.IndexOf(CircuitWord, StringComparison.OrdinalIgnoreCase) >= 0 ? CourseKind.Circuit
+					: parts.Name.IndexOf("highway", StringComparison.OrdinalIgnoreCase) >= 0 ? CourseKind.Highway
+					: CourseKind.Touge,
 				Source = CourseSource.Map,
 				MapKey = mapKey,
 				MapName = mapName,
@@ -220,18 +260,31 @@ namespace TRC.TuneLoader {
 			course.StartObject = parts.Start;
 			course.FinishObject = parts.Finish;
 
+			course.SectorPoints = parts.Sectors.Values.Select(t => t.position).ToList();
 			bool startOk = parts.Start != null && MakeGate(parts.Start, "start", course, out course.Start);
-			bool finishOk = parts.Finish != null && MakeGate(parts.Finish, "finish", course, out course.Finish);
+			bool finishOk;
+			if (course.IsCircuit) {
+				// The start line is the finish line.
+				finishOk = startOk;
+				course.FinishObject = null;
+				if (parts.Finish != null) {
+					course.Problems.Add($"A circuit needs no 'TRC Finish {parts.Name}': its start line is the finish line, so that object is ignored.");
+				}
+			} else {
+				finishOk = parts.Finish != null && MakeGate(parts.Finish, "finish", course, out course.Finish);
+			}
 			if (parts.Start == null) {
 				course.Problems.Add($"No 'TRC Start {parts.Name}' object.");
 			}
-			if (parts.Finish == null) {
+			if (parts.Finish == null && !course.IsCircuit) {
 				course.Problems.Add($"No 'TRC Finish {parts.Name}' object.");
 			}
 
 			if (startOk && finishOk) {
 				if (parts.Path == null) {
-					course.Problems.Add($"{Course.NoPathProblem}: drive it once with Record path, so the mod knows the road and can catch shortcuts. Until then it's practice only.");
+					course.Problems.Add(course.IsCircuit
+						? $"{Course.NoPathProblem}: drive it once round with Record path, so the mod knows the loop. A circuit can't be used until then."
+						: $"{Course.NoPathProblem}: drive it once with Record path, so the mod knows the road and can catch shortcuts. Until then it's practice only.");
 				} else {
 					List<Vector3> path = ReadPath(parts.Path, parts.Name, course);
 					course.HasPath = path.Count >= 2;
@@ -242,7 +295,7 @@ namespace TRC.TuneLoader {
 			course.Build();
 			if (!startOk || !finishOk) {
 				course.Path.Clear();
-			} else if (course.HasPath && course.Length < CourseGeometry.MinLength) {
+			} else if (course.HasPath && course.Length < course.MinLength) {
 				course.Problems.Add($"The course is only {course.Length:0} m long.");
 			}
 			return course;

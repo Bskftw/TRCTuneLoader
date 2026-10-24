@@ -26,9 +26,13 @@ namespace TRC.TuneLoader {
 
 		private static readonly Color StartColor = new Color(0.55f, 0.85f, 0.35f, 1f);
 		private static readonly Color FinishColor = new Color(0.83f, 0.33f, 0.49f, 1f);
+		private static readonly Color DotColor = new Color(0.55f, 0.8f, 1f, 1f);
 
 		private static Material startMaterial_;
 		private static Material finishMaterial_;
+
+		/// <summary>For <see cref="PathDots"/>: light blue.</summary>
+		internal static Material DotMaterial { get; private set; }
 		private static bool materialsTried_;
 
 		private GameObject start_;
@@ -147,7 +151,7 @@ namespace TRC.TuneLoader {
 		}
 
 		/// <summary>The road surface under a point (CarX's road layer first, then anything), or the point itself.</summary>
-		private static Vector3 Ground(Vector3 point) {
+		internal static Vector3 Ground(Vector3 point) {
 			var from = point + Vector3.up * 4f;
 			if (Physics.Raycast(from, Vector3.down, out RaycastHit hit, 10f, RoadLayerMask, QueryTriggerInteraction.Ignore) ||
 				Physics.Raycast(from, Vector3.down, out hit, 10f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)) {
@@ -174,6 +178,7 @@ namespace TRC.TuneLoader {
 
 			startMaterial_ = Make(template, shader, StartColor);
 			finishMaterial_ = Make(template, shader, FinishColor);
+			DotMaterial = Make(template, shader, DotColor);
 			ShaderName = template != null ? "HDRP/Unlit (copied from the game)" : shader.name;
 			return true;
 		}
@@ -193,6 +198,84 @@ namespace TRC.TuneLoader {
 				}
 			}
 			return material;
+		}
+	}
+
+	/// <summary>
+	/// A course's path shown as small light-blue squares on the road, every few metres, only near the camera:
+	/// while the course builder or Record path records it (so you see what you drove), and for a course you look
+	/// at. No colliders, like the lines.
+	/// </summary>
+	public sealed class PathDots {
+		private const float Range = 60f;
+
+		/// <summary>Every this many path points (about 2 m apart) gets a square.</summary>
+		private const int Every = 2;
+		private const float Size = 0.35f;
+		private const float Lift = 0.05f;
+
+		private readonly List<GameObject> pool_ = new List<GameObject>();
+		private readonly Dictionary<int, Vector3> ground_ = new Dictionary<int, Vector3>();
+		private IList<Vector3> shown_;
+
+		/// <summary>Called every frame with the path to show (null for none) and where the camera is.</summary>
+		public void Show(IList<Vector3> points, Vector3 camera) {
+			if (points == null || !CourseMarkers.Available) {
+				Clear();
+				return;
+			}
+			if (!ReferenceEquals(points, shown_)) {
+				ground_.Clear();
+				shown_ = points;
+			}
+			int used = 0;
+			for (int i = 0; i < points.Count; i += Every) {
+				Vector3 point = points[i];
+				if ((point - camera).sqrMagnitude > Range * Range) {
+					continue;
+				}
+				if (!ground_.TryGetValue(i, out Vector3 on)) {
+					ground_[i] = on = CourseMarkers.Ground(point) + Vector3.up * Lift;
+				}
+				GameObject dot = Dot(used++);
+				dot.transform.position = on;
+				if (!dot.activeSelf) {
+					dot.SetActive(true);
+				}
+			}
+			for (int i = used; i < pool_.Count; i++) {
+				if (pool_[i].activeSelf) {
+					pool_[i].SetActive(false);
+				}
+			}
+		}
+
+		public void Clear() {
+			foreach (GameObject dot in pool_) {
+				if (dot != null) {
+					Object.Destroy(dot);
+				}
+			}
+			pool_.Clear();
+			ground_.Clear();
+			shown_ = null;
+		}
+
+		private GameObject Dot(int index) {
+			while (pool_.Count <= index) {
+				GameObject dot = GameObject.CreatePrimitive(PrimitiveType.Quad);
+				Object.DestroyImmediate(dot.GetComponent<Collider>());
+				dot.name = "TRC path dot";
+				dot.hideFlags = HideFlags.DontSave;
+				dot.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
+				dot.transform.localScale = new Vector3(Size, Size, 1f);
+				MeshRenderer renderer = dot.GetComponent<MeshRenderer>();
+				renderer.sharedMaterial = CourseMarkers.DotMaterial;
+				renderer.shadowCastingMode = ShadowCastingMode.Off;
+				renderer.receiveShadows = false;
+				pool_.Add(dot);
+			}
+			return pool_[index];
 		}
 	}
 }

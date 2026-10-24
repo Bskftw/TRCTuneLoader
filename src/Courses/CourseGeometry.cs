@@ -26,6 +26,16 @@ namespace TRC.TuneLoader {
 		/// <summary>Shorter courses than this (metres) can't be used.</summary>
 		public const float MinLength = 50f;
 
+		/// <summary>A circuit's lap must be at least this long (metres), so driving round the start line isn't a lap.</summary>
+		public const float CircuitMinLength = 200f;
+
+		/// <summary>Without sector objects, a course has this many sectors, plus one for every <see cref="MetresPerExtraSector"/> over that.</summary>
+		public const int MinSectors = 3;
+		public const float MetresPerExtraSector = 2000f;
+
+		/// <summary>A sector object closer than this (metres) to the start or finish, or to another one, is left out.</summary>
+		private const float MinSectorMetres = 20f;
+
 		/// <summary>A car this far above or below a line (metres) isn't crossing it: it's on a bridge or a road underneath.</summary>
 		public const float GateHeight = 6f;
 
@@ -92,6 +102,41 @@ namespace TRC.TuneLoader {
 			Vector3 at = Vector3.Lerp(from, to, fraction);
 			return Mathf.Abs(gate.Across(at)) <= gate.Width / 2f + GateMargin &&
 				Mathf.Abs(at.y - gate.Center.y) <= GateHeight;
+		}
+
+		/// <summary>
+		/// Where each sector ends along the path, the last at its end. Sector objects (<paramref name="points"/>, in
+		/// any order) are found on the path; without usable ones, the path is cut into equal parts, more for longer
+		/// courses (3 up to 6 km, then one more every 2 km).
+		/// </summary>
+		public static float[] SectorEnds(IList<Vector3> path, float[] distances, IList<Vector3> points) {
+			float length = distances.Length > 0 ? distances[distances.Length - 1] : 0f;
+			if (length <= 0f) {
+				return new float[0];
+			}
+			var ends = new List<float>();
+			if (points != null && points.Count > 0 && path.Count >= 2) {
+				foreach (Vector3 point in points) {
+					PathPosition at = Project(path, distances, point, 0, path.Count);
+					if (at.Offset < 40f && at.Progress > MinSectorMetres && at.Progress < length - MinSectorMetres) {
+						ends.Add(at.Progress);
+					}
+				}
+				ends.Sort();
+				for (int i = ends.Count - 1; i > 0; i--) {
+					if (ends[i] - ends[i - 1] < MinSectorMetres) {
+						ends.RemoveAt(i);
+					}
+				}
+			}
+			if (ends.Count == 0) {
+				int count = Math.Max(MinSectors, (int)Math.Ceiling(length / MetresPerExtraSector));
+				for (int i = 1; i < count; i++) {
+					ends.Add(length * i / count);
+				}
+			}
+			ends.Add(length);
+			return ends.ToArray();
 		}
 
 		/// <summary>

@@ -105,12 +105,13 @@ namespace TRC.TuneLoader {
 		private void AdoptRecordedPaths() {
 			usedForPaths_.Clear();
 			List<Course> files = Official.Concat(Custom).Where(c => c.MapKey == FromMapKey && c.HasPath).ToList();
-			// Any map course with both lines (its straight line can be short, like a loop that ends near its start).
-			foreach (Course course in FromMap.Where(c => !c.HasPath && c.Path.Count >= 2)) {
+			// Any map course with both lines (its straight line can be short, like a loop that ends near its start;
+			// a circuit's start and finish are the same line).
+			foreach (Course course in FromMap.Where(c => !c.HasPath && (c.Path.Count >= 2 || c.IsCircuit))) {
 				bool backwards = false;
-				Course file = files.FirstOrDefault(f => Near(f.Start, course.Start) && Near(f.Finish, course.Finish));
+				Course file = files.FirstOrDefault(f => f.IsCircuit == course.IsCircuit && course.SameLines(f, SameLineMetres));
 				if (file == null) {
-					file = files.FirstOrDefault(f => Near(f.Start, course.Finish) && Near(f.Finish, course.Start));
+					file = files.FirstOrDefault(f => f.IsCircuit == course.IsCircuit && course.ReversedLinesOf(f, SameLineMetres));
 					backwards = file != null;
 				}
 				if (file == null) {
@@ -126,7 +127,6 @@ namespace TRC.TuneLoader {
 			}
 		}
 
-		private static bool Near(CourseGate a, CourseGate b) => Vector3.Distance(a.Center, b.Center) <= SameLineMetres;
 
 		/// <summary>The courses on this map: official first, then the map's own objects, then the player's.</summary>
 		public List<Course> ForMap(string mapKey) {

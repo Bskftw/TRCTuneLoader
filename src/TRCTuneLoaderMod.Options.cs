@@ -15,6 +15,7 @@ namespace TRC.TuneLoader {
 	public partial class TRCTuneLoaderMod {
 		private const int OptionsTab = 6;
 		private const string ShortcutPref = "open_shortcut";
+		private const string RestartPref = "restart_shortcut";
 		private const string TourPref = "tour_seen";
 		private const string WindowScalePref = "window_scale";
 		private const string BadgePref = "badge";
@@ -38,6 +39,11 @@ namespace TRC.TuneLoader {
 		private Shortcut shortcut_ = Shortcut.Default;
 		private bool capturingShortcut_;
 		private bool shortcutDown_;
+
+		/// <summary>The key that sends the car back to the start line during a time attack, ready to go again.</summary>
+		private Shortcut restartShortcut_ = Shortcut.RestartDefault;
+		private bool capturingRestart_;
+		private bool restartDown_;
 		private string optionsResult_ = "";
 
 		/// <summary>Size of the window, badge and pop-up, on top of KSL's own UI scale.</summary>
@@ -68,6 +74,7 @@ namespace TRC.TuneLoader {
 		private void LoadOptions() {
 			try {
 				shortcut_ = Shortcut.Parse(Kino.Prefs.Get(ShortcutPref, Shortcut.Default.Save()));
+				restartShortcut_ = Shortcut.Parse(Kino.Prefs.Get(RestartPref, Shortcut.RestartDefault.Save()), Shortcut.RestartDefault);
 				tourSeen_ = Kino.Prefs.Get(TourPref, 0) >= TourVersion;
 				float scale = Kino.Prefs.Get(WindowScalePref, 1f);
 				windowScale_ = WindowScales.OrderBy(s => Math.Abs(s - scale)).First();
@@ -105,7 +112,27 @@ namespace TRC.TuneLoader {
 				shortcutDown_ = false;
 				return;
 			}
+			if (e.type == EventType.KeyUp && e.keyCode == restartShortcut_.Key) {
+				restartDown_ = false;
+				return;
+			}
 			if (e.type != EventType.KeyDown || e.keyCode == KeyCode.None) {
+				return;
+			}
+
+			if (capturingRestart_) {
+				if (e.keyCode == KeyCode.Escape) {
+					capturingRestart_ = false;
+					optionsResult_ = "Restart key not changed.";
+					e.Use();
+					return;
+				}
+				Shortcut picked = Shortcut.FromEvent(e);
+				if (picked != null) {
+					SetRestartShortcut(picked);
+					restartDown_ = true;
+					e.Use();
+				}
 				return;
 			}
 
@@ -125,6 +152,13 @@ namespace TRC.TuneLoader {
 				return;
 			}
 
+			if (restartShortcut_.Matches(e) && !restartDown_ && run_ != null && !TypingInGame()) {
+				restartDown_ = true;
+				RestartFromKey();
+				e.Use();
+				return;
+			}
+
 			// Holding a key sends repeated key presses; only the first one counts.
 			if (!shortcut_.Matches(e) || shortcutDown_ || TypingInGame()) {
 				return;
@@ -137,6 +171,19 @@ namespace TRC.TuneLoader {
 		private void OnApplicationFocus(bool focused) {
 			// A key released while the game was in the background never sends its key-up.
 			shortcutDown_ = false;
+			restartDown_ = false;
+		}
+
+		private void SetRestartShortcut(Shortcut shortcut) {
+			capturingRestart_ = false;
+			if (shortcut.SameAs(shortcut_)) {
+				optionsResult_ = $"{shortcut} already opens this window: pick another key for restart.";
+				return;
+			}
+			restartShortcut_ = shortcut;
+			SavePref(RestartPref, shortcut.Save());
+			optionsResult_ = $"Restart key set to {shortcut}.";
+			TrcLog.Info($"Restart key set to {shortcut}.");
 		}
 
 		private void SetShortcut(Shortcut shortcut) {
@@ -196,10 +243,33 @@ namespace TRC.TuneLoader {
 			} else {
 				if (GUILayout.Button("Change shortcut", Theme.ButtonPrimary)) {
 					capturingShortcut_ = true;
+					capturingRestart_ = false;
 					optionsResult_ = "";
 				}
 				if (!shortcut_.SameAs(Shortcut.Default) && GUILayout.Button($"Reset to {Shortcut.Default}", Theme.Button)) {
 					SetShortcut(Shortcut.Default);
+				}
+			}
+			GUILayout.FlexibleSpace();
+			GUILayout.EndHorizontal();
+			GUILayout.Space(6);
+			GUILayout.Label(capturingRestart_
+				? "Press the new restart key now. Press Esc to cancel."
+				: $"During a time attack, <b>{restartShortcut_}</b> sends your car back to the start line, ready to go again.", Theme.Body);
+			GUILayout.BeginHorizontal();
+			if (capturingRestart_) {
+				if (GUILayout.Button("Cancel", Theme.Button)) {
+					capturingRestart_ = false;
+					optionsResult_ = "Restart key not changed.";
+				}
+			} else {
+				if (GUILayout.Button("Change restart key", Theme.Button)) {
+					capturingRestart_ = true;
+					capturingShortcut_ = false;
+					optionsResult_ = "";
+				}
+				if (!restartShortcut_.SameAs(Shortcut.RestartDefault) && GUILayout.Button($"Reset to {Shortcut.RestartDefault}", Theme.Button)) {
+					SetRestartShortcut(Shortcut.RestartDefault);
 				}
 			}
 			GUILayout.FlexibleSpace();
@@ -423,7 +493,8 @@ namespace TRC.TuneLoader {
 			new TourStep {
 				Title = "Time attack",
 				Text = "Courses here lists the courses on the map you're driving: official TRC courses and your own. " +
-					"Press Time attack, stop behind the start line, and a 3-2-1-GO countdown starts your run. Teleport to start puts you back on the line. " +
+					"Press Time attack, stop behind the start line, and a 3-2-1-GO countdown starts your run (or pick a flying start, and laps on a circuit). " +
+					"Teleport to start, or Ctrl + R, puts you back on the line. Each course is split into sectors, and the timer shows how far ahead or behind your best you are. " +
 					"Battle challenges another TRC Tune Loader player in the room to a side-by-side race or a cat and mouse, with a 3-2-1-GO on both screens at once. " +
 					"My times keeps your best times for each car and tune set, and the Course builder lets you make your own practice courses.",
 				Tab = CoursesTab,
