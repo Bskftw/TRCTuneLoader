@@ -24,6 +24,8 @@ namespace TRC.TuneLoader {
 	///                               last sector ends at the finish). Without them the course is split evenly.
 	///   TRC Start Tsukuba Circuit   a circuit: a loop whose start line is also its finish line, so it has no
 	///                               finish object. Its path comes from Record path (once round).
+	///   TRC Akina Downhill Grid 1   optional: race grid spots, 1 (pole) to 16, each in the middle of where a car
+	///                               lines up, its blue (Z) arrow pointing the way the cars face.
 	///
 	/// A course whose name ends in "Downhill" also gets an uphill twin ("Akina Uphill") with the start and
 	/// finish swapped, unless the map has its own "TRC Start Akina Uphill". A circuit gets a reverse twin
@@ -38,6 +40,7 @@ namespace TRC.TuneLoader {
 		private const string DownhillWord = "downhill";
 		private const string UphillWord = "uphill";
 		private const string SectorWord = "sector";
+		private const string GridWord = "grid";
 		private const string CircuitWord = "circuit";
 		private const string ReverseWord = "reverse";
 
@@ -53,6 +56,7 @@ namespace TRC.TuneLoader {
 			public Transform Finish;
 			public Transform Path;
 			public SortedDictionary<int, Transform> Sectors = new SortedDictionary<int, Transform>();
+			public SortedDictionary<int, Transform> Grid = new SortedDictionary<int, Transform>();
 			public List<string> Duplicates = new List<string>();
 		}
 
@@ -74,15 +78,23 @@ namespace TRC.TuneLoader {
 				}
 
 				string[] words = Words(name);
-				if (TryParseSector(words, out string sectorKey, out int sectorNumber)) {
-					if (!found.TryGetValue(sectorKey, out Parts owner)) {
-						found[sectorKey] = owner = new Parts { Name = sectorKey };
+				foreach (string numbered in new[] { SectorWord, GridWord }) {
+					if (!TryParseNumbered(words, numbered, out string ownerKey, out int number)) {
+						continue;
 					}
-					if (owner.Sectors.ContainsKey(sectorNumber)) {
+					if (!found.TryGetValue(ownerKey, out Parts owner)) {
+						found[ownerKey] = owner = new Parts { Name = ownerKey };
+					}
+					SortedDictionary<int, Transform> list = numbered == SectorWord ? owner.Sectors : owner.Grid;
+					if (list.ContainsKey(number)) {
 						owner.Duplicates.Add($"Two objects are named '{name}': the first one found is used.");
 					} else {
-						owner.Sectors[sectorNumber] = transform;
+						list[number] = transform;
 					}
+					name = null;
+					break;
+				}
+				if (name == null) {
 					continue;
 				}
 				if (!TryParse(words, out string role, out int rest)) {
@@ -185,13 +197,13 @@ namespace TRC.TuneLoader {
 			return true;
 		}
 
-		/// <summary>"trc akina downhill sector 2" → course "akina downhill", sector 2.</summary>
-		private static bool TryParseSector(string[] words, out string key, out int number) {
+		/// <summary>"trc akina downhill sector 2" → course "akina downhill", sector 2 (the same for "grid 2").</summary>
+		private static bool TryParseNumbered(string[] words, string word, out string key, out int number) {
 			key = "";
 			number = 0;
 			int trc = Array.IndexOf(words, "trc");
 			int last = words.Length - 1;
-			if (trc < 0 || last - trc < 3 || words[last - 1] != SectorWord ||
+			if (trc < 0 || last - trc < 3 || words[last - 1] != word ||
 				!int.TryParse(words[last], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out number)) {
 				return false;
 			}
@@ -261,6 +273,9 @@ namespace TRC.TuneLoader {
 			course.FinishObject = parts.Finish;
 
 			course.SectorPoints = parts.Sectors.Values.Select(t => t.position).ToList();
+			course.GridObjects = parts.Grid.Values
+				.Select(t => new GridSpot { Position = t.position, Forward = CourseGeometry.Level(t.forward) == Vector3.zero ? Vector3.forward : CourseGeometry.Level(t.forward) })
+				.ToList();
 			bool startOk = parts.Start != null && MakeGate(parts.Start, "start", course, out course.Start);
 			bool finishOk;
 			if (course.IsCircuit) {

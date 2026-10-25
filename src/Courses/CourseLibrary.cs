@@ -125,6 +125,18 @@ namespace TRC.TuneLoader {
 				course.UsePath(path, fromPlayer: file.Source == CourseSource.Custom);
 				usedForPaths_.Add(file);
 			}
+
+			// A race grid laid out for a map course (Course builder, Lay out grid) lives in a file with its lines,
+			// with or without a path: the map course takes it, unless the map has grid objects of its own.
+			List<Course> grids = Official.Concat(Custom).Where(c => c.MapKey == FromMapKey && c.GridPath.Count >= 2).ToList();
+			foreach (Course course in FromMap.Where(c => c.GridObjects.Count == 0 && c.GridPath.Count < 2)) {
+				Course file = grids.FirstOrDefault(f => f.IsCircuit == course.IsCircuit && course.SameLines(f, SameLineMetres));
+				if (file != null) {
+					course.GridPath = new List<Vector3>(file.GridPath);
+					course.GridLayout = file.GridLayout;
+					usedForPaths_.Add(file);
+				}
+			}
 		}
 
 

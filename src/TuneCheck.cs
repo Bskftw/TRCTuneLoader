@@ -12,6 +12,29 @@ namespace TRC.TuneLoader {
 	/// at its default, so it equals the official code only when the car really matches.
 	/// </summary>
 	public static class TuneCheck {
+		private static readonly System.Text.RegularExpressions.Regex FirstNumber = new System.Text.RegularExpressions.Regex(@"\s*[(\[]?[+-]?\d");
+
+		/// <summary>
+		/// A difference line without its numbers: "Front spring stiffness: 120 N/mm (official 100)" becomes "Front spring
+		/// stiffness: changed", "Stance: ride height at the front left wheel +12 mm (...)" becomes "Stance: ride height at
+		/// the front left wheel changed". Lines with no numbers (like "not on this car") stay as they are.
+		/// </summary>
+		public static string WithoutValues(string line) {
+			int colon = line.IndexOf(": ", StringComparison.Ordinal);
+			if (colon < 0 || !line.Skip(colon).Any(char.IsDigit)) {
+				return line;
+			}
+			string label = line.Substring(0, colon);
+			string rest = line.Substring(colon + 2);
+			if (label == "Stance" || label.StartsWith("Live ", StringComparison.Ordinal)) {
+				System.Text.RegularExpressions.Match number = FirstNumber.Match(rest);
+				string what = number.Success ? rest.Substring(0, number.Index).TrimEnd() : rest;
+				return what.Length > 0 && !what.Any(char.IsDigit) ? $"{label}: {what} changed" : $"{label}: changed";
+			}
+			return $"{label}: changed";
+		}
+
+
 		public sealed class Result {
 			public string Code = "";
 			public bool Matches;

@@ -93,6 +93,10 @@ namespace TRC.TuneLoader {
 		/// <summary>Laps per run on a circuit (1 on any other course).</summary>
 		public int Laps { get; }
 
+		/// <summary>A knockout tournament's battle (0 = an ordinary one), and which game of the match.</summary>
+		public uint MatchId { get; private set; }
+		public int MatchGame { get; private set; }
+
 		/// <summary>An Open battle: cars don't have to be TRC spec, and it never counts.</summary>
 		public bool Open { get; }
 		public Course Course { get; }
@@ -210,9 +214,11 @@ namespace TRC.TuneLoader {
 
 		/// <summary>Challenges <paramref name="peer"/>. The course goes with the challenge unless it's official (they have it too).</summary>
 		public static BattleSession Challenge(uint id, ulong me, string myName, ulong peer, string peerName, Course course,
-			BattleFormat format, bool open, Func<BattleCar> checkMyCar, double now, int laps = 1) {
+			BattleFormat format, bool open, Func<BattleCar> checkMyCar, double now, int laps = 1, uint matchId = 0, int matchGame = 0) {
 			var session = new BattleSession(id, true, me, myName, peer, peerName, course, format, open, laps, checkMyCar, now) {
 				State = Phase.Inviting,
+				MatchId = matchId,
+				MatchGame = matchGame,
 			};
 			session.SendChallenge(now);
 			session.Message = $"Sending the challenge to {session.PeerName}";
@@ -224,6 +230,8 @@ namespace TRC.TuneLoader {
 			var session = new BattleSession(challenge.BattleId, false, me, myName, challenge.From, challenge.FromName, course,
 				challenge.Format, challenge.Open, challenge.Laps, checkMyCar, now) {
 				State = Phase.Invited,
+				MatchId = challenge.MatchId,
+				MatchGame = challenge.MatchGame,
 			};
 			session.Message = $"{session.PeerName} challenges you";
 			return session;
@@ -432,6 +440,8 @@ namespace TRC.TuneLoader {
 			challenge.Format = Format;
 			challenge.Open = Open;
 			challenge.Laps = Laps;
+			challenge.MatchId = MatchId;
+			challenge.MatchGame = MatchGame;
 			challenge.CourseCode = Course.Code;
 			challenge.Course = Course.Official ? null : Course;
 			outbox_.Add(challenge);

@@ -530,12 +530,21 @@ namespace TRC.TuneLoader {
 				: Theme.PillGood;
 			GUILayout.Label(row.SetupText, pill);
 
+			// Another player's own tune stays theirs: what's changed shows, not the values, unless they chose to share them
+			// (Options; their TRC Tune Loader says so in its report). Your own car always shows its numbers.
+			bool values = player.IsLocal || row.Report?.ShareValues == true;
+			Func<string, string> show = values ? (Func<string, string>)(l => l) : TuneCheck.WithoutValues;
 			var lines = new List<string>();
 			if (row.Setup != null) {
 				lines.Add($"Code of the shared setup: {row.Setup.Code} (official {row.Official.Fingerprint})");
-				lines.AddRange(row.Setup.Differences);
+				lines.AddRange(row.Setup.Differences.Select(show));
+				if (!player.IsLocal && row.Setup.Differences.Count > 0) {
+					lines.Add(values
+						? $"<color={Theme.MutedHex}>{player.Name} shares their tune values (their Options), so the numbers show.</color>"
+						: $"<color={Theme.MutedHex}>Only what's changed is shown, not the values: everyone's own tune stays theirs unless they share it in Options.</color>");
+				}
 			}
-			lines.AddRange(player.StanceDifferences);
+			lines.AddRange(player.StanceDifferences.Select(show));
 			lines.AddRange(player.Workshop.Select(w => w.Describe()));
 			if (UnknownWorkshop(player)) {
 				lines.Add("Subscribe to it on the Steam Workshop and the tune loader can check whether it moves the wheels.");
@@ -546,7 +555,7 @@ namespace TRC.TuneLoader {
 				lines.Add("Their car isn't on the track here yet.");
 			} else {
 				lines.Add(player.Drivetrain.Summary());
-				lines.AddRange(player.Drivetrain.Differences);
+				lines.AddRange(player.Drivetrain.Differences.Select(show));
 				if (!player.IsLocal) {
 					lines.Add($"<color={Theme.MutedHex}>Another player's KINO engine or gearbox swap only shows here if you run KINO too.</color>");
 				}

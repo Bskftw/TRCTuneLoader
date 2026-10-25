@@ -11,9 +11,39 @@ namespace TRC.TuneLoader {
 	/// all in one frame. Packets may arrive on another thread, so whole messages wait in a queue for the mod's
 	/// Update.
 	/// </summary>
-	public sealed class BattleSync {
+	public sealed class BattleSync : SyncChannel<BattleMessage> {
+		public BattleSync() : base("trc_battle", "Battles", BattleMessage.Protocol, m => m.Encode(), BattleMessage.Decode, m => m.From) {
+		}
+	}
+
+	/// <summary>Carries race messages (open races and tournaments) the same way, on their own KSL packet.</summary>
+	public sealed class RaceSync : SyncChannel<RaceMessage> {
+		public RaceSync() : base("trc_race", "Races", RaceMessage.Protocol, m => m.Encode(), RaceMessage.Decode, m => m.From) {
+		}
+	}
+
+	/// <summary>A KSL packet that carries one kind of message: split into pieces, paced, put back together, queued for Update.</summary>
+	public class SyncChannel<T> where T : class {
+		private readonly string packetName_;
+		private readonly string what_;
+		private readonly string one_;
+		private readonly byte protocol_;
+		private readonly Func<T, byte[]> encode_;
+		private readonly Func<byte[], T> decode_;
+		private readonly Func<T, ulong> from_;
+
+		protected SyncChannel(string packetName, string what, byte protocol, Func<T, byte[]> encode, Func<byte[], T> decode, Func<T, ulong> from) {
+			packetName_ = packetName;
+			what_ = what;
+			one_ = what.TrimEnd('s').ToLowerInvariant();
+			protocol_ = protocol;
+			encode_ = encode;
+			decode_ = decode;
+			from_ = from;
+		}
+
 		private readonly object lock_ = new object();
-		private readonly Queue<BattleMessage> inbox_ = new Queue<BattleMessage>();
+		private readonly Queue<T> inbox_ = new Queue<T>();
 		private readonly BattleChunks chunks_ = new BattleChunks();
 
 		/// <summary>Pieces of big messages waiting to go, and how fast they go.</summary>
@@ -37,18 +67,18 @@ namespace TRC.TuneLoader {
 			me_ = me;
 			try {
 				if (!Kino.Sync.IsAvailable) {
-					Status = "Battles need KSL's KSL.CarX extension.";
+					Status = $"{what_} need KSL's KSL.CarX extension.";
 					return;
 				}
-				if (!Kino.Sync.TryRegisterPacket("trc_battle", out packet_)) {
-					Status = "KSL didn't accept TRC Tune Loader's battle messages.";
+				if (!Kino.Sync.TryRegisterPacket(packetName_, out packet_)) {
+					Status = $"KSL didn't accept TRC Tune Loader's {one_} messages.";
 					return;
 				}
 				Kino.Sync.SetCallback(packet_, OnPacket);
 				IsAvailable = true;
-				Status = "Battles ready.";
+				Status = $"{what_} ready.";
 			} catch (Exception e) {
-				Status = $"Battles aren't available: {e.Message}";
+				Status = $"{what_} aren't available: {e.Message}";
 				TrcLog.Error(e);
 			}
 		}
@@ -57,25 +87,26 @@ namespace TRC.TuneLoader {
 		/// Sends a message to the room: one that fits in a packet right away (0 when KSL refused it), a bigger one
 		/// through <see cref="Pump"/>. Returns how many packets it takes.
 		/// </summary>
-		public int Send(BattleMessage message) {
+		public int Send(T message) {
 			if (!IsAvailable) {
 				return 0;
 			}
 			try {
-				List<BattleChunks.Piece> pieces = BattleChunks.Split(message.Encode());
+				ulong from = from_(message);
+				List<BattleChunks.Piece> pieces = BattleChunks.Split(encode_(message));
 				if (pieces.Count == 1) {
-					return SendNow(Packet(message.From, pieces[0])) ? 1 : 0;
+					return SendNow(Packet(from, pieces[0])) ? 1 : 0;
 				}
 				if (outgoing_.Count + pieces.Count > MaxQueued) {
-					TrcLog.Warning($"Too many battle packets waiting ({outgoing_.Count}): a {pieces.Count}-packet message wasn't sent.");
+					TrcLog.Warning($"Too many {one_} packets waiting ({outgoing_.Count}): a {pieces.Count}-packet message wasn't sent.");
 					return 0;
 				}
 				foreach (BattleChunks.Piece piece in pieces) {
-					outgoing_.Enqueue(Packet(message.From, piece));
+					outgoing_.Enqueue(Packet(from, piece));
 				}
 				return pieces.Count;
 			} catch (Exception e) {
-				TrcLog.Warning($"Couldn't send a battle message: {e.Message}");
+				TrcLog.Warning($"Couldn't send a {one_} message: {e.Message}");
 				return 0;
 			}
 		}
@@ -94,14 +125,14 @@ namespace TRC.TuneLoader {
 				try {
 					SendNow(outgoing_.Dequeue());
 				} catch (Exception e) {
-					TrcLog.Warning($"Couldn't send a battle packet: {e.Message}");
+					TrcLog.Warning($"Couldn't send a {one_} packet: {e.Message}");
 				}
 			}
 		}
 
 		private IPacket Packet(ulong from, BattleChunks.Piece piece) {
 			IPacket packet = Kino.Sync.CreatePacket(packet_);
-			packet.WriteByte(BattleMessage.Protocol);
+			packet.WriteByte(protocol_);
 			packet.WriteUInt64(from);
 			packet.WriteUInt32(piece.MessageId);
 			packet.WriteInt32(piece.Index);
@@ -118,15 +149,15 @@ namespace TRC.TuneLoader {
 			}
 			Refused++;
 			if (Refused == 1 || Refused % 100 == 0) {
-				TrcLog.Warning($"KSL didn't send a battle packet ({Refused} so far, {Sent} sent). Is the room's connection all right?");
+				TrcLog.Warning($"KSL didn't send a {one_} packet ({Refused} so far, {Sent} sent). Is the room's connection all right?");
 			}
 			return false;
 		}
 
 		/// <summary>The whole messages that arrived since the last call (on Unity's main thread).</summary>
-		public List<BattleMessage> Drain() {
+		public List<T> Drain() {
 			lock (lock_) {
-				var messages = new List<BattleMessage>(inbox_);
+				var messages = new List<T>(inbox_);
 				inbox_.Clear();
 				return messages;
 			}
@@ -134,7 +165,7 @@ namespace TRC.TuneLoader {
 
 		private void OnPacket(IPacket packet) {
 			try {
-				if (packet.ReadByte() != BattleMessage.Protocol) {
+				if (packet.ReadByte() != protocol_) {
 					return;
 				}
 				ulong from = packet.ReadUInt64();
@@ -154,14 +185,14 @@ namespace TRC.TuneLoader {
 					if (whole == null) {
 						return;
 					}
-					BattleMessage message = BattleMessage.Decode(whole);
-					if (message != null && message.From == from) {
+					T message = decode_(whole);
+					if (message != null && from_(message) == from) {
 						Received++;
 						inbox_.Enqueue(message);
 					}
 				}
 			} catch (Exception e) {
-				TrcLog.Warning($"Ignored a broken battle message: {e.Message}");
+				TrcLog.Warning($"Ignored a broken {one_} message: {e.Message}");
 			}
 		}
 	}

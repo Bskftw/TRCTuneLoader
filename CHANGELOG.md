@@ -2,6 +2,49 @@
 
 All versions of TRC Tune Loader, newest first. "Not tested in game yet" means the version builds and its automatic tests pass, but nobody has tried it in CarX yet.
 
+## 0.12.0 (Oct 25 2026)
+
+Not tested in game yet. Open races and tournaments for up to 16 drivers. Everyone needs 0.12.0, for races and for battles.
+
+**New: open races (Battle, Races & tournaments)**
+- **Host a race** on any course of the map, point to point or circuit, for up to 16 drivers. Everyone in the room with TRC Tune Loader sees a pop-up and the race in their list, and joins with one click. The host starts it when everyone's in.
+- **Grid order:** order joined, random, each driver's best time on the course, or **qualifying**.
+- **Grid:** pole on the left or the right, two-wide staggered or a single-file line-up, along the course's own grid. **Teleport to my spot** puts you in your place.
+- **3-2-1-GO** for everyone at the same moment once all are lined up, or when the host says go.
+- **Jump starts:** +5 s penalty, or disqualified (the host picks). The race goes on for everyone else.
+- **Live positions:** your place (P3/12), the lap, and how far you are from the cars just ahead and behind. With more than 8 drivers the positions update twice a second instead of five times, except at the start and in the last 150 m. Lag never changes the result: every mod times its own car to the thousandth.
+- **The end:** when everyone has finished, or when the host ends it, in 60 s or straight away. Anyone still driving then doesn't finish.
+- **Results** with times, gaps and best laps, the same on every screen, even if the host leaves mid-race. Your results are saved in `TimeAttack\races.csv`.
+- **Elimination races** on circuits: the last car each lap is out, until one is left.
+- Resets don't end your race (unless they put you further along), like battles.
+
+**New: qualifying**
+- The host opens a qualifying session (5 to 20 minutes, unlimited runs or 1 to 3 each). Everyone drives time attacks on the course; the best times set the grid, or the seeding of a tournament.
+
+**New: tournaments**
+- **Points series:** several races (the same course or different ones), scoring 25, 20, 16, 13, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 1, plus 1 for the fastest lap on circuits. Most points wins; ties go to the most wins, then the last race. Rounds can use a **reverse grid**.
+- **Knockout:** 1v1 battles in a bracket seeded 1 v 16, 2 v 15..., with byes for the top seeds. Pick side by side or cat and mouse and best of 1 or 3, separately for the final, and a battle for 3rd. The host calls each battle; the two drivers' mods challenge and accept by themselves.
+- **Heats and final:** heats of 4 to 8, the top of each heat goes through to one final race.
+- **Shootout:** a time attack session; the best time wins.
+- The standings show in the race lobby for everyone.
+
+**New: race grids**
+- **Lay out grid** (Courses here): drive the road up to a course's start line, down the middle, and through the line. Races on it line up along that road, two-wide or single file.
+- Maps can place exact grid spots: `TRC <course> Grid 1` to `Grid 16`.
+
+**New: sector times that stay on screen**
+- Your sectors stay on the timer for the whole run or lap, coloured as you finish each one: **purple** great pace (faster than that sector has ever been driven), **green** on pace (as good as your best in this car), **amber** below pace. The sectors still to come are greyed out.
+- The result at the finish shows them in the same colours, and **My times** shows each best time's sectors and every recent time's sectors, coloured against your other times.
+- **Options:** Show or Hide sector times.
+
+**Changed: other players' tunes stay private**
+- On the Players page, a player with a modified TRC tune now shows only **what** is changed ("Front spring stiffness: changed"), never the values. The same goes for their stance, engine, gearbox and suspension. Nobody can copy someone's own tune from the mod any more. Your own car still shows every number.
+- **Options → Share my tune values** (off by default): turn it on and other TRC Tune Loader users see your real numbers, like before. Players without the mod, or on an older version, are always shown without values.
+
+**Changed**
+- The Battle view has two parts: 1v1 battles, and Races & tournaments.
+- Battles changed format for tournament matches: battles need 0.12.0 on both sides.
+
 ## 0.11.0 (Oct 24 2026)
 
 Not tested in game yet. Circuits, laps and sectors. Both drivers need 0.11.0 to battle.

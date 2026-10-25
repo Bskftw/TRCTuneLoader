@@ -51,8 +51,8 @@ namespace TRC.TuneLoader {
 	/// channel can't be aimed reliably), so each says who it's from and for, and the other players ignore it.
 	/// </summary>
 	public sealed class BattleMessage {
-		/// <summary>2 since 0.10.1: small pieces, the path packed in centimetres, and Seen. 3 since 0.11.0: laps, and circuit courses.</summary>
-		public const byte Protocol = 3;
+		/// <summary>2 since 0.10.1: small pieces, the path packed in centimetres, and Seen. 3 since 0.11.0: laps, and circuit courses. 4 since 0.12.0: tournament matches.</summary>
+		public const byte Protocol = 4;
 
 		public BattleKind Kind;
 		public uint BattleId;
@@ -66,6 +66,10 @@ namespace TRC.TuneLoader {
 
 		/// <summary>Laps per run, on a circuit.</summary>
 		public int Laps = 1;
+
+		/// <summary>A knockout tournament's battle (0 = an ordinary challenge), and which game of the match: accepted by itself.</summary>
+		public uint MatchId;
+		public int MatchGame;
 		public string CourseCode = "";
 
 		/// <summary>The course itself, sent when the guest may not have it (anything but an official course).</summary>
@@ -112,6 +116,8 @@ namespace TRC.TuneLoader {
 						writer.Write((byte)Format);
 						writer.Write(Open);
 						writer.Write((byte)Math.Max(1, Math.Min(255, Laps)));
+						writer.Write(MatchId);
+						writer.Write((byte)Math.Max(0, Math.Min(255, MatchGame)));
 						writer.Write(Clip(CourseCode));
 						writer.Write(Course != null);
 						if (Course != null) {
@@ -179,6 +185,8 @@ namespace TRC.TuneLoader {
 							message.Format = (BattleFormat)reader.ReadByte();
 							message.Open = reader.ReadBoolean();
 							message.Laps = Math.Max(1, (int)reader.ReadByte());
+							message.MatchId = reader.ReadUInt32();
+							message.MatchGame = reader.ReadByte();
 							message.CourseCode = Clip(reader.ReadString());
 							if (reader.ReadBoolean()) {
 								message.Course = ReadCourse(reader);
@@ -253,7 +261,7 @@ namespace TRC.TuneLoader {
 		/// The course as it is after Build (rounded to file precision), so the guest rebuilds exactly the same
 		/// course, with the same code.
 		/// </summary>
-		private static void WriteCourse(BinaryWriter writer, Course course) {
+		internal static void WriteCourse(BinaryWriter writer, Course course) {
 			writer.Write(Clip(course.Name));
 			writer.Write((byte)course.Kind);
 			writer.Write(Clip(course.MapKey));
@@ -272,7 +280,7 @@ namespace TRC.TuneLoader {
 		/// from the step before. Along a road those are a few centimetres, so most take one byte per axis: about a
 		/// quarter of the size of plain numbers. A long Touge path still takes several KB, so it's split in pieces.
 		/// </summary>
-		private static void WritePath(BinaryWriter writer, List<Vector3> path) {
+		internal static void WritePath(BinaryWriter writer, List<Vector3> path) {
 			long[] last = null;
 			var step = new long[3];
 			foreach (Vector3 point in path) {
@@ -290,7 +298,7 @@ namespace TRC.TuneLoader {
 			}
 		}
 
-		private static List<Vector3> ReadPath(BinaryReader reader, int count) {
+		internal static List<Vector3> ReadPath(BinaryReader reader, int count) {
 			var path = new List<Vector3>(count);
 			var cm = new long[3];
 			var step = new long[3];
@@ -337,7 +345,7 @@ namespace TRC.TuneLoader {
 
 		private static float Metres(long centimetres) => (float)(centimetres / 100.0);
 
-		private static Course ReadCourse(BinaryReader reader) {
+		internal static Course ReadCourse(BinaryReader reader) {
 			var course = new Course {
 				Name = Clip(reader.ReadString()),
 				Kind = (CourseKind)Math.Min(reader.ReadByte(), (byte)CourseKind.Circuit),

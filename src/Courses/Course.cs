@@ -9,6 +9,15 @@ namespace TRC.TuneLoader {
 	/// <summary>Touge and highway run from a start line to a finish line; a circuit is a loop whose finish line is its start line.</summary>
 	public enum CourseKind { Touge, Highway, Circuit }
 
+	/// <summary>How cars line up for a race: two-wide and staggered, or one behind the other.</summary>
+	public enum GridLayout : byte { Grid, LineUp }
+
+	/// <summary>Where one car lines up for a race, and the way it faces.</summary>
+	public struct GridSpot {
+		public Vector3 Position;
+		public Vector3 Forward;
+	}
+
 	/// <summary>
 	/// Where a course comes from. Official courses are built into the mod (only bskftw ships them);
 	/// map courses come from TRC-named objects in the map itself; custom courses were made with the
@@ -106,6 +115,59 @@ namespace TRC.TuneLoader {
 
 		/// <summary>Metres along the path where each sector ends, the last one at <see cref="Length"/> (worked out in Build).</summary>
 		public float[] SectorEnds { get; private set; } = new float[0];
+
+		/// <summary>
+		/// The road leading up to the start line, driven with the Course builder's grid tool: points from the start
+		/// line backwards. Race grids are laid along it; without it, straight back from the line. Not part of the code.
+		/// </summary>
+		public List<Vector3> GridPath = new List<Vector3>();
+		public GridLayout GridLayout;
+
+		/// <summary>Map courses only: the map's "TRC &lt;course&gt; Grid N" spots, in number order. They win over everything else.</summary>
+		public List<GridSpot> GridObjects = new List<GridSpot>();
+
+		/// <summary>Grid rows: the first car this far (metres) behind the start line, then one every <see cref="GridStep"/> (two-wide: alternating sides).</summary>
+		public const float GridFirst = 4f;
+		public const float GridStep = 4f;
+		public const float LineUpStep = 8f;
+
+		/// <summary>
+		/// The spots for <paramref name="count"/> cars, pole first: the map's grid objects when it has them, else
+		/// along the grid path (or straight back from the start line). Two-wide grids put pole on the left or the
+		/// right (<paramref name="poleLeft"/>), the next car on the other side a little further back, and so on.
+		/// </summary>
+		public List<GridSpot> GridSpots(int count, bool poleLeft, GridLayout? layout = null) {
+			var spots = new List<GridSpot>();
+			GridLayout shape = layout ?? GridLayout;
+			for (int i = 0; i < count && i < GridObjects.Count; i++) {
+				spots.Add(GridObjects[i]);
+			}
+			if (spots.Count == count) {
+				return spots;
+			}
+			if (spots.Count > 0) {
+				// More cars than spots: on behind the last one, the way it faces.
+				GridSpot last = spots[spots.Count - 1];
+				for (int i = spots.Count, n = 1; i < count; i++, n++) {
+					spots.Add(new GridSpot { Position = last.Position - last.Forward * (shape == GridLayout.LineUp ? LineUpStep : GridStep * 2) * n, Forward = last.Forward });
+				}
+				return spots;
+			}
+
+			List<Vector3> back = GridPath.Count >= 2 ? GridPath : new List<Vector3> { Start.Center, Start.Center - Start.Forward * 10f };
+			float side = Mathf.Clamp(Start.Width / 4f, 1.5f, 3f);
+			for (int i = 0; i < count; i++) {
+				float behind = GridFirst + i * (shape == GridLayout.LineUp ? LineUpStep : GridStep);
+				CourseGeometry.AlongBack(back, behind, out Vector3 at, out Vector3 forward);
+				if (shape == GridLayout.Grid) {
+					bool left = (i % 2 == 0) == poleLeft;
+					Vector3 right = new Vector3(forward.z, 0f, -forward.x);
+					at += right * (left ? -side : side);
+				}
+				spots.Add(new GridSpot { Position = at, Forward = forward });
+			}
+			return spots;
+		}
 
 		/// <summary>Distance along the path at each path point, in metres.</summary>
 		public float[] Distances { get; private set; } = new float[0];

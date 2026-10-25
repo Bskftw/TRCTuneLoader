@@ -19,6 +19,26 @@ namespace TRC.TuneLoader.CodeCheck {
 			SectorObjectsSetTheSectors();
 			ReversedCircuitIsItsOwnCourse();
 			BuilderClosesTheLoop();
+			OtherPlayersValuesStayHidden();
+		}
+
+		private static void OtherPlayersValuesStayHidden() {
+			string[] lines = {
+				"Front spring stiffness: 120 N/mm (official 100 N/mm)",
+				"Tyre pressure rear: 1.9 bar [0.4521] (official 2.1 bar [0.5])",
+				"Stance: ride height at the front left wheel +12 mm (380 mm, stock 368 mm)",
+				"Stance: track width front -8 mm (1520 mm, stock 1528 mm)",
+				"Live frontSuspension.stiffness: 152287 (expected 39700.63)",
+				"Final drive: 3.9 (CarX 4.11 with the tune)",
+			};
+			string[] hidden = lines.Select(TuneCheck.WithoutValues).ToArray();
+			Expect(hidden.All(h => !h.Any(char.IsDigit)), $"another player's differences show no numbers ({string.Join(" | ", hidden)})");
+			Expect(hidden[0] == "Front spring stiffness: changed" && hidden[2] == "Stance: ride height at the front left wheel changed" &&
+				hidden[3] == "Stance: track width front changed" && hidden[4] == "Live frontSuspension.stiffness: changed",
+				$"they still say what's changed ({hidden[0]} / {hidden[2]} / {hidden[3]})");
+			Expect(TuneCheck.WithoutValues("Gear 7 ratio: not on this car") == "Gear 7 ratio: not on this car" &&
+				TuneCheck.WithoutValues("Body kit part that moves the wheels: Rocket Bunny (body)") == "Body kit part that moves the wheels: Rocket Bunny (body)",
+				"lines without values stay as they are");
 		}
 
 		private static void BuilderClosesTheLoop() {
@@ -148,6 +168,16 @@ namespace TRC.TuneLoader.CodeCheck {
 				Math.Abs(l.Sectors.Sum() - l.Time) < 0.001);
 			Expect(even, $"every lap has 3 sectors adding up to the lap ({string.Join(" | ", run.LapTimes.Select(l => string.Join(" ", l.Sectors.Select(s => s.ToString("0.000")))))}, expected {third:0.000} each)");
 			Expect(splits.Count == 6 && splits.Select(s => s.Index).SequenceEqual(new[] { 0, 1, 2, 0, 1, 2 }), $"each sector is split as it ends, every lap ({splits.Count} splits)");
+
+			var strip = new TimeAttackRun(course, laps: 2, flying: true);
+			int midLap = -1;
+			DriveCircle(strip, t => (float)(25 * t), before: 30f, onFrame: r => {
+				if (midLap < 0 && r.Lap == 2 && r.Progress > course.Length * 0.5f) {
+					midLap = r.CurrentSectors.Count;
+				}
+				return 0f;
+			});
+			Expect(midLap == 1 && strip.CurrentSectors.Count == 3, $"the sector strip holds this lap's finished sectors ({midLap} halfway round lap 2, {strip.CurrentSectors.Count} at the end)");
 		}
 
 		private static void DeltaComparesWithTheBestLap() {

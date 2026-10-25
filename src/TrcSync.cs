@@ -50,6 +50,12 @@ namespace TRC.TuneLoader {
 			public int DrivetrainDifferences;
 			public List<ModEntry> Mods = new List<ModEntry>();
 			public DateTime ReceivedAt;
+
+			/// <summary>
+			/// The player lets others see their tune's values (Options, off by default). Sent last, so reports from
+			/// versions before 0.12 (which don't have it) read as not sharing, and they ignore it.
+			/// </summary>
+			public bool ShareValues;
 		}
 
 		// 2: added the matched tune set. 3: added the stance check. 4: added the engine & drivetrain check.
@@ -108,6 +114,17 @@ namespace TRC.TuneLoader {
 		}
 
 		/// <summary>Asks every TRC Tune Loader user in the room for a fresh report, and sends ours.</summary>
+		/// <summary>Sends this player's report to the room now (after an option that's in it changed).</summary>
+		public void SendReportNow() {
+			if (IsAvailable) {
+				try {
+					SendOwnReport(force: true);
+				} catch (Exception e) {
+					TrcLog.Warning($"Couldn't send the TRC report: {e.Message}");
+				}
+			}
+		}
+
 		public void RequestReports() {
 			if (!IsAvailable) {
 				return;
@@ -184,6 +201,7 @@ namespace TRC.TuneLoader {
 				packet.WriteString(Clip(own.Mods[i].Author));
 				packet.WriteString(Clip(own.Mods[i].Type));
 			}
+			packet.WriteBool(own.ShareValues);
 
 			Kino.Sync.SendToAll(packet);
 			lastSent_ = DateTime.UtcNow;
@@ -226,6 +244,11 @@ namespace TRC.TuneLoader {
 						Author = Clip(packet.ReadString()),
 						Type = Clip(packet.ReadString()),
 					});
+				}
+				try {
+					report.ShareValues = packet.ReadBool();
+				} catch (Exception) {
+					// A report from before 0.12: not sharing.
 				}
 
 				if (report.SteamId != 0) {

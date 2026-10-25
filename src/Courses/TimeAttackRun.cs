@@ -25,6 +25,9 @@ namespace TRC.TuneLoader {
 		public float[] Trace = new float[0];
 	}
 
+	/// <summary>What a jump start does: start again (time attack, battles), or in a race a time penalty or disqualification.</summary>
+	public enum JumpRule : byte { Restart, Penalty, Disqualify }
+
 	/// <summary>A sector just finished, to flash on screen.</summary>
 	public struct SectorSplit {
 		/// <summary>0 for the first sector.</summary>
@@ -101,6 +104,12 @@ namespace TRC.TuneLoader {
 		/// <summary>After a reset, the car is first looked for this far back along the path (segments), where resets put it.</summary>
 		private const int ResetLookBehind = 200;
 
+		/// <summary>A car this close (metres) to its race grid spot, facing the right way and stopped, is lined up.</summary>
+		public const float SpotRadius = 3.5f;
+
+		/// <summary>A car still behind the start line this long (seconds) after GO is out.</summary>
+		private const double MaxBeforeLineSeconds = 90;
+
 		public Course Course { get; }
 		public Phase State { get; private set; } = Phase.ToStart;
 
@@ -131,8 +140,11 @@ namespace TRC.TuneLoader {
 		/// <summary>Metres along the course (along this lap, on a circuit).</summary>
 		public float Progress { get; private set; }
 
-		/// <summary>Metres driven along the course in the whole run, over every lap: what battles compare.</summary>
-		public float TotalProgress => (Lap - 1) * Course.Length + Progress;
+		/// <summary>
+		/// Metres driven along the course in the whole run, over every lap: what battles and races compare. Before
+		/// the start line (the back of a race grid), how far behind it, as a negative number.
+		/// </summary>
+		public float TotalProgress => BeforeLine ? Math.Min(0f, Course.Start.Ahead(lastPosition_)) : (Lap - 1) * Course.Length + Progress;
 
 		public float DistanceToStart { get; private set; }
 
@@ -157,6 +169,17 @@ namespace TRC.TuneLoader {
 		/// <summary>Whether the lap being driven still counts, and why not.</summary>
 		public bool LapValid { get; private set; } = true;
 		public string LapInvalid { get; private set; } = "";
+
+		/// <summary>Seconds for each sector of this lap finished so far (all of them once a point-to-point run is over).</summary>
+		public List<double> CurrentSectors {
+			get {
+				var sectors = new List<double>(splits_.Count);
+				for (int i = 0; i < splits_.Count; i++) {
+					sectors.Add(splits_[i] - (i == 0 ? lapStart_ : splits_[i - 1]));
+				}
+				return sectors;
+			}
+		}
 
 		/// <summary>The sector being driven (0 for the first) and the last one finished.</summary>
 		public int Sector { get; private set; }
@@ -183,6 +206,15 @@ namespace TRC.TuneLoader {
 		/// <summary>The start box, in metres behind the start line: from <see cref="GridFront"/> back to <see cref="GridBack"/>.</summary>
 		public float GridFront { get; set; }
 		public float GridBack { get; set; } = GridDepth;
+
+		/// <summary>For races: the car's own grid spot. Set, it's lined up only there (instead of anywhere in the start box).</summary>
+		public GridSpot? Spot { get; set; }
+
+		/// <summary>What a jump start does (races pick penalty or disqualification).</summary>
+		public JumpRule OnJump { get; set; } = JumpRule.Restart;
+
+		/// <summary>The car hasn't crossed the start line since GO (it started behind it, like the back of a race grid).</summary>
+		public bool BeforeLine { get; private set; }
 
 		private double stillSince_ = -1;
 		private Vector3 lastSeen_;
@@ -307,9 +339,17 @@ namespace TRC.TuneLoader {
 			offSince_ = -1;
 			offRoadSince_ = -1;
 			hasLast_ = false;
+			jumped_ = false;
+			BeforeLine = false;
 		}
 
+		private bool jumped_;
+
 		private void WaitAtStart(double now, Vector3 position, Vector3 forward, float speedKmh) {
+			if (Spot.HasValue) {
+				WaitInSpot(now, position, forward, speedKmh, Spot.Value);
+				return;
+			}
 			CourseGate gate = Course.Start;
 			float ahead = gate.Ahead(position);
 			float across = gate.Across(position);
@@ -355,6 +395,34 @@ namespace TRC.TuneLoader {
 			Message = now < jumpUntil_ ? "Jump start! Stop behind the line to try again" : hint;
 		}
 
+		/// <summary>Races: lined up when stopped in the car's own grid spot, facing the way the grid faces.</summary>
+		private void WaitInSpot(double now, Vector3 position, Vector3 forward, float speedKmh, GridSpot spot) {
+			lastSeen_ = position;
+			lastPosition_ = position;
+			ReadyToStart = false;
+			float away = Vector3.Distance(new Vector3(position.x, spot.Position.y, position.z), spot.Position);
+			DistanceToStart = away;
+			bool facing = Vector3.Dot(CourseGeometry.Level(forward), spot.Forward) > 0.5f;
+			string hint;
+			if (away > SpotRadius || Mathf.Abs(position.y - spot.Position.y) > GridHeight) {
+				stillSince_ = -1;
+				hint = $"Drive to your grid spot: {Distance(away)}";
+			} else if (!facing) {
+				stillSince_ = -1;
+				hint = "Turn around: face the way the grid faces";
+			} else if (speedKmh > StoppedKmh) {
+				stillSince_ = -1;
+				hint = "Stop in your spot";
+			} else {
+				if (stillSince_ < 0) {
+					stillSince_ = now;
+				}
+				ReadyToStart = now - stillSince_ >= StillSeconds;
+				hint = ReadyToStart ? "Ready" : "Hold still...";
+			}
+			Message = hint;
+		}
+
 		/// <summary>Flying start: the clock starts at the moment the car crosses the start line (worked out between frames).</summary>
 		private void WaitForFlyingStart(double now, Vector3 position, float speedKmh) {
 			DistanceToStart = Vector3.Distance(position, Course.Start.Center);
@@ -373,7 +441,21 @@ namespace TRC.TuneLoader {
 		}
 
 		private void CountDown(double now, Vector3 position, float speedKmh) {
-			if (speedKmh > JumpKmh || Vector3.Distance(position, anchor_) > JumpMetres) {
+			bool moved = speedKmh > JumpKmh || Vector3.Distance(position, anchor_) > JumpMetres;
+			if (moved && OnJump == JumpRule.Disqualify) {
+				JumpStarts++;
+				Cancel("Jump start: disqualified.");
+				return;
+			}
+			if (moved && OnJump == JumpRule.Penalty) {
+				// The countdown carries on; the penalty goes on the time at the finish.
+				if (!jumped_) {
+					jumped_ = true;
+					JumpStarts++;
+				}
+				moved = false;
+			}
+			if (moved) {
 				State = Phase.ToStart;
 				stillSince_ = -1;
 				CountdownNumber = 0;
@@ -393,7 +475,7 @@ namespace TRC.TuneLoader {
 			double left = CountdownSeconds - (now - countdownStart_);
 			if (left > 0) {
 				CountdownNumber = Mathf.Clamp((int)Math.Ceiling(left), 1, 3);
-				Message = "Get ready";
+				Message = jumped_ ? "Jump start! Time penalty" : "Get ready";
 				return;
 			}
 
@@ -415,6 +497,12 @@ namespace TRC.TuneLoader {
 			offRoadSince_ = -1;
 			Lap = 1;
 			BeginLap(0);
+			// Well behind the line (the back of a race grid): nothing counts until the car crosses it.
+			BeforeLine = !Flying && Course.Start.Ahead(position) < -GridDepth;
+			if (BeforeLine) {
+				lastProgress_ = Progress = 0f;
+				segment_ = 0;
+			}
 			Message = "";
 		}
 
@@ -439,6 +527,22 @@ namespace TRC.TuneLoader {
 				return;
 			}
 			Elapsed = now - goTime_;
+
+			if (BeforeLine) {
+				if (CourseGeometry.Crossed(Course.Start, lastPosition_, position, out _)) {
+					BeforeLine = false;
+					PathPosition from = CourseGeometry.Project(Course.Path, Course.Distances, position, 0, LookAhead);
+					segment_ = from.Segment;
+					lastProgress_ = Progress = from.Progress;
+				} else if (Elapsed > MaxBeforeLineSeconds) {
+					Cancel("Never crossed the start line, so the run was stopped.");
+					return;
+				}
+				lastPosition_ = position;
+				lastTime_ = now;
+				lastSpeed_ = speedKmh;
+				return;
+			}
 
 			float moved = Vector3.Distance(position, lastPosition_);
 			float possible = Mathf.Max(lastSpeed_, speedKmh) / 3.6f * (float)dt;

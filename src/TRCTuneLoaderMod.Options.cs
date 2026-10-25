@@ -16,6 +16,10 @@ namespace TRC.TuneLoader {
 		private const int OptionsTab = 6;
 		private const string ShortcutPref = "open_shortcut";
 		private const string RestartPref = "restart_shortcut";
+		private const string ShareValuesPref = "share_tune_values";
+
+		/// <summary>Let other TRC Tune Loader users see this player's tune values on their Players page (off by default).</summary>
+		private bool shareValues_;
 		private const string TourPref = "tour_seen";
 		private const string WindowScalePref = "window_scale";
 		private const string BadgePref = "badge";
@@ -84,6 +88,8 @@ namespace TRC.TuneLoader {
 				int keep = Kino.Prefs.Get(BackupsKeepPref, 0);
 				backupsKeep_ = BackupLimits.Contains(keep) ? keep : 0;
 				problemsOnly_ = Kino.Prefs.Get(ProblemsOnlyPref, false);
+				showSectors_ = Kino.Prefs.Get(SectorsPref, true);
+				shareValues_ = Kino.Prefs.Get(ShareValuesPref, false);
 				Vector2 timer = Kino.Prefs.Get(HudPositionPref, DefaultHudPosition);
 				hudPosition_ = new Vector2(Mathf.Clamp01(timer.x), Mathf.Clamp01(timer.y));
 			} catch (Exception e) {
@@ -315,6 +321,23 @@ namespace TRC.TuneLoader {
 			if (check != autoCheck_) {
 				autoCheck_ = check;
 				SavePref(AutoCheckPref, autoCheck_);
+			}
+			GUILayout.Space(8);
+			GUILayout.Label("<b>Share my tune values</b>: when your tune isn't the official one, other players with TRC Tune Loader see only what you changed, not the values. " +
+				"Turn this on to let them see your numbers too.", Theme.Body);
+			int share = Choice(new[] { "Keep my values private", "Share my values" }, shareValues_ ? 1 : 0);
+			if ((share == 1) != shareValues_) {
+				shareValues_ = share == 1;
+				SavePref(ShareValuesPref, shareValues_);
+				sync_?.SendReportNow();
+				TrcLog.Info(shareValues_ ? "Sharing tune values with other players." : "Tune values kept private.");
+			}
+			GUILayout.Space(8);
+			GUILayout.Label("<b>Sector times</b>: your sectors stay on the timer during a run (purple: great pace, green: on pace, amber: below pace), with the result and in My times.", Theme.Body);
+			int sectors = Choice(new[] { "Show sector times", "Hide sector times" }, showSectors_ ? 0 : 1);
+			if ((sectors == 0) != showSectors_) {
+				showSectors_ = sectors == 0;
+				SavePref(SectorsPref, showSectors_);
 			}
 			GUILayout.Space(8);
 			GUILayout.Label("<b>Time attack timer</b>: drag it anywhere on the screen while this window is open during a run.", Theme.Body);

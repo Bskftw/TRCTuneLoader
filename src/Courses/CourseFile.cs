@@ -31,6 +31,11 @@ namespace TRC.TuneLoader {
 	///   12.3, 45.6, -78.9             (points along the middle of the road, start to finish; a circuit's go
 	///                                  once round, back to the start line)
 	///   ...
+	///
+	///   [grid]                        (optional: where race grids line up)
+	///   layout = grid                 (grid: two-wide, staggered; lineup: one behind the other)
+	///   12.3, 45.6, -78.9             (points down the middle of the road, from the start line backwards)
+	///   ...
 	/// </summary>
 	public static class CourseFile {
 		public const string Extension = ".trccourse";
@@ -48,6 +53,7 @@ namespace TRC.TuneLoader {
 		public static Course Parse(string text, CourseSource source) {
 			var course = new Course { Source = source };
 			var path = new List<Vector3>();
+			var grid = new List<Vector3>();
 			bool startSet = false, finishSet = false;
 			string section = "";
 			string written = "";
@@ -66,6 +72,14 @@ namespace TRC.TuneLoader {
 					continue;
 				}
 
+				if (section == "grid" && line.IndexOf('=') < 0) {
+					if (TryParseVector(line, 3, out Vector3 point)) {
+						grid.Add(point);
+					} else {
+						course.Problems.Add($"Line {lineNumber}: a grid point should be three numbers, like 12.3, 45.6, -78.9");
+					}
+					continue;
+				}
 				if (section == "path") {
 					if (TryParseVector(line, 3, out Vector3 point)) {
 						path.Add(point);
@@ -101,8 +115,15 @@ namespace TRC.TuneLoader {
 					case "finish":
 						finishSet |= SetGate(course.Finish, key, value, lineNumber, course.Problems);
 						break;
+					case "grid":
+						if (key == "layout") {
+							course.GridLayout = TuneRules.Key(value) == "lineup" ? GridLayout.LineUp : GridLayout.Grid;
+						} else {
+							course.Problems.Add($"Line {lineNumber}: unknown grid field '{key}'");
+						}
+						break;
 					default:
-						course.Problems.Add($"Line {lineNumber}: '{key}' is outside an [info], [start] or [finish] section");
+						course.Problems.Add($"Line {lineNumber}: '{key}' is outside an [info], [start], [finish] or [grid] section");
 						break;
 				}
 			}
@@ -119,6 +140,7 @@ namespace TRC.TuneLoader {
 
 			course.Path = path;
 			course.HasPath = path.Count >= 2;
+			course.GridPath = grid.Count >= 2 ? grid : new List<Vector3>();
 			course.Build(resample: false);
 
 			if (written.Length > 0 && !string.Equals(written, course.Code, StringComparison.OrdinalIgnoreCase)) {
@@ -148,6 +170,13 @@ namespace TRC.TuneLoader {
 			if (course.HasPath) {
 				text.Append("\n[path]\n");
 				foreach (Vector3 point in course.Path) {
+					text.Append(Number(point.x, 2)).Append(", ").Append(Number(point.y, 2)).Append(", ").Append(Number(point.z, 2)).Append('\n');
+				}
+			}
+			if (course.GridPath.Count >= 2) {
+				text.Append("\n[grid]\n");
+				text.Append("layout = ").Append(course.GridLayout == GridLayout.LineUp ? "lineup" : "grid").Append('\n');
+				foreach (Vector3 point in course.GridPath) {
 					text.Append(Number(point.x, 2)).Append(", ").Append(Number(point.y, 2)).Append(", ").Append(Number(point.z, 2)).Append('\n');
 				}
 			}

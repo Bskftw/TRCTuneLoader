@@ -23,7 +23,7 @@ namespace TRC.TuneLoader {
 	/// </summary>
 	[KSLMeta("TRCTuneLoader", Version, "bskftw")]
 	public partial class TRCTuneLoaderMod : BaseMod {
-		public const string Version = "0.11.0";
+		public const string Version = "0.12.0";
 
 		private const string BackupsFolderName = "Backups";
 		private const float CarRefreshSeconds = 1.0f;
@@ -121,6 +121,7 @@ namespace TRC.TuneLoader {
 			try {
 				SetupCourses();
 				SetupBattles();
+				SetupRaces();
 			} catch (Exception e) {
 				TrcLog.Error(e);
 			}
@@ -163,6 +164,13 @@ namespace TRC.TuneLoader {
 				hasPose_ = false;
 				// It runs every frame: only the first few errors go to the log.
 				if (courseErrors_++ < 3) {
+					TrcLog.Error(e);
+				}
+			}
+			try {
+				UpdateRaces();
+			} catch (Exception e) {
+				if (courseErrors_++ < 6) {
 					TrcLog.Error(e);
 				}
 			}
@@ -663,6 +671,7 @@ namespace TRC.TuneLoader {
 						report.DrivetrainDifferences = check.Drivetrain.Differences.Count;
 					}
 				}
+				report.ShareValues = shareValues_;
 
 				return report;
 			} catch (Exception e) {

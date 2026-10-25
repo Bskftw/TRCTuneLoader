@@ -21,16 +21,18 @@ namespace TRC.TuneLoader {
 		/// <summary>How long a sector split or a lap time flashes over the track.</summary>
 		private const float FlashSeconds = 4f;
 
+		private const string SectorsPref = "show_sectors";
+
+		/// <summary>Sector times on the timer, with the result and in My times (Options).</summary>
+		private bool showSectors_ = true;
+
 		private int pickedStart_;
 		private int pickedLaps_ = 1;
 		private bool lapPrefsLoaded_;
 
 		/// <summary>Laps and the split of the run already dealt with, so each is handled once.</summary>
 		private int lapsSeen_;
-		private SectorSplit? splitSeen_;
-		private string splitFlash_ = "";
 		private string lapFlash_ = "";
-		private float flashUntil_;
 		private float lapFlashUntil_;
 		private bool referenceLoaded_;
 
@@ -86,10 +88,7 @@ namespace TRC.TuneLoader {
 		/// <summary>A new run (or the same one again): nothing from the last one carries over.</summary>
 		private void ResetRunExtras() {
 			lapsSeen_ = 0;
-			splitSeen_ = null;
-			splitFlash_ = "";
 			lapFlash_ = "";
-			flashUntil_ = 0;
 			lapFlashUntil_ = 0;
 			referenceLoaded_ = false;
 		}
@@ -117,10 +116,6 @@ namespace TRC.TuneLoader {
 				sectorBestMine_ = TimeAttackLog.BestSectorsMs(times_, r => r.CourseCode == run_.Course.Code && r.CarId == car && r.TuneSet == set && kind.Matches(r), sectors);
 			}
 
-			if (run_.LastSplit.HasValue && !run_.LastSplit.Equals(splitSeen_)) {
-				splitSeen_ = run_.LastSplit;
-				FlashSplit(run_.LastSplit.Value);
-			}
 
 			while (lapsSeen_ < run_.LapTimes.Count) {
 				LapTime lap = run_.LapTimes[lapsSeen_++];
@@ -130,19 +125,50 @@ namespace TRC.TuneLoader {
 			}
 		}
 
-		/// <summary>"S2 +0.125": purple for the best this sector has ever been driven, green for your best in this car, else red.</summary>
-		private void FlashSplit(SectorSplit split) {
-			int sectors = run_.Course.SectorEnds.Length;
-			if (split.Index >= sectors - 1 && !run_.Course.IsCircuit) {
-				return; // the last sector ends at the finish, where the result shows instead
+		/// <summary>
+		/// The colour of a sector time: purple (great pace) when it beats the best this sector has ever been driven,
+		/// green (on pace) when it's as good as your best in this car on this set (or there's none yet), amber (below
+		/// pace) when it's slower. <paramref name="orEqual"/>: for saved times, matching the best counts as the best.
+		/// </summary>
+		private static string PaceColour(long ms, long? all, long? mine, bool orEqual = false) {
+			if (all != null && (ms < all || (orEqual && ms == all))) {
+				return Theme.PurpleHex;
 			}
-			long ms = (long)Math.Round(split.Time * 1000.0);
-			long? all = split.Index < sectorBestAll_.Length ? sectorBestAll_[split.Index] : null;
-			long? mine = split.Index < sectorBestMine_.Length ? sectorBestMine_[split.Index] : null;
-			string colour = all == null || ms < all ? Theme.PurpleHex : mine == null || ms < mine ? Theme.GoodHex : Theme.BadHex;
-			string gap = mine != null ? $" {TimeAttackRun.FormatGap((ms - mine.Value) / 1000.0)}" : "";
-			splitFlash_ = $"<color={colour}>S{split.Index + 1} {TimeAttackRun.FormatTime(split.Time)}{gap}</color>";
-			flashUntil_ = Time.unscaledTime + FlashSeconds;
+			return mine == null || ms <= mine ? Theme.GoodHex : Theme.WarnHex;
+		}
+
+		/// <summary>A finished run's sectors in their pace colours, for the result (compared with the bests from before this run).</summary>
+		private string ResultSectors(LapTime lap) {
+			var parts = new List<string>();
+			for (int i = 0; i < lap.Sectors.Length; i++) {
+				long ms = (long)Math.Round(lap.Sectors[i] * 1000.0);
+				long? all = i < sectorBestAll_.Length ? sectorBestAll_[i] : null;
+				long? mine = i < sectorBestMine_.Length ? sectorBestMine_[i] : null;
+				parts.Add($"<color={PaceColour(ms, all, mine)}>S{i + 1} {TimeAttackRun.FormatTime(lap.Sectors[i])}</color>");
+			}
+			return string.Join("  ", parts);
+		}
+
+		/// <summary>"S1 19.234  S2 21.002  S3 –": this lap's sectors in their pace colours, the ones still to come greyed (three to a line).</summary>
+		private string SectorStrip(TimeAttackRun run) {
+			List<double> done = run.CurrentSectors;
+			int count = run.Course.SectorEnds.Length;
+			var parts = new List<string>();
+			for (int i = 0; i < count; i++) {
+				if (i < done.Count) {
+					long ms = (long)Math.Round(done[i] * 1000.0);
+					long? all = i < sectorBestAll_.Length ? sectorBestAll_[i] : null;
+					long? mine = i < sectorBestMine_.Length ? sectorBestMine_[i] : null;
+					parts.Add($"<color={PaceColour(ms, all, mine)}>S{i + 1} {TimeAttackRun.FormatTime(done[i])}</color>");
+				} else {
+					parts.Add($"<color={Theme.MutedHex}>S{i + 1} –</color>");
+				}
+			}
+			var lines = new List<string>();
+			for (int i = 0; i < parts.Count; i += 3) {
+				lines.Add(string.Join("  ", parts.Skip(i).Take(3)));
+			}
+			return string.Join("\n", lines);
 		}
 
 		/// <summary>A circuit lap ended: shown, saved when it counts, and kept for the delta when it's the best yet.</summary>
@@ -250,7 +276,7 @@ namespace TRC.TuneLoader {
 
 		/// <summary>
 		/// The timer while a time attack runs: the lap time big on a circuit (the run's time otherwise), then the lap
-		/// count and total, the best lap and the live delta, and for a few seconds the last split or lap.
+		/// count and total, the best lap, the live delta, this lap's sectors (they stay up), and for a few seconds the last lap.
 		/// </summary>
 		private void DrawRunTimer(float screenWidth, float screenHeight) {
 			TimeAttackRun run = run_;
@@ -266,10 +292,12 @@ namespace TRC.TuneLoader {
 			if (!run.LapValid) {
 				lines.Add($"<color={Theme.BadHex}>This lap doesn't count ({run.LapInvalid})</color>");
 			}
+			// The sectors stay on screen for the whole lap (Options can hide them).
+			if (showSectors_ && run.Course.SectorEnds.Length > 1) {
+				lines.Add(SectorStrip(run));
+			}
 			if (Time.unscaledTime < lapFlashUntil_ && lapFlash_.Length > 0) {
 				lines.Add(lapFlash_);
-			} else if (Time.unscaledTime < flashUntil_ && splitFlash_.Length > 0) {
-				lines.Add(splitFlash_);
 			}
 			DrawTimer(screenWidth, screenHeight, run, string.Join("\n", lines), run.Course.IsCircuit ? run.LapElapsed : run.Elapsed);
 		}

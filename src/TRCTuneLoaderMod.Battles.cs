@@ -12,8 +12,8 @@ namespace TRC.TuneLoader {
 	/// messages go through BattleSync.
 	/// </summary>
 	public partial class TRCTuneLoaderMod {
-		/// <summary>Players need at least this TRC Tune Loader version to battle (battle messages changed in 0.10.1 and 0.11.0).</summary>
-		private static readonly System.Version BattleVersion = new System.Version(0, 11, 0);
+		/// <summary>Players need at least this TRC Tune Loader version to battle (battle messages changed in 0.10.1, 0.11.0 and 0.12.0).</summary>
+		private static readonly System.Version BattleVersion = new System.Version(0, 12, 0);
 		private static readonly int[] BattleLapChoices = { 1, 2, 3, 5 };
 		private static readonly string[] BattleFormats = { "Side-by-side race", "Cat and mouse" };
 		private static readonly string[] BattleModes = { "TRC spec", "Open" };
@@ -106,6 +106,7 @@ namespace TRC.TuneLoader {
 
 			if (!battle_.Active && battleEndedAt_ < 0) {
 				battleEndedAt_ = Time.unscaledTime;
+				ReportMatchBattle(battle_);
 				TrcLog.Info($"Battle {battle_.Id} vs {battle_.PeerName} on {battle_.Course.Name}: {battle_.Message} ({BattleLog.ResultOf(battle_)}, {battle_.Runs.Count} run(s)).");
 				if (battle_.Started && !battleLogged_) {
 					battleLogged_ = true;
@@ -152,6 +153,13 @@ namespace TRC.TuneLoader {
 				return;
 			}
 			string name = BattleMessage.PlainName(challenge.FromName);
+			if (InRace) {
+				closedChallenges_.Add(challenge.BattleId);
+				SendBattle(new BattleMessage {
+					Kind = BattleKind.Answer, BattleId = challenge.BattleId, From = MySteamId, To = challenge.From, Reason = "in a race",
+				});
+				return;
+			}
 			if (battle_ != null && battle_.Active && battle_.Started) {
 				closedChallenges_.Add(challenge.BattleId);
 				SendBattle(new BattleMessage {
@@ -173,6 +181,11 @@ namespace TRC.TuneLoader {
 			TrcLog.Info($"Battle {challenge.BattleId}: challenge from {name} on {courseName} ({challenge.CourseCode}), " +
 				$"{BattleFormats[(int)challenge.Format]}, {(challenge.Open ? "Open" : "TRC spec")}.{(course == null ? $" Can't accept: {problem}." : "")}");
 
+			if (course != null && IsCalledMatch(challenge) && (battle_ == null || !battle_.Active)) {
+				TrcLog.Info($"Battle {challenge.BattleId}: the tournament battle the host called, accepted by itself.");
+				AnswerChallenge(challenge, true);
+				return;
+			}
 			if (course != null && battle_ != null && battle_.YieldsTo(challenge)) {
 				TrcLog.Info($"Battle {challenge.BattleId}: you and {name} challenged each other to the same battle, so it goes ahead on {name}'s challenge.");
 				AnswerChallenge(challenge, true);
@@ -255,19 +268,28 @@ namespace TRC.TuneLoader {
 		}
 
 		private void ChallengePlayer(PlayerRow opponent, Course course) {
+			if (InRace) {
+				battleResult_ = "Finish or leave your race first.";
+				return;
+			}
+			StartBattle(opponent.Player.SteamId, opponent.Player.Name, course, (BattleFormat)pickedFormat_, pickedMode_ == 1, BattleLapChoices[pickedBattleLaps_], 0, 0);
+		}
+
+		/// <summary>Challenges a driver: from the Battle view, or by itself for a knockout battle the race host called.</summary>
+		private void StartBattle(ulong peer, string peerName, Course course, BattleFormat format, bool open, int laps, uint matchId, int matchGame) {
 			if (battle_ != null && battle_.Active) {
 				battleResult_ = "Finish or leave the battle you're in first.";
 				return;
 			}
 			StopOtherCourseWork();
 			uint id = (uint)battleIds_.Next(1, int.MaxValue);
-			battle_ = BattleSession.Challenge(id, MySteamId, MyName(), opponent.Player.SteamId, opponent.Player.Name, course,
-				(BattleFormat)pickedFormat_, pickedMode_ == 1, CheckBattleCar, BattleNow, laps: BattleLapChoices[pickedBattleLaps_]);
+			battle_ = BattleSession.Challenge(id, MySteamId, MyName(), peer, peerName, course, format, open, CheckBattleCar, BattleNow,
+				laps: laps, matchId: matchId, matchGame: matchGame);
 			battleLogged_ = false;
 			battleEndedAt_ = -1f;
 			battleResult_ = "";
-			TrcLog.Info($"Battle {id}: challenged {battle_.PeerName} ({opponent.Player.SteamId}) on {course.Name} ({course.Code}, {course.Path.Count} path points), " +
-				$"{BattleFormats[pickedFormat_]}, {BattleModes[pickedMode_]}.");
+			TrcLog.Info($"Battle {id}: challenged {battle_.PeerName} ({peer}) on {course.Name} ({course.Code}, {course.Path.Count} path points), " +
+				$"{BattleFormats[(int)format]}, {(open ? "Open" : "TRC spec")}{(matchId != 0 ? $", tournament battle {matchId} game {matchGame}" : "")}.");
 		}
 
 		private void AnswerChallenge(BattleMessage challenge, bool accept) {

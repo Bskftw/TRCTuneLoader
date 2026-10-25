@@ -80,6 +80,11 @@ namespace TRC.TuneLoader {
 		/// <summary>A course whose path is shown as dots on the road (Show path), or null.</summary>
 		private Course pathShownFor_;
 
+		/// <summary>Lay out grid, while it runs, and the layout picked for it.</summary>
+		private GridRecorder gridRecorder_;
+		private int gridLayoutPick_;
+		private static readonly string[] GridLayouts = { "Two-wide grid", "Line-up" };
+
 		/// <summary>Record path on a map course, while it runs (and for a few seconds after it's saved).</summary>
 		private PathRecorder pathRecorder_;
 		private float pathDoneUntil_;
@@ -105,7 +110,8 @@ namespace TRC.TuneLoader {
 		private string TimesFolder => Path.Combine(modFolder_, TimesFolderName);
 
 		/// <summary>Time attack or the course builder is showing something over the track.</summary>
-		private bool CourseHudVisible => hasPose_ && (BattleOnTrack || run_ != null || pathRecorder_ != null || recorder_.State != CourseRecorder.Phase.Idle || invites_.Count > 0);
+		private bool CourseHudVisible => hasPose_ && (BattleOnTrack || run_ != null || pathRecorder_ != null || recorder_.State != CourseRecorder.Phase.Idle || invites_.Count > 0 ||
+			RaceHudVisible || RaceToShow() != null || gridRecorder_ != null);
 
 		/// <summary>The car and its TRC spec state at the start or the finish of a run.</summary>
 		private sealed class RunCheck {
@@ -151,13 +157,20 @@ namespace TRC.TuneLoader {
 			if (recorder_.State == CourseRecorder.Phase.Recording && hasPose_) {
 				recorder_.Tick(pose_.Position);
 			}
+			if (gridRecorder_ != null && hasPose_) {
+				gridRecorder_.Tick(pose_.Position);
+				if (gridRecorder_.State == GridRecorder.Phase.Done) {
+					SaveGrid();
+				}
+			}
 			UpdateCourseObjects();
 		}
 
 		/// <summary>The start/finish markers and the map's own start/finish signs for whatever is running: a time attack, Record path or the course builder.</summary>
 		private void UpdateCourseObjects() {
 			Course battleCourse = battle_ != null && battle_.Started && battle_.Active ? battle_.Course : null;
-			Course course = hasPose_ ? battleCourse ?? run_?.Course ?? pathRecorder_?.Course : null;
+			Course raceCourse = InRace ? race_.Course : null;
+			Course course = hasPose_ ? raceCourse ?? battleCourse ?? run_?.Course ?? pathRecorder_?.Course ?? gridRecorder_?.Course : null;
 			ShowSigns(course);
 			UpdatePathDots();
 
@@ -238,7 +251,8 @@ namespace TRC.TuneLoader {
 		/// picked with Show path. Never during a battle.
 		/// </summary>
 		private void UpdatePathDots() {
-			IList<Vector3> points = !hasPose_ || InBattle ? null
+			IList<Vector3> points = !hasPose_ || InBattle || InRace ? null
+				: gridRecorder_ != null ? gridRecorder_.Points
 				: recorder_.State != CourseRecorder.Phase.Idle ? recorder_.Points
 				: pathRecorder_ != null && pathRecorder_.State != PathRecorder.Phase.ToStart ? pathRecorder_.Points
 				: pathShownFor_?.Path;
@@ -321,10 +335,11 @@ namespace TRC.TuneLoader {
 		private bool InBattle => battle_ != null && battle_.Started && battle_.Active;
 
 		private void StartTimeAttack(Course course) {
-			if (InBattle) {
-				courseResult_ = "Finish or leave your battle first.";
+			if (InBattle || InRace) {
+				courseResult_ = InRace ? "Finish or leave your race first." : "Finish or leave your battle first.";
 				return;
 			}
+			gridRecorder_ = null;
 			if (recorder_.State != CourseRecorder.Phase.Idle) {
 				courseResult_ = "Finish or clear the course builder first.";
 				return;
@@ -493,7 +508,7 @@ namespace TRC.TuneLoader {
 				: course.Official ? $"<color={Theme.GoodHex}>{record.TuneSet} spec</color>"
 				: $"{record.TuneSet} spec · practice course";
 			string laps = LapSummary(run_);
-			string sectors = only != null && only.Sectors.Length > 1 ? $"\n<color={Theme.MutedHex}>{string.Join(" · ", only.Sectors.Select((s, i) => $"S{i + 1} {TimeAttackRun.FormatTime(s)}"))}</color>" : "";
+			string sectors = showSectors_ && only != null && only.Sectors.Length > 1 ? $"\n{ResultSectors(only)}" : "";
 			runResultText_ = $"<b>{TimeAttackRun.FormatTime(record.Seconds)}</b>\n{compare} · {status}{(laps.Length > 0 ? $"\n<color={Theme.MutedHex}>{laps}</color>" : "")}{sectors}";
 			runResultUntil_ = Time.unscaledTime + ResultSeconds;
 			TrcLog.Info($"Time attack on {course.Name} ({course.Code}): {TimeAttackRun.FormatTime(record.Seconds)} in {record.Car}, " +
@@ -517,6 +532,60 @@ namespace TRC.TuneLoader {
 			: record.Spec == "not fully checked" ? "the live car wasn't checked yet: doesn't count"
 			: record.Spec == "no TRC tune" ? "no TRC tune for this car: doesn't count"
 			: "not TRC spec: doesn't count";
+
+		// ---- Lay out grid ----
+
+		/// <summary>Starts (or, with null, stops) laying out a race grid for a course: drive up to its start line down the middle of the road.</summary>
+		private void StartGrid(Course course) {
+			gridRecorder_ = course != null ? new GridRecorder(course) : null;
+			if (course != null) {
+				pathShownFor_ = null;
+				courseResult_ = $"Lay out grid for {course.Name}: drive {GridRecorder.MinLength:0}–{GridRecorder.MaxLength:0} m back from the start line, turn round, and drive down the middle of the road up to the line and through it.";
+				TrcLog.Info($"Lay out grid started on {course.Name} ({GridLayouts[gridLayoutPick_]}).");
+				CloseWindow();
+			}
+		}
+
+		/// <summary>
+		/// Keeps the laid-out grid: in your own course's file, or for a map course in the file with its recorded path
+		/// (or a small file of its own), which the map course then takes like a recorded path.
+		/// </summary>
+		private void SaveGrid() {
+			GridRecorder done = gridRecorder_;
+			gridRecorder_ = null;
+			Course course = done.Course;
+			List<Vector3> grid = done.GridPath();
+			GridLayout layout = gridLayoutPick_ == 1 ? GridLayout.LineUp : GridLayout.Grid;
+			try {
+				Course file = course.Source == CourseSource.Custom ? course
+					: courses_.Custom.FirstOrDefault(c => c.IsCircuit == course.IsCircuit && c.SameLines(course));
+				if (file != null) {
+					Course updated = Copy(file, c => {
+						c.GridPath = grid;
+						c.GridLayout = layout;
+					});
+					CourseFile.Save(updated, file.FilePath);
+				} else {
+					var lines = new Course {
+						Name = $"{course.Name} grid", Kind = course.Kind, Source = CourseSource.Custom, MapKey = course.MapKey, MapName = course.MapName,
+						Author = $"steam:{MySteamId.ToString(CultureInfo.InvariantCulture)}",
+						Start = new CourseGate { Center = course.Start.Center, Forward = course.Start.Forward, Width = course.Start.Width },
+						Finish = new CourseGate { Center = course.Finish.Center, Forward = course.Finish.Forward, Width = course.Finish.Width },
+						GridPath = grid, GridLayout = layout,
+					};
+					lines.Build(resample: false);
+					CourseLibrary.SaveCustom(CoursesFolder, lines);
+				}
+				courses_.LoadCustom(CoursesFolder);
+				scannedMapKey_ = "";
+				mapSince_ = Time.unscaledTime - MapScanDelaySeconds;
+				courseResult_ = $"Grid laid out for {course.Name}: {TimeAttackRun.Distance(done.Recorded)}, {GridLayouts[gridLayoutPick_].ToLowerInvariant()}. Races on it line up along it.";
+				TrcLog.Info($"Grid laid out for {course.Name}: {grid.Count} points, {done.Recorded:0} m, {layout}.");
+			} catch (Exception e) {
+				courseResult_ = $"Couldn't save the grid: {e.Message}";
+				TrcLog.Error(e);
+			}
+		}
 
 		// ---- Course builder ----
 
@@ -598,7 +667,7 @@ namespace TRC.TuneLoader {
 
 			switch (coursesView_) {
 				case 0: DrawCoursesHere(); break;
-				case 1: DrawBattleView(); break;
+				case 1: DrawBattleOrRaces(); break;
 				case 2: DrawMyTimes(); break;
 				default: DrawCourseBuilder(); break;
 			}
@@ -644,6 +713,10 @@ namespace TRC.TuneLoader {
 			List<Course> here = courses_.ForMap(map_.Key);
 			if (run_ == null && here.Count > 0) {
 				DrawStartOptions(here.Any(c => c.IsCircuit));
+				GUILayout.BeginHorizontal();
+				GUILayout.Label("Lay out grid as", Theme.SectionLabel, GUILayout.Width(110));
+				gridLayoutPick_ = Choice(GridLayouts, gridLayoutPick_);
+				GUILayout.EndHorizontal();
 			}
 			GUILayout.BeginVertical(Theme.Card, GUILayout.ExpandHeight(true));
 			coursesScroll_ = GUILayout.BeginScrollView(coursesScroll_);
@@ -695,6 +768,11 @@ namespace TRC.TuneLoader {
 			GUI.enabled = enabled && course.HasPath && hasPose_;
 			if (GUILayout.Button(pathShownFor_ == course ? "Hide path" : "Show path", Theme.Button)) {
 				pathShownFor_ = pathShownFor_ == course ? null : course;
+			}
+			// Race grids: drive the road up to the start line (official courses and maps with grid spots have their own).
+			GUI.enabled = enabled && hasPose_ && course.Source != CourseSource.Official && course.GridObjects.Count == 0 && run_ == null && !InBattle && !InRace;
+			if (GUILayout.Button(gridRecorder_?.Course == course ? "Stop grid" : "Lay out grid", Theme.Button)) {
+				StartGrid(gridRecorder_?.Course == course ? null : course);
 			}
 			GUI.enabled = enabled;
 
@@ -870,8 +948,12 @@ namespace TRC.TuneLoader {
 			}
 
 			hudRect_ = Rect.zero;
-			if (BattleOnTrack) {
+			if (RaceHudVisible) {
+				DrawRaceHud(screenWidth, screenHeight);
+			} else if (BattleOnTrack) {
 				DrawBattleHud(screenWidth, screenHeight);
+			} else if (gridRecorder_ != null) {
+				DrawHudPill(screenWidth, screenHeight, $"<b>Lay out grid · {gridRecorder_.Course.Name}</b> · {TimeAttackRun.Distance(gridRecorder_.Recorded)}\n<color={Theme.MutedHex}>{gridRecorder_.Message}</color>");
 			} else if (run_ != null) {
 				DrawRunHud(screenWidth, screenHeight);
 			} else if (pathRecorder_ != null) {
@@ -885,9 +967,11 @@ namespace TRC.TuneLoader {
 					? $"<b>Recording the {(recorder_.Circuit ? "circuit" : "course")}</b> · {TimeAttackRun.Distance(recorder_.Recorded)}\n<color={Theme.MutedHex}>{next}</color>"
 					: $"<b>{(recorder_.Circuit ? "Loop closed" : "Course recorded")}</b>\n<color={Theme.MutedHex}>{shortcut_} to name and save it</color>");
 			}
-			// A challenge always shows, even during a time attack or a recording.
+			// A challenge always shows, even during a time attack or a recording; so does a race someone just opened.
 			if (invites_.Count > 0) {
 				DrawInviteHud(screenWidth, screenHeight);
+			} else if (RaceToShow() != null) {
+				DrawRaceInviteHud(screenWidth, screenHeight);
 			}
 		}
 

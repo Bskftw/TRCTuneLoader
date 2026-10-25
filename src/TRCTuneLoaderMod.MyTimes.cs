@@ -104,6 +104,12 @@ namespace TRC.TuneLoader {
 				GUILayout.BeginVertical();
 				GUILayout.Label($"<b>{any.Car}</b> · {set}  <color={Theme.MutedHex}>{carSet.Count()} time(s), last {carSet.Max(r => r.When):MMM d}</color>", Theme.Body);
 				GUILayout.Label(string.Join("   ", parts), Theme.Small);
+				// The sectors of this car's best time (a circuit's best lap), coloured against every time on the course.
+				TimeAttackRecord bestTime = carSet.Where(r => r.SectorMs.Length > 1 && (circuit ? r.IsLap : r.Laps == 1 && !r.Flying))
+					.OrderBy(r => r.IsSpec ? 0 : 1).ThenBy(r => r.TimeMs).FirstOrDefault();
+				if (showSectors_ && bestTime != null) {
+					GUILayout.Label($"<color={Theme.MutedHex}>{(circuit ? "Best lap" : "Best run")}:</color> {SavedSectors(bestTime, times_)}", Theme.Small);
+				}
 				GUILayout.EndVertical();
 				GUILayout.EndHorizontal();
 			}
@@ -139,11 +145,30 @@ namespace TRC.TuneLoader {
 				: "";
 		}
 
-		private static void DrawRecentTimes(List<TimeAttackRecord> records) {
+		/// <summary>
+		/// A saved time's sectors in their pace colours: purple where it's the best that sector has been driven (this kind
+		/// of time, any car), green where it's your best in this car on this set, amber where it's slower.
+		/// </summary>
+		private static string SavedSectors(TimeAttackRecord r, IEnumerable<TimeAttackRecord> all) {
+			TimeKind kind = TimeKind.Of(r);
+			int count = r.SectorMs.Length;
+			long?[] best = TimeAttackLog.BestSectorsMs(all, x => x.CourseCode == r.CourseCode && kind.Matches(x), count);
+			long?[] mine = TimeAttackLog.BestSectorsMs(all, x => x.CourseCode == r.CourseCode && x.CarId == r.CarId && x.TuneSet == r.TuneSet && kind.Matches(x), count);
+			var parts = new List<string>();
+			for (int i = 0; i < count; i++) {
+				parts.Add($"<color={PaceColour(r.SectorMs[i], best[i], mine[i], orEqual: true)}>S{i + 1} {TimeAttackRun.FormatTime(r.SectorMs[i] / 1000.0)}</color>");
+			}
+			return string.Join("  ", parts);
+		}
+
+		private void DrawRecentTimes(List<TimeAttackRecord> records) {
 			foreach (TimeAttackRecord r in records.OrderByDescending(r => r.When).Take(RecentCount)) {
 				string what = r.IsLap ? $"lap {r.LapNumber}" : r.Laps == 0 ? "laps" : r.Laps > 1 ? $"{r.Laps} laps {(r.Flying ? "flying" : "standing")}" : r.Flying ? "flying" : "standing";
 				string spec = r.IsSpec ? $"<color={Theme.GoodHex}>{r.TuneSet} spec</color>" : $"<color={Theme.MutedHex}>{DoesntCount(r)}</color>";
 				GUILayout.Label($"<color={Theme.MutedHex}>{r.When:MMM d HH:mm}</color>  <b>{TimeAttackRun.FormatTime(r.Seconds)}</b>  {r.CourseName} · {what} · {r.Car} · {spec}", Theme.Body);
+				if (showSectors_ && r.SectorMs.Length > 1) {
+					GUILayout.Label($"      {SavedSectors(r, times_)}", Theme.Small);
+				}
 			}
 		}
 	}

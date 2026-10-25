@@ -105,6 +105,33 @@ namespace TRC.TuneLoader {
 		}
 
 		/// <summary>
+		/// The point <paramref name="behind"/> metres back along <paramref name="back"/> (a line drawn from the start
+		/// line backwards), and the way a car there faces (towards the start). Past its end, straight on back.
+		/// </summary>
+		public static void AlongBack(IList<Vector3> back, float behind, out Vector3 at, out Vector3 forward) {
+			float left = behind;
+			for (int i = 1; i < back.Count; i++) {
+				Vector3 a = back[i - 1];
+				Vector3 b = back[i];
+				float length = Vector3.Distance(a, b);
+				if (length < 1e-4f) {
+					continue;
+				}
+				forward = Level(a - b);
+				if (left <= length || i == back.Count - 1) {
+					at = a + (b - a) * (left / length);
+					if (forward == Vector3.zero) {
+						forward = Vector3.forward;
+					}
+					return;
+				}
+				left -= length;
+			}
+			at = back.Count > 0 ? back[0] : Vector3.zero;
+			forward = Vector3.forward;
+		}
+
+		/// <summary>
 		/// Where each sector ends along the path, the last at its end. Sector objects (<paramref name="points"/>, in
 		/// any order) are found on the path; without usable ones, the path is cut into equal parts, more for longer
 		/// courses (3 up to 6 km, then one more every 2 km).
