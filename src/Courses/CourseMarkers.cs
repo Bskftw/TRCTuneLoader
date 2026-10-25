@@ -27,6 +27,10 @@ namespace TRC.TuneLoader {
 		private static readonly Color StartColor = new Color(0.55f, 0.85f, 0.35f, 1f);
 		private static readonly Color FinishColor = new Color(0.83f, 0.33f, 0.49f, 1f);
 		private static readonly Color DotColor = new Color(0.55f, 0.8f, 1f, 1f);
+		private static readonly Color TrapColor = new Color(0.98f, 0.78f, 0.25f, 1f);
+
+		/// <summary>For <see cref="TrapMarkers"/>: amber.</summary>
+		internal static Material TrapMaterial { get; private set; }
 
 		private static Material startMaterial_;
 		private static Material finishMaterial_;
@@ -96,7 +100,7 @@ namespace TRC.TuneLoader {
 			}
 		}
 
-		private static GameObject BuildGate(CourseGate gate, string name, Material material) {
+		internal static GameObject BuildGate(CourseGate gate, string name, Material material) {
 			var root = new GameObject(name) { hideFlags = HideFlags.DontSave };
 			root.SetActive(false);
 
@@ -179,6 +183,7 @@ namespace TRC.TuneLoader {
 			startMaterial_ = Make(template, shader, StartColor);
 			finishMaterial_ = Make(template, shader, FinishColor);
 			DotMaterial = Make(template, shader, DotColor);
+			TrapMaterial = Make(template, shader, TrapColor);
 			ShaderName = template != null ? "HDRP/Unlit (copied from the game)" : shader.name;
 			return true;
 		}
@@ -198,6 +203,158 @@ namespace TRC.TuneLoader {
 				}
 			}
 			return material;
+		}
+	}
+
+	/// <summary>
+	/// The best line: small squares on the road where the car drove on its best run or lap, near the camera only,
+	/// in one colour or coloured by speed (red where it was slowest on the line, through amber and green to cyan
+	/// where it was fastest).
+	/// </summary>
+	public sealed class SpeedLine {
+		private const float Range = 70f;
+		private const int Every = 2;
+		private const float Size = 0.3f;
+		private const float Lift = 0.06f;
+		private static readonly Color[] Ramp = {
+			new Color(0.9f, 0.25f, 0.25f), new Color(0.95f, 0.55f, 0.2f), new Color(0.95f, 0.85f, 0.3f),
+			new Color(0.55f, 0.85f, 0.35f), new Color(0.3f, 0.85f, 0.6f), new Color(0.35f, 0.8f, 0.95f),
+		};
+		private static Material[] materials_;
+
+		private readonly List<GameObject> pool_ = new List<GameObject>();
+		private readonly Dictionary<int, Vector3> ground_ = new Dictionary<int, Vector3>();
+		private IList<Vector3> shown_;
+		private float min_;
+		private float max_;
+
+		/// <summary>Called every frame: the line (null for none), its speeds, whether to colour by speed, and where the camera is.</summary>
+		public void Show(IList<Vector3> line, IList<float> kmh, bool coloured, Vector3 camera) {
+			if (line == null || !CourseMarkers.Available || !MakeMaterials()) {
+				Clear();
+				return;
+			}
+			if (!ReferenceEquals(line, shown_)) {
+				ground_.Clear();
+				shown_ = line;
+				min_ = kmh.Count > 0 ? kmh.Min() : 0f;
+				max_ = kmh.Count > 0 ? kmh.Max() : 1f;
+			}
+			int used = 0;
+			for (int i = 0; i < line.Count; i += Every) {
+				if ((line[i] - camera).sqrMagnitude > Range * Range) {
+					continue;
+				}
+				if (!ground_.TryGetValue(i, out Vector3 on)) {
+					ground_[i] = on = CourseMarkers.Ground(line[i]) + Vector3.up * Lift;
+				}
+				GameObject dot = Dot(used++);
+				dot.transform.position = on;
+				float share = max_ - min_ > 1f && i < kmh.Count ? (kmh[i] - min_) / (max_ - min_) : 1f;
+				Material material = coloured ? materials_[Mathf.Clamp(Mathf.FloorToInt(share * Ramp.Length), 0, Ramp.Length - 1)] : CourseMarkers.DotMaterial;
+				MeshRenderer renderer = dot.GetComponent<MeshRenderer>();
+				if (renderer.sharedMaterial != material) {
+					renderer.sharedMaterial = material;
+				}
+				if (!dot.activeSelf) {
+					dot.SetActive(true);
+				}
+			}
+			for (int i = used; i < pool_.Count; i++) {
+				if (pool_[i].activeSelf) {
+					pool_[i].SetActive(false);
+				}
+			}
+		}
+
+		public void Clear() {
+			foreach (GameObject dot in pool_) {
+				if (dot != null) {
+					Object.Destroy(dot);
+				}
+			}
+			pool_.Clear();
+			ground_.Clear();
+			shown_ = null;
+		}
+
+		private static bool MakeMaterials() {
+			if (materials_ != null) {
+				return true;
+			}
+			if (CourseMarkers.DotMaterial == null) {
+				return false;
+			}
+			materials_ = Ramp.Select(c => {
+				var material = new Material(CourseMarkers.DotMaterial) { hideFlags = HideFlags.DontSave, name = "TRC best line" };
+				foreach (string property in new[] { "_UnlitColor", "_BaseColor", "_Color" }) {
+					if (material.HasProperty(property)) {
+						material.SetColor(property, c);
+					}
+				}
+				return material;
+			}).ToArray();
+			return true;
+		}
+
+		private GameObject Dot(int index) {
+			while (pool_.Count <= index) {
+				GameObject dot = GameObject.CreatePrimitive(PrimitiveType.Quad);
+				Object.DestroyImmediate(dot.GetComponent<Collider>());
+				dot.name = "TRC best line";
+				dot.hideFlags = HideFlags.DontSave;
+				dot.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
+				dot.transform.localScale = new Vector3(Size, Size, 1f);
+				MeshRenderer renderer = dot.GetComponent<MeshRenderer>();
+				renderer.shadowCastingMode = ShadowCastingMode.Off;
+				renderer.receiveShadows = false;
+				pool_.Add(dot);
+			}
+			return pool_[index];
+		}
+	}
+
+	/// <summary>Speed traps drawn on the road (an amber strip and posts, like the start and finish lines), only near the camera.</summary>
+	public sealed class TrapMarkers {
+		private const float Range = 100f;
+		private readonly List<(CourseGate Gate, GameObject Marker)> shown_ = new List<(CourseGate, GameObject)>();
+		private List<CourseGate> for_;
+
+		/// <summary>Called every frame with the traps to show (null for none) and where the camera is.</summary>
+		public void Show(List<CourseGate> gates, Vector3 camera) {
+			if (gates == null || gates.Count == 0 || !CourseMarkers.Available) {
+				Clear();
+				return;
+			}
+			if (for_ == null || for_.Count != gates.Count || !for_.SequenceEqual(gates)) {
+				Clear();
+				for_ = new List<CourseGate>(gates);
+				foreach (CourseGate gate in gates) {
+					shown_.Add((gate, null));
+				}
+			}
+			for (int i = 0; i < shown_.Count; i++) {
+				var (gate, marker) = shown_[i];
+				bool near = (gate.Center - camera).sqrMagnitude <= Range * Range;
+				if (near && marker == null) {
+					// Built when first near, so the road under it has loaded.
+					marker = CourseMarkers.BuildGate(gate, "TRC speed trap", CourseMarkers.TrapMaterial);
+					shown_[i] = (gate, marker);
+				}
+				if (marker != null && marker.activeSelf != near) {
+					marker.SetActive(near);
+				}
+			}
+		}
+
+		public void Clear() {
+			foreach (var (_, marker) in shown_) {
+				if (marker != null) {
+					Object.Destroy(marker);
+				}
+			}
+			shown_.Clear();
+			for_ = null;
 		}
 	}
 

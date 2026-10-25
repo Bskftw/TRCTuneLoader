@@ -89,6 +89,7 @@ namespace TRC.TuneLoader {
 				backupsKeep_ = BackupLimits.Contains(keep) ? keep : 0;
 				problemsOnly_ = Kino.Prefs.Get(ProblemsOnlyPref, false);
 				showSectors_ = Kino.Prefs.Get(SectorsPref, true);
+				bestLineMode_ = Mathf.Clamp(Kino.Prefs.Get(BestLinePref, 0), 0, 2);
 				shareValues_ = Kino.Prefs.Get(ShareValuesPref, false);
 				Vector2 timer = Kino.Prefs.Get(HudPositionPref, DefaultHudPosition);
 				hudPosition_ = new Vector2(Mathf.Clamp01(timer.x), Mathf.Clamp01(timer.y));
@@ -338,6 +339,14 @@ namespace TRC.TuneLoader {
 			if ((sectors == 0) != showSectors_) {
 				showSectors_ = sectors == 0;
 				SavePref(SectorsPref, showSectors_);
+			}
+			GUILayout.Space(8);
+			GUILayout.Label("<b>Best line</b>: during a time attack, where you drove on your best run (or best lap) in this car is drawn on the road: " +
+				"red where you were slowest, through amber and green to blue where you were fastest, or in one colour.", Theme.Body);
+			int lineMode = Choice(BestLineModes, bestLineMode_);
+			if (lineMode != bestLineMode_) {
+				bestLineMode_ = lineMode;
+				SavePref(BestLinePref, bestLineMode_);
 			}
 			GUILayout.Space(8);
 			GUILayout.Label("<b>Time attack timer</b>: drag it anywhere on the screen while this window is open during a run.", Theme.Body);

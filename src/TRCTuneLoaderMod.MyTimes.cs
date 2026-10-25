@@ -10,7 +10,7 @@ namespace TRC.TuneLoader {
 	/// the best laps of every circuit, or the latest runs. "TRC spec only" hides times that don't count.
 	/// </summary>
 	public partial class TRCTuneLoaderMod {
-		private static readonly string[] TimesViews = { "Best times", "Best laps", "Recent" };
+		private static readonly string[] TimesViews = { "Best times", "Best laps", "Recent", "Ratings" };
 		private static readonly string[] TimesFilters = { "All times", "TRC spec only" };
 		private const int RecentCount = 40;
 
@@ -30,7 +30,9 @@ namespace TRC.TuneLoader {
 			List<TimeAttackRecord> shown = timesFilter_ == 1 ? times_.Where(r => r.IsSpec).ToList() : times_;
 			GUILayout.BeginVertical(Theme.Card, GUILayout.ExpandHeight(true));
 			timesScroll_ = GUILayout.BeginScrollView(timesScroll_);
-			if (shown.Count == 0) {
+			if (timesView_ == 3) {
+				DrawRatings();
+			} else if (shown.Count == 0) {
 				GUILayout.Label(times_.Count == 0 ? "No times yet. Pick a course in Courses here and press Time attack." : "No TRC spec times yet.", Theme.Small);
 			} else if (timesView_ == 2) {
 				DrawRecentTimes(shown);
@@ -168,6 +170,9 @@ namespace TRC.TuneLoader {
 				GUILayout.Label($"<color={Theme.MutedHex}>{r.When:MMM d HH:mm}</color>  <b>{TimeAttackRun.FormatTime(r.Seconds)}</b>  {r.CourseName} · {what} · {r.Car} · {spec}", Theme.Body);
 				if (showSectors_ && r.SectorMs.Length > 1) {
 					GUILayout.Label($"      {SavedSectors(r, times_)}", Theme.Small);
+				}
+				if (r.TrapKmh.Length > 0) {
+					GUILayout.Label($"      <color={Theme.WarnHex}>Speed traps {string.Join(" · ", r.TrapKmh.Select(k => $"{k:0}"))} km/h, total {r.TrapTotal:0}</color>", Theme.Small);
 				}
 			}
 		}

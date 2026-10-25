@@ -93,6 +93,45 @@ namespace TRC.TuneLoader {
 		/// <summary>Laps per run on a circuit (1 on any other course).</summary>
 		public int Laps { get; }
 
+		/// <summary>Highway battles: both drivers' SP (100 at the start; empty loses), and where the other car is.</summary>
+		public float MySp { get; private set; } = FullSp;
+		public float PeerSp { get; private set; } = FullSp;
+		public Vector3 PeerPosition { get; private set; }
+		public Vector3 PeerHeading { get; private set; }
+		public float PeerKmh { get; private set; }
+		public bool IsHighway => Format == BattleFormat.Highway;
+
+		/// <summary>The gap (metres) to the other car along the way you're both going: plus when you're ahead.</summary>
+		public float HighwayGap { get; private set; }
+
+		public const float FullSp = 100f;
+
+		/// <summary>Highway battles start rolling: both this close and at least this fast, for a moment.</summary>
+		public const float HighwayStartMetres = 30f;
+		public const float HighwayStartKmh = 50f;
+
+		/// <summary>Behind by more than this (metres), SP drains; faster the bigger the gap, up to a limit. Further than the last, it's over.</summary>
+		public const float DrainFromMetres = 5f;
+		public const float DrainMetresPerSp = 8f;
+		public const float MaxDrainPerSecond = 25f;
+		public const float LostMetres = 600f;
+
+		/// <summary>A hit (a wall or the other car) costs this much SP.</summary>
+		public const float HitSp = 15f;
+		private const double HighwayMaxSeconds = 600;
+
+		private Vector3 myPosition_;
+		private Vector3 myForward_;
+		private float myKmh_;
+		private double lastHighwayTick_ = -1;
+
+		/// <summary>Highway battles: the mod saw this car hit something.</summary>
+		public void Hit() {
+			if (IsHighway && State == Phase.Running) {
+				MySp = Math.Max(0f, MySp - HitSp);
+			}
+		}
+
 		/// <summary>A knockout tournament's battle (0 = an ordinary one), and which game of the match.</summary>
 		public uint MatchId { get; private set; }
 		public int MatchGame { get; private set; }
@@ -204,7 +243,7 @@ namespace TRC.TuneLoader {
 			PeerName = peerName.Length == 0 ? "the other driver" : peerName;
 			Course = course;
 			Format = format;
-			Laps = course.IsCircuit ? Math.Max(1, laps) : 1;
+			Laps = course != null && course.IsCircuit ? Math.Max(1, laps) : 1;
 			Open = open;
 			Counted = !open;
 			checkMyCar_ = checkMyCar;
@@ -340,9 +379,13 @@ namespace TRC.TuneLoader {
 					if (!IsHost && message.CountdownId > countdownId_ && message.RunIndex == RunIndex && State == Phase.Gridding) {
 						countdownId_ = message.CountdownId;
 						goTime_ = message.GoHostTime - ClockOffset;
-						Run.StartCountdown(goTime_);
-						if (Run.State == TimeAttackRun.Phase.Countdown) {
+						if (IsHighway) {
 							State = Phase.Countdown;
+						} else {
+							Run.StartCountdown(goTime_);
+							if (Run.State == TimeAttackRun.Phase.Countdown) {
+								State = Phase.Countdown;
+							}
 						}
 					}
 					break;
@@ -393,6 +436,15 @@ namespace TRC.TuneLoader {
 				return;
 			}
 
+			myPosition_ = position;
+			myForward_ = CourseGeometry.Level(forward);
+			myKmh_ = Mathf.Abs(speedKmh);
+			if (IsHighway) {
+				TickHighway(now);
+				Heartbeat(now);
+				return;
+			}
+
 			TimeAttackRun.Phase before = Run.State;
 			Run.Tick(now, position, forward, speedKmh, timeScale, onRoad);
 
@@ -422,8 +474,88 @@ namespace TRC.TuneLoader {
 			Heartbeat(now);
 		}
 
+		/// <summary>
+		/// A highway battle: line up side by side at speed, a rolling 3-2-1, then the one behind loses SP, faster the
+		/// bigger the gap; a hit costs some too. Empty SP (or falling right out of sight) loses.
+		/// </summary>
+		private void TickHighway(double now) {
+			double dt = lastHighwayTick_ < 0 ? 0 : Math.Min(0.5, now - lastHighwayTick_);
+			lastHighwayTick_ = now;
+			Vector3 along = CourseGeometry.Level(myForward_ + PeerHeading);
+			if (along == Vector3.zero) {
+				along = myForward_;
+			}
+			HighwayGap = -Vector3.Dot(PeerPosition - myPosition_, along);
+			float apart = Vector3.Distance(PeerPosition, myPosition_);
+			switch (State) {
+				case Phase.Gridding: {
+					bool together = apart <= HighwayStartMetres && myKmh_ >= HighwayStartKmh && PeerKmh >= HighwayStartKmh;
+					if (!together) {
+						MyCar = null;
+					} else if (MyCar == null) {
+						MyCar = checkMyCar_?.Invoke() ?? new BattleCar();
+					}
+					MyReady = together && (Open || MyCar.Spec);
+					bool sameSet = Open || (MyCar != null && PeerCar.TuneSet == MyCar.TuneSet);
+					Message = !together ? $"Drive alongside {PeerName}: within {HighwayStartMetres:0} m, both over {HighwayStartKmh:0} km/h ({apart:0} m apart now)"
+						: !Open && !MyCar.Spec ? "Your car isn't TRC spec, and this is a TRC spec battle"
+						: !PeerReady ? $"Alongside. Waiting for {PeerName}"
+						: !sameSet ? "Different tune sets"
+						: "Both ready: keep rolling";
+					if (IsHost) {
+						if (MyReady && PeerReady && sameSet) {
+							if (bothReadySince_ < 0) {
+								bothReadySince_ = now;
+							} else if (now - bothReadySince_ >= ReadyHoldSeconds) {
+								StartCountdown(now);
+							}
+						} else {
+							bothReadySince_ = -1;
+						}
+					}
+					break;
+				}
+				case Phase.Countdown:
+					Message = now < goTime_ ? $"{Math.Ceiling(goTime_ - now):0}" : "";
+					if (now >= goTime_) {
+						State = Phase.Running;
+						MySp = FullSp;
+						PeerSp = FullSp;
+						Message = "";
+					}
+					break;
+				case Phase.Running: {
+					if (HighwayGap < -DrainFromMetres) {
+						float behind = -HighwayGap - DrainFromMetres;
+						MySp = Math.Max(0f, MySp - Mathf.Min(MaxDrainPerSecond, behind / DrainMetresPerSp) * (float)dt);
+					}
+					if (apart > LostMetres && HighwayGap < 0f) {
+						MySp = 0f;
+					}
+					bool timeUp = now - goTime_ > HighwayMaxSeconds;
+					if (MySp <= 0f || PeerSp <= 0f || timeUp) {
+						bool iWin = MySp > 0f && (PeerSp <= 0f || (timeUp && MySp > PeerSp));
+						bool draw = timeUp && Math.Abs(MySp - PeerSp) < 0.5f;
+						Winner = draw ? 0 : iWin ? Me : Peer;
+						string text = draw ? "Time's up, dead even: a draw"
+							: iWin ? $"You gapped {PeerName}: you win" : $"{PeerName} gapped you: {PeerName} wins";
+						var mine = new RunResult { Run = 0, Finished = true, Time = now - goTime_, SpecAtEnd = Open || (checkMyCar_?.Invoke()?.Spec ?? false) };
+						Runs.Add(new BattleRun { Index = 0, Mine = mine, Theirs = new RunResult { Run = 0, Finished = true, Time = now - goTime_, SpecAtEnd = true }, Winner = Winner, Text = text });
+						if (!Open) {
+							Counted &= mine.SpecAtEnd;
+						}
+						End(Phase.Finished, text, now);
+					}
+					break;
+				}
+			}
+		}
+
 		/// <summary>Where this driver should line up: the middle of their start box, facing the course.</summary>
 		public Vector3 MySpot() {
+			if (IsHighway) {
+				return myPosition_;
+			}
 			CourseGate start = Course.Start;
 			if (Format == BattleFormat.CatAndMouse) {
 				return start.Center - start.Forward * (IAmLeader ? LeaderSpot : ChaserSpot);
@@ -442,8 +574,8 @@ namespace TRC.TuneLoader {
 			challenge.Laps = Laps;
 			challenge.MatchId = MatchId;
 			challenge.MatchGame = MatchGame;
-			challenge.CourseCode = Course.Code;
-			challenge.Course = Course.Official ? null : Course;
+			challenge.CourseCode = IsHighway ? "" : Course.Code;
+			challenge.Course = IsHighway || Course.Official ? null : Course;
 			outbox_.Add(challenge);
 		}
 
@@ -455,13 +587,20 @@ namespace TRC.TuneLoader {
 		}
 
 		private void NewRun() {
-			// A reset doesn't end a battle run: a driver who messes up can still win if the other does too.
-			Run = new TimeAttackRun(Course, Laps) { ExternalStart = true, AllowResets = true };
-			if (Format == BattleFormat.CatAndMouse && !IAmLeader) {
-				Run.GridFront = ChaserBoxFront;
-				Run.GridBack = ChaserBoxBack;
+			if (IsHighway) {
+				// No course: the battle is on SP, driven anywhere.
+				Run = null;
+				MySp = FullSp;
+				PeerSp = FullSp;
 			} else {
-				Run.GridBack = Format == BattleFormat.CatAndMouse ? LeaderBoxBack : RaceBoxBack;
+				// A reset doesn't end a battle run: a driver who messes up can still win if the other does too.
+				Run = new TimeAttackRun(Course, Laps) { ExternalStart = true, AllowResets = true };
+				if (Format == BattleFormat.CatAndMouse && !IAmLeader) {
+					Run.GridFront = ChaserBoxFront;
+					Run.GridBack = ChaserBoxBack;
+				} else {
+					Run.GridBack = Format == BattleFormat.CatAndMouse ? LeaderBoxBack : RaceBoxBack;
+				}
 			}
 			myResult_ = null;
 			peerResult_ = null;
@@ -529,7 +668,7 @@ namespace TRC.TuneLoader {
 			countdown.RunIndex = RunIndex;
 			countdown.GoHostTime = goTime_;
 			outbox_.Add(countdown);
-			Run.StartCountdown(goTime_);
+			Run?.StartCountdown(goTime_);
 			State = Phase.Countdown;
 			bothReadySince_ = -1;
 			Message = "Get ready";
@@ -623,6 +762,12 @@ namespace TRC.TuneLoader {
 			bool sameRun = message.RunIndex == RunIndex;
 			PeerReady = sameRun && message.Ready;
 			PeerCar = new BattleCar { Spec = message.Spec, TuneSet = message.TuneSet, TuneCode = message.TuneCode, Car = message.Car };
+			PeerPosition = message.Position;
+			PeerHeading = message.Heading;
+			PeerKmh = message.Kmh;
+			if (IsHighway && State == Phase.Running) {
+				PeerSp = message.Sp;
+			}
 			if (sameRun) {
 				double at = message.SentAt;
 				double since = at - peerProgressAt_;
@@ -666,6 +811,10 @@ namespace TRC.TuneLoader {
 			beat.RunIndex = RunIndex;
 			beat.Phase = (byte)State;
 			beat.Result = lastResult_;
+			beat.Position = myPosition_;
+			beat.Heading = myForward_;
+			beat.Kmh = myKmh_;
+			beat.Sp = MySp;
 			outbox_.Add(beat);
 		}
 

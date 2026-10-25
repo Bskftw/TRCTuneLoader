@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
@@ -110,6 +111,9 @@ namespace TRC.TuneLoader {
 		/// </summary>
 		public List<Vector3> SectorPoints = new List<Vector3>();
 
+		/// <summary>What a highway battle runs on: no lines and no path, just the map.</summary>
+		public static Course FreeRoam(string mapKey) => new Course { Name = "Free roam", MapKey = mapKey ?? "", Source = CourseSource.Custom, Kind = CourseKind.Highway };
+
 		/// <summary>A loop: the finish line is the start line, driven again after a lap.</summary>
 		public bool IsCircuit => Kind == CourseKind.Circuit;
 
@@ -122,6 +126,12 @@ namespace TRC.TuneLoader {
 		/// </summary>
 		public List<Vector3> GridPath = new List<Vector3>();
 		public GridLayout GridLayout;
+
+		/// <summary>
+		/// Speed traps along the course (map objects "TRC &lt;course&gt; Trap N", or added in Edit): the car's speed is
+		/// caught at each in a run, and a speed trap race is won on their total. Not part of the code.
+		/// </summary>
+		public List<CourseGate> Traps = new List<CourseGate>();
 
 		/// <summary>Map courses only: the map's "TRC &lt;course&gt; Grid N" spots, in number order. They win over everything else.</summary>
 		public List<GridSpot> GridObjects = new List<GridSpot>();
@@ -242,6 +252,7 @@ namespace TRC.TuneLoader {
 				PathFromPlayer = PathFromPlayer,
 				Reversed = true,
 				SectorPoints = new List<Vector3>(SectorPoints),
+				Traps = Traps.Select(t => new CourseGate { Center = t.Center, Forward = -t.Forward, Width = t.Width }).Reverse().ToList(),
 			};
 			reversed.SectorPoints.Reverse();
 			reversed.Path = new List<Vector3>(Path);

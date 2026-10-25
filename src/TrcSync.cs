@@ -56,6 +56,17 @@ namespace TRC.TuneLoader {
 			/// versions before 0.12 (which don't have it) read as not sharing, and they ignore it.
 			/// </summary>
 			public bool ShareValues;
+
+			/// <summary>The player's TRC ratings (0.13 on): Elo for touge, highway and circuit, Safety Rating and license. 0 before 0.13.</summary>
+			public float EloTouge;
+			public float EloHighway;
+			public float EloCircuit;
+			public float Safety;
+			public byte License;
+
+			public bool HasRatings => EloTouge > 0;
+			public float EloFor(CourseKind kind) => kind == CourseKind.Highway ? EloHighway : kind == CourseKind.Circuit ? EloCircuit : EloTouge;
+			public string Badge => HasRatings ? $"{RatingBook.LicenseName((License)License)} {Safety:0.00}" : "";
 		}
 
 		// 2: added the matched tune set. 3: added the stance check. 4: added the engine & drivetrain check.
@@ -202,6 +213,11 @@ namespace TRC.TuneLoader {
 				packet.WriteString(Clip(own.Mods[i].Type));
 			}
 			packet.WriteBool(own.ShareValues);
+			packet.WriteFloat(own.EloTouge);
+			packet.WriteFloat(own.EloHighway);
+			packet.WriteFloat(own.EloCircuit);
+			packet.WriteFloat(own.Safety);
+			packet.WriteByte(own.License);
 
 			Kino.Sync.SendToAll(packet);
 			lastSent_ = DateTime.UtcNow;
@@ -247,8 +263,13 @@ namespace TRC.TuneLoader {
 				}
 				try {
 					report.ShareValues = packet.ReadBool();
+					report.EloTouge = packet.ReadFloat();
+					report.EloHighway = packet.ReadFloat();
+					report.EloCircuit = packet.ReadFloat();
+					report.Safety = packet.ReadFloat();
+					report.License = packet.ReadByte();
 				} catch (Exception) {
-					// A report from before 0.12: not sharing.
+					// A report from an older version: whatever it didn't have stays at none.
 				}
 
 				if (report.SteamId != 0) {

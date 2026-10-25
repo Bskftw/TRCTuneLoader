@@ -48,6 +48,16 @@ namespace TRC.TuneLoader {
 
 			GUILayout.Space(4);
 			GUILayout.BeginHorizontal();
+			GUI.enabled = enabled && hasPose_ && map_ != null && course.MapKey == map_.Key && course.HasPath;
+			if (GUILayout.Button("Add speed trap here", Theme.Button)) {
+				AddCourseTrap(course);
+			}
+			GUI.enabled = enabled;
+			if (course.Traps.Count > 0 && GUILayout.Button($"Remove its {course.Traps.Count} speed trap(s)", Theme.Button)) {
+				RemoveCourseTraps(course);
+			}
+			GUILayout.EndHorizontal();
+			GUILayout.BeginHorizontal();
 			if (GUILayout.Button(course.IsCircuit ? "Drive it the other way" : "Flip direction", Theme.Button)) {
 				string name = course.Name.EndsWith(ReversedSuffix, StringComparison.Ordinal)
 					? course.Name.Substring(0, course.Name.Length - ReversedSuffix.Length)

@@ -43,6 +43,32 @@ namespace TRC.TuneLoader {
 		public double ProgressAt = -1;
 		public double ProgressHeardAt = -1;
 		public double Speed;
+
+		/// <summary>Where their car is on the map, the way it points and its speed (km/h), as their mod last said.</summary>
+		public Vector3 Position;
+		public Vector3 Heading;
+		public float Kmh;
+		public bool HasPosition;
+
+		public float TrapTotal;
+		public int Incidents;
+		public string LastIncident = "";
+
+		/// <summary>Host only: every incident they reported in this race, with when.</summary>
+		public List<string> IncidentLog = new List<string>();
+
+		/// <summary>Host only: a penalty the host gave after the race (seconds), or disqualified.</summary>
+		public double HostPenalty;
+		public bool HostDisqualified;
+
+		/// <summary>Room games: their part, the points the host keeps for them, whether they're out, and their own score (cut-up).</summary>
+		public RoomRole Role;
+		public int Points;
+		public bool Out;
+		public float Score;
+
+		/// <summary>Host only: how long a room game's rule has held for them (busted, too far from the leader).</summary>
+		public double RuleSince = -1;
 	}
 
 	/// <summary>Where a driver is in the race right now: their place, and metres along it.</summary>
@@ -178,7 +204,7 @@ namespace TRC.TuneLoader {
 				HostName = BattleMessage.PlainName(myName),
 				Settings = settings.Copy(),
 				Course = course,
-				CourseCode = course.Code,
+				CourseCode = course?.Code ?? "",
 				Phase = RacePhase.Lobby,
 			};
 			s.Drivers.Add(new RaceDriver { Id = me, Name = s.HostName, HasCourse = true, LastHeard = now });
@@ -206,6 +232,55 @@ namespace TRC.TuneLoader {
 		}
 
 		public RaceDriver MyDriver => Drivers.FirstOrDefault(d => d.Id == Me);
+
+		/// <summary>A room game (anywhere on the map), not a race on a course.</summary>
+		public bool IsGame => Settings.Mode != RoomMode.Race;
+
+		/// <summary>King of the hill: the hill (where the host was at the start) and how far it reaches.</summary>
+		public Vector3 Zone { get; private set; }
+		public float ZoneRadius { get; private set; }
+		public const float HillRadius = 25f;
+
+		/// <summary>Called by the mod when it notices an incident of this car's (a hit, a reset...): counted and told to the host.</summary>
+		public void AddIncident(string what) {
+			myIncidents_++;
+			myLastIncident_ = what ?? "";
+			lastBeat_ = double.MinValue;
+		}
+
+		/// <summary>Cut-up: this player's points so far, as their own mod counts them.</summary>
+		public void SetScore(float score) {
+			myScore_ = score;
+		}
+
+		/// <summary>
+		/// Host, after a race: a time penalty (seconds, added to what's there) or a disqualification for a driver. The
+		/// results are worked out again and sent to everyone.
+		/// </summary>
+		public void Penalize(ulong id, double seconds, bool disqualify, double now) {
+			RaceDriver d = Drivers.FirstOrDefault(x => x.Id == id);
+			if (!IsHost || d == null || Results == null) {
+				return;
+			}
+			if (disqualify) {
+				d.HostDisqualified = true;
+			} else if (seconds == 0) {
+				d.HostPenalty = 0;
+				d.HostDisqualified = false;
+			} else {
+				d.HostPenalty += seconds;
+			}
+			Results = ResultsFromDrivers();
+			resultsSentAt_ = now;
+			resultsSends_ = 0;
+		}
+
+		private int myIncidents_;
+		private string myLastIncident_ = "";
+		private float myScore_;
+		private Vector3 myPosition_;
+		private Vector3 myForward_;
+		private float myKmh_;
 		public List<RaceDriver> Racers => Drivers.Where(d => d.Racer).ToList();
 		public bool IAmRacing => MyDriver?.Racer == true && (Phase == RacePhase.Gridding || Phase == RacePhase.Countdown || Phase == RacePhase.Running);
 
@@ -289,6 +364,10 @@ namespace TRC.TuneLoader {
 		/// <paramref name="order"/> sets the grid when the tournament decides it (else the race's grid order).
 		/// </summary>
 		public void StartRace(double now, IList<ulong> racers = null, IList<ulong> order = null) {
+			if (IsHost && IsGame && Phase != RacePhase.Countdown && Phase != RacePhase.Running) {
+				StartGame(now);
+				return;
+			}
 			if (!IsHost || Course == null || Phase == RacePhase.Gridding || Phase == RacePhase.Countdown || Phase == RacePhase.Running) {
 				return;
 			}
@@ -306,7 +385,14 @@ namespace TRC.TuneLoader {
 				d.Reason = "";
 				d.BestLap = 0;
 				d.ProgressAt = -1;
+				d.TrapTotal = 0;
+				d.Incidents = 0;
+				d.IncidentLog.Clear();
+				d.HostPenalty = 0;
+				d.HostDisqualified = false;
 			}
+			myIncidents_ = 0;
+			myLastIncident_ = "";
 			List<RaceDriver> grid = GridOrderOf(Racers, order);
 			for (int i = 0; i < grid.Count; i++) {
 				grid[i].Slot = i;
@@ -508,6 +594,9 @@ namespace TRC.TuneLoader {
 				d.Racer = e.Racer;
 				d.Slot = e.Slot;
 				d.EliminatedOnLap = e.EliminatedOnLap;
+				d.Role = e.Role;
+				d.Points = e.Points;
+				d.Out = e.Out;
 				Drivers.Add(d);
 			}
 			if (!Joined && m.Entries.Count >= m.Settings.MaxPlayers) {
@@ -546,6 +635,11 @@ namespace TRC.TuneLoader {
 			d.TuneSet = m.TuneSet;
 			d.Car = m.Car;
 			d.HasCourse = m.HasCourse;
+			d.Position = m.Position;
+			d.Heading = m.Heading;
+			d.Kmh = m.Speed;
+			d.HasPosition = true;
+			d.Score = m.Score;
 			d.BestQualifying = m.BestQualifying;
 			d.QualifyingRuns = m.QualifyingRuns;
 			d.PersonalBest = m.PersonalBest;
@@ -564,6 +658,13 @@ namespace TRC.TuneLoader {
 				d.ProgressHeardAt = now;
 			}
 			d.LapsDone = m.LapsDone;
+			d.TrapTotal = m.TrapTotal;
+			if (m.Incidents > d.Incidents && IsHost) {
+				int at = (int)Math.Max(0, now - goHostTime_);
+				d.IncidentLog.Add($"{at / 60}:{at % 60:00} {m.LastIncident}");
+			}
+			d.Incidents = Math.Max(d.Incidents, m.Incidents);
+			d.LastIncident = m.LastIncident;
 			// The host decides who's eliminated or removed; anything else comes from the driver's own mod.
 			if (d.State != RacerState.Eliminated && !(IsHost && d.State == RacerState.Out && m.State == RacerState.Racing)) {
 				d.State = m.State;
@@ -602,6 +703,8 @@ namespace TRC.TuneLoader {
 			}
 			endAtHost_ = m.EndAtHostTime;
 			EndAt = endAtHost_ >= 0 ? endAtHost_ - ClockOffset : -1;
+			Zone = m.Zone;
+			ZoneRadius = m.ZoneRadius;
 			qualifyingEndsHost_ = m.QualifyingEndsHostTime;
 			QualifyingEnds = qualifyingEndsHost_ >= 0 ? qualifyingEndsHost_ - ClockOffset : -1;
 		}
@@ -612,6 +715,17 @@ namespace TRC.TuneLoader {
 		public void Tick(double now, Vector3 position, Vector3 forward, float speedKmh, float timeScale, bool? onRoad) {
 			if (Ended) {
 				return;
+			}
+			myPosition_ = position;
+			myForward_ = CourseGeometry.Level(forward);
+			myKmh_ = Mathf.Abs(speedKmh);
+			RaceDriver self = MyDriver;
+			if (self != null) {
+				self.Position = myPosition_;
+				self.Heading = myForward_;
+				self.Kmh = myKmh_;
+				self.HasPosition = true;
+				self.Score = myScore_;
 			}
 			if (IsHost) {
 				HostTick(now);
@@ -635,7 +749,9 @@ namespace TRC.TuneLoader {
 				case RacePhase.Gridding:
 				case RacePhase.Countdown:
 				case RacePhase.Running:
-					TickRace(now, position, forward, speedKmh, timeScale, onRoad);
+					if (!IsGame) {
+						TickRace(now, position, forward, speedKmh, timeScale, onRoad);
+					}
 					break;
 				default:
 					if (Run != null && qualifyingRun_) {
@@ -643,7 +759,7 @@ namespace TRC.TuneLoader {
 					}
 					break;
 			}
-			if (!IsHost && Phase == RacePhase.Running && Racers.Count > 0 && Racers.All(d => d.State != RacerState.Racing)) {
+			if (!IsHost && !IsGame && Phase == RacePhase.Running && Racers.Count > 0 && Racers.All(d => d.State != RacerState.Racing)) {
 				// Everyone's done but the host's results haven't come (the host left, or the message was lost): work them out here.
 				if (doneSince_ < 0) {
 					doneSince_ = now;
@@ -831,6 +947,16 @@ namespace TRC.TuneLoader {
 					}
 					break;
 
+				case RacePhase.Gridding when endAtHost_ >= 0 && now >= endAtHost_:
+				case RacePhase.Countdown when endAtHost_ >= 0 && now >= endAtHost_ && !IsGame:
+					// Called off before GO: nobody races.
+					foreach (RaceDriver d in Racers.Where(d => d.State == RacerState.Racing)) {
+						d.State = RacerState.Out;
+						d.Reason = "the race was called off";
+					}
+					FinishRace(now);
+					break;
+
 				case RacePhase.Gridding: {
 					List<RaceDriver> racers = Racers;
 					bool sameSet = Settings.Open || racers.Select(r => r.TuneSet).Distinct().Count() == 1;
@@ -851,6 +977,10 @@ namespace TRC.TuneLoader {
 						Phase = RacePhase.Running;
 						lobbyDirty_ = true;
 					}
+					break;
+
+				case RacePhase.Running when IsGame:
+					HostGame(now);
 					break;
 
 				case RacePhase.Running: {
@@ -938,16 +1068,29 @@ namespace TRC.TuneLoader {
 		/// <summary>The results as the drivers' own mods reported them: finishers by time, then those knocked out later, then the rest.</summary>
 		public List<RaceResultRow> ResultsFromDrivers() {
 			var rows = new List<RaceResultRow>();
+			if (IsGame) {
+				int place = 1;
+				foreach (RaceDriver d in Racers.OrderByDescending(x => x.Points).ThenBy(x => x.Out ? 1 : 0)) {
+					rows.Add(new RaceResultRow {
+						Id = d.Id, Name = d.Name, Position = place++, State = d.Out ? RacerState.Out : RacerState.Finished, Points = d.Points,
+						Reason = d.Out ? GameOutReason(d) : "", Incidents = d.Incidents,
+					});
+				}
+				return rows;
+			}
+			RacerState StateOf(RaceDriver d) => d.HostDisqualified ? RacerState.Disqualified : d.State == RacerState.Racing ? RacerState.Out : d.State;
+			bool traps = Settings.SpeedTrapScoring && Course != null && Course.Traps.Count > 0;
 			IEnumerable<RaceDriver> order = Racers
-				.OrderBy(d => d.State == RacerState.Finished ? 0 : d.State == RacerState.Eliminated ? 1 : d.State == RacerState.Disqualified ? 3 : 2)
-				.ThenBy(d => d.State == RacerState.Finished ? d.Time : 0)
+				.OrderBy(d => StateOf(d) == RacerState.Finished ? 0 : StateOf(d) == RacerState.Eliminated ? 1 : StateOf(d) == RacerState.Disqualified ? 3 : 2)
+				.ThenBy(d => StateOf(d) == RacerState.Finished ? (traps ? -d.TrapTotal : d.Time + d.HostPenalty) : 0)
 				.ThenByDescending(d => d.State == RacerState.Eliminated ? d.EliminatedOnLap : 0)
 				.ThenByDescending(d => d.Progress);
 			int position = 1;
 			foreach (RaceDriver d in order) {
 				rows.Add(new RaceResultRow {
-					Id = d.Id, Name = d.Name, Position = position++, State = d.State == RacerState.Racing ? RacerState.Out : d.State,
-					Time = d.Time, Penalty = d.Penalty, Reason = d.Reason, BestLap = d.BestLap,
+					Id = d.Id, Name = d.Name, Position = position++, State = StateOf(d),
+					Time = d.Time + d.HostPenalty, Penalty = d.Penalty + d.HostPenalty,
+					Reason = d.HostDisqualified ? "disqualified by the host" : d.Reason, BestLap = d.BestLap, TrapTotal = d.TrapTotal, Incidents = d.Incidents,
 				});
 			}
 			return rows;
@@ -964,6 +1107,13 @@ namespace TRC.TuneLoader {
 					progress += (float)(d.Speed * age);
 				}
 				list.Add(new RaceStanding { Driver = d, Progress = progress });
+			}
+			if (IsGame) {
+				list = list.OrderByDescending(s => s.Driver.Points).ToList();
+				for (int i = 0; i < list.Count; i++) {
+					list[i].Position = i + 1;
+				}
+				return list;
 			}
 			list = list
 				.OrderBy(s => s.Driver.State == RacerState.Finished ? 0 : s.Driver.State == RacerState.Racing ? 1 : s.Driver.State == RacerState.Eliminated ? 2 : 3)
@@ -1025,7 +1175,7 @@ namespace TRC.TuneLoader {
 			lobby.MatchGame = MatchGame;
 			lobby.MatchLaps = MatchLaps;
 			foreach (RaceDriver d in Drivers) {
-				lobby.Entries.Add(new LobbyEntry { Id = d.Id, Name = d.Name, Racer = d.Racer, Slot = d.Slot, EliminatedOnLap = d.EliminatedOnLap });
+				lobby.Entries.Add(new LobbyEntry { Id = d.Id, Name = d.Name, Racer = d.Racer, Slot = d.Slot, EliminatedOnLap = d.EliminatedOnLap, Role = d.Role, Points = d.Points, Out = d.Out });
 			}
 			outbox_.Add(lobby);
 		}
@@ -1037,6 +1187,9 @@ namespace TRC.TuneLoader {
 		}
 
 		private double BeatSeconds(double now) {
+			if (IsGame && (Phase == RacePhase.Running || Phase == RacePhase.Countdown)) {
+				return Racers.Count <= SlowAbove ? FastSeconds : SlowSeconds;
+			}
 			switch (Phase) {
 				case RacePhase.Lobby:
 				case RacePhase.Finished:
@@ -1085,6 +1238,13 @@ namespace TRC.TuneLoader {
 			beat.BestQualifying = myBestQualifying_;
 			beat.QualifyingRuns = myQualifyingRuns_;
 			beat.PersonalBest = personalBest_?.Invoke() ?? 0;
+			beat.Position = myPosition_;
+			beat.Heading = myForward_;
+			beat.Speed = myKmh_;
+			beat.TrapTotal = Run != null && !qualifyingRun_ ? Run.TrapTotal : 0f;
+			beat.Incidents = myIncidents_;
+			beat.LastIncident = myLastIncident_;
+			beat.Score = myScore_;
 			outbox_.Add(beat);
 		}
 
@@ -1103,10 +1263,255 @@ namespace TRC.TuneLoader {
 			foreach (RaceDriver d in Drivers.Where(d => d.Id != Me && d.SentHeardAt >= 0)) {
 				beat.Echoes.Add((d.Id, d.SentAt, now - d.SentHeardAt));
 			}
+			beat.Zone = Zone;
+			beat.ZoneRadius = ZoneRadius;
 			outbox_.Add(beat);
 		}
 
 		private RaceMessage New(RaceKind kind) => new RaceMessage { Kind = kind, RaceId = Id, From = Me, RaceNumber = RaceNumber };
+
+		// ---- Room games (host) ----
+
+		/// <summary>Room games start this long after the host presses start, wherever everyone is.</summary>
+		private const double GameStartSeconds = 5;
+
+		/// <summary>Cops and runners: a runner slower than this within this distance of a cop for this long is busted.</summary>
+		public const float BustMetres = 8f;
+		public const float BustKmh = 25f;
+		public const double BustSeconds = 3;
+		private const int BustPoints = 100;
+
+		/// <summary>Tag and infected: this close is a touch. After a tag, nobody can be tagged for a moment.</summary>
+		public const float TouchMetres = 4.5f;
+		private const double TagCooldownSeconds = 4;
+		private const int SurvivorBonus = 1000;
+
+		/// <summary>Keep-up: further than the gap from the leader for this long and you're out.</summary>
+		public const double KeepUpSeconds = 10;
+
+		private readonly Dictionary<ulong, double> gameSeconds_ = new Dictionary<ulong, double>();
+		private double lastGameTick_ = -1;
+		private double tagReadyAt_;
+
+		private void StartGame(double now) {
+			RaceNumber++;
+			var random = new System.Random((int)(Id ^ (uint)(RaceNumber * 7919)));
+			List<RaceDriver> players = Drivers.ToList();
+			foreach (RaceDriver d in players) {
+				d.Racer = true;
+				d.Role = RoomRole.None;
+				d.Points = 0;
+				d.Out = false;
+				d.RuleSince = -1;
+				d.State = RacerState.Racing;
+				d.Reason = "";
+				d.Incidents = 0;
+				d.IncidentLog.Clear();
+				d.Score = 0;
+			}
+			gameSeconds_.Clear();
+			List<RaceDriver> shuffled = players.OrderBy(_ => random.Next()).ToList();
+			switch (Settings.Mode) {
+				case RoomMode.CopsAndRunners: {
+					int cops = Mathf.Clamp(Settings.Cops, 1, Math.Max(1, players.Count - 1));
+					for (int i = 0; i < shuffled.Count; i++) {
+						shuffled[i].Role = i < cops ? RoomRole.Cop : RoomRole.Runner;
+					}
+					break;
+				}
+				case RoomMode.Tag:
+					shuffled[0].Role = RoomRole.It;
+					break;
+				case RoomMode.Infected:
+					shuffled[0].Role = RoomRole.Infected;
+					break;
+				case RoomMode.KeepUp:
+				case RoomMode.Convoy:
+					players[0].Role = RoomRole.Leader;
+					break;
+				case RoomMode.KingOfTheHill:
+					Zone = myPosition_;
+					ZoneRadius = HillRadius;
+					break;
+			}
+			myScore_ = 0;
+			myIncidents_ = 0;
+			countdownId_++;
+			goHostTime_ = now + GameStartSeconds;
+			endAtHost_ = Settings.Mode == RoomMode.Convoy ? -1 : goHostTime_ + Settings.RoundMinutes * 60.0;
+			EndAt = endAtHost_;
+			Results = null;
+			ResultsFor = -1;
+			Phase = RacePhase.Countdown;
+			lastGameTick_ = -1;
+			tagReadyAt_ = 0;
+			lobbyDirty_ = true;
+			lastHostBeat_ = double.MinValue;
+		}
+
+		private static float Gap(RaceDriver a, RaceDriver b) => Vector3.Distance(a.Position, b.Position);
+
+		private void AddSeconds(RaceDriver d, double seconds) {
+			gameSeconds_.TryGetValue(d.Id, out double had);
+			gameSeconds_[d.Id] = had + seconds;
+			d.Points = (int)(had + seconds);
+		}
+
+		/// <summary>Host, every frame of a room game: who's caught, tagged, holding the hill or dropped, the points, and the end.</summary>
+		private void HostGame(double now) {
+			double dt = lastGameTick_ < 0 ? 0 : Math.Min(0.5, now - lastGameTick_);
+			lastGameTick_ = now;
+			List<RaceDriver> live = Racers.Where(d => d.HasPosition && !d.Out && d.State != RacerState.Out).ToList();
+			bool over = endAtHost_ >= 0 && now >= endAtHost_;
+			switch (Settings.Mode) {
+				case RoomMode.CopsAndRunners:
+					foreach (RaceDriver runner in live.Where(d => d.Role == RoomRole.Runner).ToList()) {
+						RaceDriver cop = live.Where(c => c.Role == RoomRole.Cop).OrderBy(c => Gap(c, runner)).FirstOrDefault();
+						bool caught = cop != null && Gap(cop, runner) <= BustMetres && runner.Kmh < BustKmh;
+						if (!caught) {
+							runner.RuleSince = -1;
+							AddSeconds(runner, dt);
+							continue;
+						}
+						if (runner.RuleSince < 0) {
+							runner.RuleSince = now;
+						} else if (now - runner.RuleSince >= BustSeconds) {
+							// Busted: they join the cops. The cop who caught them scores.
+							runner.Role = RoomRole.Cop;
+							runner.RuleSince = -1;
+							runner.Reason = $"busted by {cop.Name}";
+							AddSeconds(cop, BustPoints);
+							lobbyDirty_ = true;
+						}
+					}
+					over |= !live.Any(d => d.Role == RoomRole.Runner);
+					break;
+
+				case RoomMode.Tag: {
+					RaceDriver it = live.FirstOrDefault(d => d.Role == RoomRole.It);
+					foreach (RaceDriver d in live.Where(d => d.Role != RoomRole.It)) {
+						AddSeconds(d, dt);
+					}
+					if (it != null && now >= tagReadyAt_) {
+						RaceDriver touched = live.Where(d => d != it && Gap(d, it) <= TouchMetres).OrderBy(d => Gap(d, it)).FirstOrDefault();
+						if (touched != null) {
+							it.Role = RoomRole.None;
+							touched.Role = RoomRole.It;
+							tagReadyAt_ = now + TagCooldownSeconds;
+							lobbyDirty_ = true;
+						}
+					} else if (it == null && live.Count > 0) {
+						live[0].Role = RoomRole.It;
+						lobbyDirty_ = true;
+					}
+					break;
+				}
+
+				case RoomMode.Infected: {
+					List<RaceDriver> infected = live.Where(d => d.Role == RoomRole.Infected).ToList();
+					foreach (RaceDriver d in live.Where(d => d.Role != RoomRole.Infected)) {
+						if (infected.Any(i => Gap(i, d) <= TouchMetres)) {
+							d.Role = RoomRole.Infected;
+							lobbyDirty_ = true;
+						} else {
+							AddSeconds(d, dt);
+						}
+					}
+					over |= live.Count(d => d.Role != RoomRole.Infected) <= (live.Count > 1 ? 1 : 0);
+					if (over) {
+						// The survivors win: a bonus puts them above everyone caught, however long those lasted.
+						foreach (RaceDriver d in live.Where(d => d.Role != RoomRole.Infected)) {
+							AddSeconds(d, SurvivorBonus);
+						}
+					}
+					break;
+				}
+
+				case RoomMode.KingOfTheHill: {
+					List<RaceDriver> inside = live.Where(d => Vector3.Distance(d.Position, Zone) <= ZoneRadius).ToList();
+					if (inside.Count == 1) {
+						AddSeconds(inside[0], dt);
+						over |= gameSeconds_[inside[0].Id] >= Settings.HillSeconds;
+					}
+					break;
+				}
+
+				case RoomMode.KeepUp: {
+					RaceDriver leader = live.FirstOrDefault(d => d.Role == RoomRole.Leader);
+					if (leader == null) {
+						over = true;
+						break;
+					}
+					AddSeconds(leader, 0);
+					foreach (RaceDriver d in live.Where(d => d != leader)) {
+						if (Gap(d, leader) <= Settings.KeepUpMetres) {
+							d.RuleSince = -1;
+							AddSeconds(d, dt);
+						} else if (d.RuleSince < 0) {
+							d.RuleSince = now;
+						} else if (now - d.RuleSince >= KeepUpSeconds) {
+							d.Out = true;
+							d.Reason = $"fell more than {Settings.KeepUpMetres} m behind {leader.Name}";
+							lobbyDirty_ = true;
+						}
+					}
+					over |= !live.Any(d => d != leader && !d.Out);
+					break;
+				}
+
+				case RoomMode.CutUp:
+					foreach (RaceDriver d in live) {
+						d.Points = (int)d.Score;
+					}
+					break;
+			}
+			if (over) {
+				FinishRace(now);
+			}
+		}
+
+		private string GameOutReason(RaceDriver d) => d.Reason.Length > 0 ? d.Reason : "out";
+
+		/// <summary>The room game's rule for this driver right now, in a few words.</summary>
+		public string GameLine(double now) {
+			RaceDriver me = MyDriver;
+			if (me == null) {
+				return "";
+			}
+			string points = $"{me.Points} pts";
+			switch (Settings.Mode) {
+				case RoomMode.CopsAndRunners:
+					int runners = Racers.Count(d => d.Role == RoomRole.Runner);
+					return me.Role == RoomRole.Cop ? $"You're a cop: catch the runners ({runners} left). Box them in and stop them for {BustSeconds:0} s"
+						: $"You're a runner: don't get stopped near a cop. {points}";
+				case RoomMode.Tag:
+					RaceDriver it = Racers.FirstOrDefault(d => d.Role == RoomRole.It);
+					return me.Role == RoomRole.It ? "You're it! Touch someone" : $"{it?.Name ?? "Someone"} is it: stay away. {points}";
+				case RoomMode.Infected:
+					int left = Racers.Count(d => d.Role != RoomRole.Infected);
+					return me.Role == RoomRole.Infected ? $"You're infected: catch the others ({left} left)" : $"Don't get touched by the infected ({left} left). {points}";
+				case RoomMode.KingOfTheHill: {
+					float away = Vector3.Distance(myPosition_, Zone);
+					return away <= ZoneRadius ? $"On the hill: {me.Points}/{Settings.HillSeconds} s (only counts when you're alone on it)"
+						: $"The hill is {away:0} m away. {me.Points}/{Settings.HillSeconds} s";
+				}
+				case RoomMode.KeepUp: {
+					RaceDriver leader = Racers.FirstOrDefault(d => d.Role == RoomRole.Leader);
+					if (me.Role == RoomRole.Leader) {
+						return $"You lead: lose them. {Racers.Count(d => d.Role != RoomRole.Leader && !d.Out)} still with you";
+					}
+					return me.Out ? $"Out: {me.Reason}" : $"Stay within {Settings.KeepUpMetres} m of {leader?.Name}: {(leader != null ? Gap(me, leader) : 0):0} m. {points}";
+				}
+				case RoomMode.Convoy: {
+					int index = Racers.IndexOf(me);
+					RaceDriver ahead = index > 0 ? Racers[index - 1] : null;
+					return ahead == null ? "You lead the convoy" : $"Follow {ahead.Name}: {Gap(me, ahead):0} m";
+				}
+				case RoomMode.CutUp:
+					return $"Cut-up: pass cars close and fast. {me.Points} pts";
+			}
+			return "";
+		}
 
 		private void UpdateMessage(double now) {
 			RaceDriver me = MyDriver;
@@ -1136,7 +1541,10 @@ namespace TRC.TuneLoader {
 					}
 					break;
 				case RacePhase.Countdown:
-					Message = Run?.Message ?? "Get ready";
+					Message = IsGame ? $"Starts in {Math.Max(0, goHostTime_ - ClockOffset - now):0} s" : Run?.Message ?? "Get ready";
+					break;
+				case RacePhase.Running when IsGame:
+					Message = GameLine(now);
 					break;
 				case RacePhase.Running:
 					Message = me?.Racer != true ? "Watching" : me.State == RacerState.Racing ? (EndAt >= 0 ? $"The race ends in {Math.Max(0, EndAt - now):0} s" : "")

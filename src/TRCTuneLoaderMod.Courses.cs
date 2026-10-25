@@ -111,7 +111,7 @@ namespace TRC.TuneLoader {
 
 		/// <summary>Time attack or the course builder is showing something over the track.</summary>
 		private bool CourseHudVisible => hasPose_ && (BattleOnTrack || run_ != null || pathRecorder_ != null || recorder_.State != CourseRecorder.Phase.Idle || invites_.Count > 0 ||
-			RaceHudVisible || RaceToShow() != null || gridRecorder_ != null);
+			RaceHudVisible || RaceToShow() != null || gridRecorder_ != null || TrapFlashVisible);
 
 		/// <summary>The car and its TRC spec state at the start or the finish of a run.</summary>
 		private sealed class RunCheck {
@@ -131,6 +131,7 @@ namespace TRC.TuneLoader {
 				TrcLog.Warning($"Course problem: {error}");
 			}
 			LoadTimes();
+			LoadTrapRecords();
 			TrcLog.Info($"Courses: {courses_.Official.Count} official, {courses_.Custom.Count} of your own. Time attack runs saved: {times_.Count}.");
 		}
 
@@ -164,6 +165,8 @@ namespace TRC.TuneLoader {
 				}
 			}
 			UpdateCourseObjects();
+			UpdateSpeedTraps();
+			UpdateBestLine();
 		}
 
 		/// <summary>The start/finish markers and the map's own start/finish signs for whatever is running: a time attack, Record path or the course builder.</summary>
@@ -268,6 +271,8 @@ namespace TRC.TuneLoader {
 		private void CleanUpCourses() {
 			markers_.Clear();
 			dots_.Clear();
+			trapMarkers_.Clear();
+			speedLine_.Clear();
 			RestoreSigns();
 		}
 
@@ -313,6 +318,7 @@ namespace TRC.TuneLoader {
 			try {
 				List<Course> found = CourseScanner.Scan(map_.Key, map_.Name, out scanSummary_);
 				courses_.SetMapCourses(map_.Key, found);
+				RefreshTraps();
 				TrcLog.Info($"{map_.Name} ({map_.Key}): {scanSummary_}");
 				foreach (string line in CourseScanner.Lines) {
 					TrcLog.Info($"  {line}");
@@ -443,7 +449,9 @@ namespace TRC.TuneLoader {
 			HandleRunProgress();
 			if (before == TimeAttackRun.Phase.Running && now == TimeAttackRun.Phase.Finished) {
 				FinishRun();
+				RateRun(run_);
 			} else if (before != TimeAttackRun.Phase.Cancelled && now == TimeAttackRun.Phase.Cancelled) {
+				RateRun(run_);
 				TrcLog.Info($"Time attack on {run_.Course.Name} stopped: {run_.Message}");
 				string laps = LapSummary(run_);
 				runResultText_ = laps.Length > 0 ? $"{run_.Message}\n<color={Theme.MutedHex}>{laps}</color>" : run_.Message;
@@ -488,6 +496,7 @@ namespace TRC.TuneLoader {
 			record.FlaggedMods = Math.Max(start.Flagged, end.Flagged);
 			record.Flying = run_.Flying;
 			record.Laps = run_.Laps;
+			record.TrapKmh = run_.TrapSpeeds.ToArray();
 			LapTime only = !course.IsCircuit && run_.LapTimes.Count == 1 ? run_.LapTimes[0] : null;
 			if (only != null) {
 				record.SectorMs = only.Sectors.Select(s => (long)Math.Round(s * 1000.0, MidpointRounding.AwayFromZero)).ToArray();
@@ -498,7 +507,10 @@ namespace TRC.TuneLoader {
 			TimeAttackRecord best = TimeAttackLog.BestFor(times_, course.Code, record.CarId, record.TuneSet, record.IsSpec, kind);
 			SaveRecord(record);
 			if (only != null) {
-				TimeAttackTraces.SaveIfFaster(TimesFolder, TimeAttackTraces.Key(course.Code, record.CarId, record.TuneSet, kind), only.Trace, record.TimeMs);
+				string key = TimeAttackTraces.Key(course.Code, record.CarId, record.TuneSet, kind);
+				if (TimeAttackTraces.SaveIfFaster(TimesFolder, key, only.Trace, record.TimeMs)) {
+					TimeAttackTraces.SaveLine(TimesFolder, key, only.Line, only.LineKmh, record.TimeMs);
+				}
 			}
 
 			string compare = best == null ? $"first time in this car{(record.TuneSet.Length > 0 ? $" on {record.TuneSet}" : "")}"
@@ -509,6 +521,9 @@ namespace TRC.TuneLoader {
 				: $"{record.TuneSet} spec · practice course";
 			string laps = LapSummary(run_);
 			string sectors = showSectors_ && only != null && only.Sectors.Length > 1 ? $"\n{ResultSectors(only)}" : "";
+			if (record.TrapKmh.Length > 0) {
+				sectors += $"\n<color={Theme.WarnHex}>Speed traps: {string.Join(" · ", record.TrapKmh.Select(k => $"{k:0}"))} km/h (total {record.TrapTotal:0})</color>";
+			}
 			runResultText_ = $"<b>{TimeAttackRun.FormatTime(record.Seconds)}</b>\n{compare} · {status}{(laps.Length > 0 ? $"\n<color={Theme.MutedHex}>{laps}</color>" : "")}{sectors}";
 			runResultUntil_ = Time.unscaledTime + ResultSeconds;
 			TrcLog.Info($"Time attack on {course.Name} ({course.Code}): {TimeAttackRun.FormatTime(record.Seconds)} in {record.Car}, " +
@@ -741,6 +756,8 @@ namespace TRC.TuneLoader {
 			if (!string.IsNullOrEmpty(scanSummary_)) {
 				GUILayout.Label(scanSummary_, Theme.Small);
 			}
+			GUILayout.Space(6);
+			DrawSpeedTraps();
 		}
 
 		private void DrawCourseRow(Course course) {
@@ -973,6 +990,7 @@ namespace TRC.TuneLoader {
 			} else if (RaceToShow() != null) {
 				DrawRaceInviteHud(screenWidth, screenHeight);
 			}
+			DrawTrapFlash(screenWidth, screenHeight);
 		}
 
 		private void DrawRunHud(float screenWidth, float screenHeight) {

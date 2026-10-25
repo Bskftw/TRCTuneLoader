@@ -23,6 +23,10 @@ namespace TRC.TuneLoader {
 
 		/// <summary>Lap time at every <see cref="TimeAttackRun.TraceStep"/> metres along the lap: what the live delta compares with.</summary>
 		public float[] Trace = new float[0];
+
+		/// <summary>Where the car was, every <see cref="TimeAttackRun.LineStep"/> m of the lap, and its speed there (km/h): the driving line.</summary>
+		public List<Vector3> Line = new List<Vector3>();
+		public List<float> LineKmh = new List<float>();
 	}
 
 	/// <summary>What a jump start does: start again (time attack, battles), or in a race a time penalty or disqualification.</summary>
@@ -61,6 +65,9 @@ namespace TRC.TuneLoader {
 
 		/// <summary>The lap time is kept every this many metres along the lap, for the live delta.</summary>
 		public const float TraceStep = 10f;
+
+		/// <summary>The car's position and speed are kept every this many metres it drives, for the best line drawn on the road.</summary>
+		public const float LineStep = 2f;
 
 		/// <summary>How long the car must stand still behind the line before the countdown starts.</summary>
 		private const float StillSeconds = 1f;
@@ -180,6 +187,19 @@ namespace TRC.TuneLoader {
 				return sectors;
 			}
 		}
+
+		/// <summary>The speed (km/h) caught at each of the course's speed traps so far, in the order driven (every lap).</summary>
+		public List<float> TrapSpeeds { get; } = new List<float>();
+
+		/// <summary>The trap just driven through (its number on the course, from 0) and the speed, for the flash.</summary>
+		public (int Index, float Kmh)? LastTrap { get; private set; }
+
+		/// <summary>All the speeds caught at traps added up: what a speed trap race is won on.</summary>
+		public float TrapTotal => TrapSpeeds.Sum();
+
+		private readonly HashSet<int> trapsThisLap_ = new HashSet<int>();
+		private readonly List<Vector3> line_ = new List<Vector3>();
+		private readonly List<float> lineKmh_ = new List<float>();
 
 		/// <summary>The sector being driven (0 for the first) and the last one finished.</summary>
 		public int Sector { get; private set; }
@@ -329,6 +349,9 @@ namespace TRC.TuneLoader {
 			Progress = 0;
 			Lap = 1;
 			LapTimes.Clear();
+			TrapSpeeds.Clear();
+			LastTrap = null;
+			trapsThisLap_.Clear();
 			LapValid = true;
 			LapInvalid = "";
 			Sector = 0;
@@ -515,6 +538,9 @@ namespace TRC.TuneLoader {
 			splits_.Clear();
 			trace_.Clear();
 			trace_.Add(0f);
+			trapsThisLap_.Clear();
+			line_.Clear();
+			lineKmh_.Clear();
 		}
 
 		private void Run(double now, Vector3 position, float speedKmh, float timeScale, bool? onRoad) {
@@ -644,8 +670,23 @@ namespace TRC.TuneLoader {
 
 		private float OffCourseLimit => Course.Kind == CourseKind.Highway ? OffCourseHighway : Course.IsCircuit ? OffCourseCircuit : OffCourseTouge;
 
-		/// <summary>The car moved on to <paramref name="at"/>: sectors and the trace catch up, then this frame is the last one seen.</summary>
+		/// <summary>The car moved on to <paramref name="at"/>: sectors, traps and the trace catch up, then this frame is the last one seen.</summary>
 		private void Moved(double now, Vector3 position, float speedKmh, PathPosition at, bool resetTo) {
+			if (!resetTo && (line_.Count == 0 || Vector3.Distance(line_[line_.Count - 1], position) >= LineStep)) {
+				line_.Add(position);
+				lineKmh_.Add(speedKmh);
+			}
+			if (!resetTo) {
+				// A speed trap catches the speed at the moment the car crosses it, worked out between frames (once a lap each).
+				for (int i = 0; i < Course.Traps.Count; i++) {
+					if (!trapsThisLap_.Contains(i) && CourseGeometry.Crossed(Course.Traps[i], lastPosition_, position, out float fraction)) {
+						trapsThisLap_.Add(i);
+						float kmh = Mathf.Lerp(lastSpeed_, speedKmh, fraction);
+						TrapSpeeds.Add(kmh);
+						LastTrap = (i, kmh);
+					}
+				}
+			}
 			if (!resetTo && at.Progress > lastProgress_) {
 				// The moment the car passed each point is worked out along the way it moved this frame.
 				double dt = now - lastTime_;
@@ -697,6 +738,8 @@ namespace TRC.TuneLoader {
 				Invalid = LapInvalid,
 				Standing = Lap == 1 && !Flying,
 				Trace = trace_.ToArray(),
+				Line = new List<Vector3>(line_),
+				LineKmh = new List<float>(lineKmh_),
 			});
 		}
 

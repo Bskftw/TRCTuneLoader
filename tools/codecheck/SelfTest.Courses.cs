@@ -27,6 +27,7 @@ namespace TRC.TuneLoader.CodeCheck {
 			RecordedPathIsAdopted();
 			CircuitTests();
 			RaceTests();
+			ModeTests();
 		}
 
 		private static void UphillIsDownhillReversed() {

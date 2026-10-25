@@ -27,6 +27,21 @@ namespace TRC.TuneLoader {
 		private static readonly int[] AdvanceChoices = { 1, 2, 3, 4 };
 		private static readonly int[] QualifyingMinuteChoices = { 5, 10, 15, 20 };
 		private static readonly string[] QualifyingRunChoices = { "Unlimited", "1", "2", "3" };
+		private static readonly string[] RoomModeNames = { "Race", "Cops and runners", "Tag", "Infected", "King of the hill", "Keep-up", "Convoy cruise", "Highway cut-up" };
+		private static readonly string[] RoomModeRules = {
+			"",
+			"Cops catch runners: a runner who's stopped (under 25 km/h) next to a cop for 3 s is busted and joins the cops. Runners score every second they're free; cops score per bust.",
+			"One driver is it: touch someone (within a few metres) to pass it on. You score every second you're not it.",
+			"One driver is infected: touching spreads it. You score every second you're clean, and the last survivors win.",
+			"The hill is where the host is when the game starts (25 m round). Score every second you're on it alone; first to the target wins.",
+			"Follow the host: more than the gap behind for 10 s and you're out. You score every second you keep up; the last one with them wins.",
+			"A cruise behind the host: no winner, just everyone's gap to the car ahead. The host ends it.",
+			"Score close, fast passes on other players (over 80 km/h, at least 10 km/h faster, within 5 m to the side), with a combo for passes in a row. A hit loses the combo.",
+		};
+		private static readonly int[] RoundMinuteChoices = { 3, 5, 10, 15 };
+		private static readonly int[] CopChoices = { 1, 2, 3 };
+		private static readonly int[] HillSecondChoices = { 30, 60, 120 };
+		private static readonly int[] KeepUpChoices = { 150, 250, 400 };
 
 		/// <summary>An open race is listed this long (seconds) after its host last said so.</summary>
 		private const float OpenRaceSeconds = 8f;
@@ -57,6 +72,12 @@ namespace TRC.TuneLoader {
 		private int hostQualMinutes_ = 1;
 		private int hostQualRuns_;
 		private int hostTournament_;
+		private int hostGame_;
+		private int hostRoundMinutes_ = 1;
+		private int hostCops_;
+		private int hostHill_ = 1;
+		private int hostKeepUp_ = 1;
+		private bool hostTrapScoring_;
 		private int koFormat_;
 		private int koBestOf_ = 1;
 		private int koFinalFormat_ = 1;
@@ -126,6 +147,7 @@ namespace TRC.TuneLoader {
 
 		// ---- Hosting and joining ----
 
+		/// <summary>Opens a race on <paramref name="course"/>, or (null) the room game picked in the form.</summary>
 		private void HostRace(Course course) {
 			if (battle_ != null && battle_.Active) {
 				raceResult_ = "Finish or leave your battle first.";
@@ -137,29 +159,38 @@ namespace TRC.TuneLoader {
 			var settings = new RaceSettings {
 				Name = $"{BattleMessage.PlainName(MyName())}'s race",
 				MaxPlayers = MaxDriverChoices[hostMax_],
-				Laps = course.IsCircuit ? RaceLapChoices[hostLaps_] : 1,
+				Laps = course != null && course.IsCircuit ? RaceLapChoices[hostLaps_] : 1,
 				Open = hostMode_ == 1,
 				Order = (GridOrder)hostOrder_,
 				PoleLeft = hostPole_ == 0,
 				LayoutFromCourse = hostLayout_ == 0,
 				Layout = hostLayout_ == 2 ? GridLayout.LineUp : GridLayout.Grid,
 				Jump = hostJump_ == 1 ? JumpRule.Disqualify : JumpRule.Penalty,
-				Elimination = hostElimination_ && course.IsCircuit,
+				Elimination = course != null && hostElimination_ && course.IsCircuit,
 				QualifyingMinutes = QualifyingMinuteChoices[hostQualMinutes_],
 				QualifyingRuns = hostQualRuns_,
+				SpeedTrapScoring = course != null && hostTrapScoring_ && course.Traps.Count > 0,
+				Mode = course == null ? (RoomMode)hostGame_ : RoomMode.Race,
+				RoundMinutes = RoundMinuteChoices[hostRoundMinutes_],
+				Cops = CopChoices[hostCops_],
+				HillSeconds = HillSecondChoices[hostHill_],
+				KeepUpMetres = KeepUpChoices[hostKeepUp_],
 			};
+			if (course == null) {
+				settings.Name = $"{BattleMessage.PlainName(MyName())}'s {RoomModeNames[hostGame_].ToLowerInvariant()}";
+			}
 			uint id = (uint)raceIds_.Next(1, int.MaxValue);
-			race_ = RaceSession.Host(id, MySteamId, MyName(), course, settings, CheckBattleCar, () => PersonalBestOn(course), BattleNow);
+			race_ = RaceSession.Host(id, MySteamId, MyName(), course, settings, CheckBattleCar, () => course != null ? PersonalBestOn(course) : 0, BattleNow);
 			tournament_ = null;
 			tournamentRaceCounted_ = -1;
 			matchReportsSeen_.Clear();
-			if (hostTournament_ > 0) {
+			if (hostTournament_ > 0 && course != null) {
 				settings.Name = $"{BattleMessage.PlainName(MyName())}'s {TournamentKinds[hostTournament_].ToLowerInvariant()}";
 				race_.SetSettings(settings);
 				race_.SetLines(new List<string> { $"{settings.Name}: waiting for drivers. The host starts it when everyone's in." });
 			}
 			raceResult_ = "";
-			TrcLog.Info($"Race {id}: opened on {course.Name} ({course.Code}), {settings.MaxPlayers} drivers max, {settings.Laps} lap(s), " +
+			TrcLog.Info($"Race {id}: opened {(course != null ? $"on {course.Name} ({course.Code})" : RoomModeNames[hostGame_])}, {settings.MaxPlayers} drivers max, {settings.Laps} lap(s), " +
 				$"grid {GridOrders[hostOrder_]}, jump {JumpRules[hostJump_]}, {(settings.Open ? "Open" : "TRC spec")}{(hostTournament_ > 0 ? $", {TournamentKinds[hostTournament_]}" : "")}.");
 		}
 
@@ -403,6 +434,7 @@ namespace TRC.TuneLoader {
 					TrcLog.Info($"  P{r.Position} {r.Name}: {RowText(r)}");
 				}
 				SaveRaceResults();
+				RateRace();
 			}
 			if (race_.Ended) {
 				TrcLog.Info($"Race {race_.Id}: {race_.Message}.");
@@ -411,8 +443,10 @@ namespace TRC.TuneLoader {
 			}
 		}
 
-		private static string RowText(RaceResultRow r) =>
-			r.State == RacerState.Finished ? $"{TimeAttackRun.FormatTime(r.Time)}{(r.Penalty > 0 ? $" (+{r.Penalty:0} s)" : "")}"
+		private string RowText(RaceResultRow r) =>
+			race_ != null && race_.IsGame ? $"{r.Points} pts{(r.State == RacerState.Out ? $" ({r.Reason})" : "")}"
+			: r.State == RacerState.Finished && race_ != null && race_.Settings.SpeedTrapScoring ? $"{r.TrapTotal:0} km/h at the traps · {TimeAttackRun.FormatTime(r.Time)}"
+			: r.State == RacerState.Finished ? $"{TimeAttackRun.FormatTime(r.Time)}{(r.Penalty > 0 ? $" (+{r.Penalty:0} s)" : "")}"
 			: r.State == RacerState.Disqualified ? $"disqualified ({r.Reason})"
 			: r.State == RacerState.Eliminated ? $"eliminated{(r.Reason.Length > 0 ? $" ({r.Reason})" : "")}"
 			: $"didn't finish{(r.Reason.Length > 0 ? $" ({r.Reason})" : "")}";
@@ -482,7 +516,7 @@ namespace TRC.TuneLoader {
 			}
 			foreach (var (lobby, _, _) in openRaces_.Values.ToList()) {
 				Course course = courses_.ByCode(lobby.CourseCode);
-				string where = course?.Name ?? lobby.CourseCode;
+				string where = lobby.Settings.Mode != RoomMode.Race ? RoomModeNames[(int)lobby.Settings.Mode] : course?.Name ?? lobby.CourseCode;
 				bool full = lobby.Entries.Count >= lobby.Settings.MaxPlayers;
 				bool running = lobby.Phase != RacePhase.Lobby && lobby.Phase != RacePhase.Qualifying && lobby.Phase != RacePhase.Finished;
 				GUILayout.BeginHorizontal();
@@ -508,6 +542,13 @@ namespace TRC.TuneLoader {
 				GUILayout.EndVertical();
 				return;
 			}
+			GUILayout.Label("What to play", Theme.SectionLabel);
+			hostGame_ = Choice(RoomModeNames, hostGame_);
+			if (hostGame_ != 0) {
+				DrawGameForm();
+				GUILayout.EndVertical();
+				return;
+			}
 			List<Course> courses = courses_.ForMap(map_.Key).Where(c => c.Usable).ToList();
 			if (courses.Count == 0) {
 				GUILayout.Label("No courses on this map yet: make one with the Course builder.", Theme.Small);
@@ -523,6 +564,10 @@ namespace TRC.TuneLoader {
 				}
 			}
 			Course picked = courses.FirstOrDefault(c => c.Code == hostCourse_);
+			if (picked?.Traps.Count > 0) {
+				GUILayout.Label("Scoring", Theme.SectionLabel);
+				hostTrapScoring_ = Choice(new[] { "Fastest time", $"Speed traps (highest total of {picked.Traps.Count})" }, hostTrapScoring_ ? 1 : 0) == 1;
+			}
 			if (picked?.IsCircuit == true) {
 				GUILayout.Label("Laps", Theme.SectionLabel);
 				hostLaps_ = Choice(RaceLapChoices.Select(l => l.ToString(CultureInfo.InvariantCulture)).ToArray(), hostLaps_);
@@ -561,6 +606,36 @@ namespace TRC.TuneLoader {
 			GUILayout.FlexibleSpace();
 			GUILayout.EndHorizontal();
 			GUILayout.EndVertical();
+		}
+
+		/// <summary>The room game's options: how long, and its own rules.</summary>
+		private void DrawGameForm() {
+			GUILayout.Label(RoomModeRules[hostGame_], Theme.Small);
+			if (hostGame_ != (int)RoomMode.Convoy) {
+				GUILayout.Label("Round length", Theme.SectionLabel);
+				hostRoundMinutes_ = Choice(RoundMinuteChoices.Select(m => $"{m} min").ToArray(), hostRoundMinutes_);
+			}
+			if (hostGame_ == (int)RoomMode.CopsAndRunners) {
+				GUILayout.Label("Cops at the start", Theme.SectionLabel);
+				hostCops_ = Choice(CopChoices.Select(c => c.ToString(CultureInfo.InvariantCulture)).ToArray(), hostCops_);
+			}
+			if (hostGame_ == (int)RoomMode.KingOfTheHill) {
+				GUILayout.Label("Seconds on the hill to win", Theme.SectionLabel);
+				hostHill_ = Choice(HillSecondChoices.Select(s => $"{s} s").ToArray(), hostHill_);
+			}
+			if (hostGame_ == (int)RoomMode.KeepUp) {
+				GUILayout.Label("Gap allowed", Theme.SectionLabel);
+				hostKeepUp_ = Choice(KeepUpChoices.Select(m => $"{m} m").ToArray(), hostKeepUp_);
+			}
+			GUILayout.Label("Drivers (most)", Theme.SectionLabel);
+			hostMax_ = Choice(MaxDriverChoices.Select(m => m.ToString(CultureInfo.InvariantCulture)).ToArray(), hostMax_);
+			GUILayout.Space(4);
+			GUILayout.BeginHorizontal();
+			if (GUILayout.Button($"Open {RoomModeNames[hostGame_].ToLowerInvariant()}", Theme.ButtonPrimary)) {
+				HostRace(null);
+			}
+			GUILayout.FlexibleSpace();
+			GUILayout.EndHorizontal();
 		}
 
 		private void DrawTournamentOptions(List<Course> courses, Course picked) {
@@ -618,8 +693,13 @@ namespace TRC.TuneLoader {
 			GUILayout.BeginVertical(Theme.Guide);
 			GUILayout.Label(r.Settings.Name.Length > 0 ? r.Settings.Name : $"{r.HostName}'s race", Theme.Heading);
 			string laps = r.Course?.IsCircuit == true ? $" · {r.Settings.Laps} lap{(r.Settings.Laps == 1 ? "" : "s")}{(r.Settings.Elimination ? ", elimination" : "")}" : "";
-			GUILayout.Label($"{r.Course?.Name ?? r.CourseCode}{laps} · {(r.Settings.Open ? "Open" : "TRC spec")} · grid {GridOrders[(int)Math.Min((int)r.Settings.Order, 3)].ToLowerInvariant()}, " +
-				$"{(r.Settings.PoleLeft ? "pole left" : "pole right")} · jump start {(r.Settings.Jump == JumpRule.Disqualify ? "disqualifies" : $"+{r.Settings.JumpPenaltySeconds:0} s")}", Theme.Small);
+			if (r.IsGame) {
+				GUILayout.Label($"{RoomModeNames[(int)r.Settings.Mode]} · anywhere on the map{(r.Settings.Mode != RoomMode.Convoy ? $" · {r.Settings.RoundMinutes} min" : "")}", Theme.Small);
+				GUILayout.Label(RoomModeRules[(int)r.Settings.Mode], Theme.Small);
+			} else {
+				GUILayout.Label($"{r.Course?.Name ?? r.CourseCode}{laps} · {(r.Settings.Open ? "Open" : "TRC spec")}{(r.Settings.SpeedTrapScoring ? " · speed trap race" : "")} · grid {GridOrders[(int)Math.Min((int)r.Settings.Order, 3)].ToLowerInvariant()}, " +
+					$"{(r.Settings.PoleLeft ? "pole left" : "pole right")} · jump start {(r.Settings.Jump == JumpRule.Disqualify ? "disqualifies" : $"+{r.Settings.JumpPenaltySeconds:0} s")}", Theme.Small);
+			}
 			GUILayout.Label(r.Message, Theme.Body);
 			if (r.RoundTrip > 0) {
 				GUILayout.Label($"Connection to the host: {r.RoundTrip * 1000:0} ms there and back", Theme.Small);
@@ -641,7 +721,29 @@ namespace TRC.TuneLoader {
 				foreach (RaceResultRow row in r.Results) {
 					string gap = row.State == RacerState.Finished && row.Position > 1 && winner > 0 ? $" <color={Theme.MutedHex}>{TimeAttackRun.FormatGap(row.Time - winner)}</color>" : "";
 					string lap = row.BestLap > 0 ? $" <color={Theme.MutedHex}>· best lap {TimeAttackRun.FormatTime(row.BestLap)}</color>" : "";
-					GUILayout.Label($"<b>P{row.Position}</b>  {row.Name}  {RowText(row)}{gap}{lap}", row.Id == MySteamId ? Theme.Body : Theme.Small);
+					GUILayout.BeginHorizontal();
+					string incidents = row.Incidents > 0 ? $" <color={Theme.WarnHex}>· {row.Incidents} incident(s)</color>" : "";
+					GUILayout.Label($"<b>P{row.Position}</b>  {row.Name}  {RowText(row)}{(r.IsGame ? "" : gap + lap)}{incidents}", row.Id == MySteamId ? Theme.Body : Theme.Small);
+					GUILayout.FlexibleSpace();
+					// The host as race director: penalties after the race, and everyone sees the new results.
+					if (r.IsHost && !r.IsGame) {
+						if (GUILayout.Button("+5 s", Theme.Button)) {
+							r.Penalize(row.Id, 5, false, BattleNow);
+							TrcLog.Info($"Race {r.Id}: +5 s for {row.Name}.");
+						}
+						if (GUILayout.Button("+10 s", Theme.Button)) {
+							r.Penalize(row.Id, 10, false, BattleNow);
+							TrcLog.Info($"Race {r.Id}: +10 s for {row.Name}.");
+						}
+						if (GUILayout.Button("DQ", Theme.Button)) {
+							r.Penalize(row.Id, 0, true, BattleNow);
+							TrcLog.Info($"Race {r.Id}: {row.Name} disqualified by the host.");
+						}
+						if ((row.Penalty > 0 || row.State == RacerState.Disqualified) && GUILayout.Button("Clear", Theme.Button)) {
+							r.Penalize(row.Id, 0, false, BattleNow);
+						}
+					}
+					GUILayout.EndHorizontal();
 				}
 				GUILayout.EndVertical();
 			}
@@ -667,6 +769,10 @@ namespace TRC.TuneLoader {
 				if (r.Phase == RacePhase.Gridding && d.Racer) {
 					parts.Add(d.Ready ? $"<color={Theme.GoodHex}>ready</color>" : "lining up");
 				}
+				string rating = RatingOf(d.Id, r.Course?.Kind ?? CourseKind.Touge);
+				if (rating.Length > 0) {
+					parts.Add(rating);
+				}
 				if (d.BestQualifying > 0) {
 					parts.Add($"qualified {TimeAttackRun.FormatTime(d.BestQualifying)}");
 				}
@@ -675,6 +781,12 @@ namespace TRC.TuneLoader {
 				} else if (d.State != RacerState.Racing && racing) {
 					parts.Add($"<color={Theme.BadHex}>{d.State.ToString().ToLowerInvariant()}</color>");
 				}
+				if (r.IsGame && d.Role != RoomRole.None) {
+					parts.Insert(0, d.Role.ToString().ToLowerInvariant());
+				}
+				if (r.IsGame && racing) {
+					parts.Add($"{d.Points} pts{(d.Out ? " (out)" : "")}");
+				}
 				GUILayout.BeginHorizontal();
 				GUILayout.Label($"<b>{d.Name}</b>{(d.Id == r.HostId ? " (host)" : "")}  <color={Theme.MutedHex}>{string.Join(" · ", parts)}</color>", Theme.Body);
 				GUILayout.FlexibleSpace();
@@ -682,6 +794,10 @@ namespace TRC.TuneLoader {
 					r.Kick(d.Id, now);
 				}
 				GUILayout.EndHorizontal();
+				// Race control: the host sees each driver's incidents as their mod reported them.
+				if (r.IsHost && d.IncidentLog.Count > 0) {
+					GUILayout.Label($"<color={Theme.WarnHex}>    {string.Join("  ·  ", d.IncidentLog.Skip(Math.Max(0, d.IncidentLog.Count - 3)))}</color>", Theme.Small);
+				}
 			}
 			GUILayout.EndVertical();
 
@@ -706,7 +822,7 @@ namespace TRC.TuneLoader {
 			switch (r.Phase) {
 				case RacePhase.Lobby:
 				case RacePhase.Finished:
-					if (hostTournament_ > 0 && tournament_ == null) {
+					if (hostTournament_ > 0 && tournament_ == null && !r.IsGame) {
 						if (r.Settings.Order == GridOrder.Qualifying && GUILayout.Button("Start qualifying", Theme.Button)) {
 							r.StartQualifying(now);
 						}
@@ -791,6 +907,10 @@ namespace TRC.TuneLoader {
 				DrawTimer(screenWidth, screenHeight, run, $"Qualifying · {left}{(r.MyDriver?.BestQualifying > 0 ? $" · best {TimeAttackRun.FormatTime(r.MyDriver.BestQualifying)}" : "")}");
 				return;
 			}
+			if (r.IsGame && (r.Phase == RacePhase.Countdown || r.Phase == RacePhase.Running)) {
+				DrawGameHud(screenWidth, screenHeight, r, now);
+				return;
+			}
 			if (r.Phase == RacePhase.Running && run != null && run.State == TimeAttackRun.Phase.Running && r.MyDriver?.State == RacerState.Racing) {
 				List<RaceStanding> standings = r.Standings(now);
 				RaceStanding mine = standings.FirstOrDefault(s => s.Driver.Id == MySteamId);
@@ -811,6 +931,16 @@ namespace TRC.TuneLoader {
 						lines.Add(string.Join(" · ", gaps));
 					}
 				}
+				if (mine != null) {
+					var (yellow, blue) = RaceFlags.For(mine.Progress, r.Course.IsCircuit ? r.Course.Length : 0f,
+						standings.Where(s => s != mine).Select(s => (s.Driver.Name, s.Progress, s.Driver.Kmh, s.Driver.State != RacerState.Racing && s.Driver.State != RacerState.Finished)));
+					if (yellow.Length > 0) {
+						lines.Add($"<color={Theme.WarnHex}>{yellow}</color>");
+					}
+					if (blue.Length > 0) {
+						lines.Add($"<color=#8FB8FF>{blue}</color>");
+					}
+				}
 				if (r.EndAt >= 0) {
 					lines.Add($"<color={Theme.WarnHex}>The race ends in {Math.Max(0, r.EndAt - now):0} s</color>");
 				}
@@ -826,6 +956,22 @@ namespace TRC.TuneLoader {
 				text = $"<b>{r.Settings.Name}</b> · {r.Course?.Name}\n<color={Theme.MutedHex}>{r.Message}</color>";
 			}
 			DrawHudPill(screenWidth, screenHeight, text);
+		}
+
+		/// <summary>A room game over the track: the start count, your part and points, the top three, the time left, and cut-up passes.</summary>
+		private void DrawGameHud(float screenWidth, float screenHeight, RaceSession r, double now) {
+			if (r.Phase == RacePhase.Countdown) {
+				DrawHudPill(screenWidth, screenHeight, $"<b>{RoomModeNames[(int)r.Settings.Mode]}</b>\n<color={Theme.MutedHex}>{r.Message}</color>");
+				return;
+			}
+			var lines = new List<string> { $"<b>{RoomModeNames[(int)r.Settings.Mode]}</b>{(r.EndAt >= 0 ? $" · {Math.Max(0, r.EndAt - now) / 60.0:0.0} min left" : "")}", r.Message };
+			if (r.Settings.Mode != RoomMode.Convoy) {
+				lines.Add($"<color={Theme.MutedHex}>{string.Join("   ", r.Standings(now).Take(3).Select(s => $"{s.Position}. {s.Driver.Name} {s.Driver.Points}"))}</color>");
+			}
+			if (CutUpFlashVisible) {
+				lines.Add(cutUpFlash_);
+			}
+			DrawHudPill(screenWidth, screenHeight, string.Join("\n", lines));
 		}
 
 		/// <summary>An open race this player isn't in, for a while after it first appears.</summary>
@@ -847,8 +993,9 @@ namespace TRC.TuneLoader {
 				return;
 			}
 			Course course = courses_.ByCode(lobby.CourseCode);
-			string text = $"<b>{BattleMessage.PlainName(lobby.HostName)} opened a {(lobby.Lines.Count > 0 ? "tournament" : "race")}</b>\n" +
-				$"<color={Theme.MutedHex}>{course?.Name ?? "a course"} · {lobby.Entries.Count}/{lobby.Settings.MaxPlayers} · press {shortcut_} to join (Battle, Races)</color>";
+			string what = lobby.Settings.Mode != RoomMode.Race ? RoomModeNames[(int)lobby.Settings.Mode].ToLowerInvariant() : lobby.Lines.Count > 0 ? "tournament" : "race";
+			string text = $"<b>{BattleMessage.PlainName(lobby.HostName)} opened a {what}</b>\n" +
+				$"<color={Theme.MutedHex}>{(lobby.Settings.Mode != RoomMode.Race ? "anywhere on the map" : course?.Name ?? "a course")} · {lobby.Entries.Count}/{lobby.Settings.MaxPlayers} · press {shortcut_} to join (Battle, Races)</color>";
 			if (hudRect_.width <= 0f) {
 				DrawHudPill(screenWidth, screenHeight, text);
 				return;

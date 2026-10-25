@@ -42,6 +42,10 @@ namespace TRC.TuneLoader {
 		/// <summary>Milliseconds for each sector, in order (empty for runs from before sectors).</summary>
 		public long[] SectorMs = new long[0];
 
+		/// <summary>The speeds caught at the course's speed traps, in km/h, in the order driven (empty without traps).</summary>
+		public float[] TrapKmh = new float[0];
+		public float TrapTotal => TrapKmh.Sum();
+
 		public bool IsSpec => Spec == TimeAttackLog.SpecWord && FlaggedMods == 0;
 		public bool IsLap => LapNumber > 0;
 		public double Seconds => TimeMs / 1000.0;
@@ -72,7 +76,7 @@ namespace TRC.TuneLoader {
 		private static readonly string[] Columns = {
 			"date", "course_code", "course", "map", "map_name", "official_course", "car_id", "car", "setup",
 			"tune_code", "tune_set", "spec", "flagged_mods", "time_ms", "loader_version",
-			"start", "laps", "lap", "sectors_ms",
+			"start", "laps", "lap", "sectors_ms", "traps_kmh",
 		};
 
 		/// <summary>The first columns, which every line has (lines from before 0.11 have only these).</summary>
@@ -98,6 +102,7 @@ namespace TRC.TuneLoader {
 				record.Laps.ToString(CultureInfo.InvariantCulture),
 				record.LapNumber.ToString(CultureInfo.InvariantCulture),
 				string.Join("|", record.SectorMs.Select(ms => ms.ToString(CultureInfo.InvariantCulture))),
+				string.Join("|", record.TrapKmh.Select(k => k.ToString("0.0", CultureInfo.InvariantCulture))),
 			};
 			text.Append(string.Join(",", fields.Select(Quote))).Append('\n');
 			File.AppendAllText(path, text.ToString(), new UTF8Encoding(false));
@@ -142,7 +147,8 @@ namespace TRC.TuneLoader {
 					TimeMs = ms,
 					LoaderVersion = f[14],
 				};
-				if (f.Count >= Columns.Length) {
+				// Columns added later are read when the line has them (0.11: start, laps, lap, sectors; 0.13: traps).
+				if (f.Count >= 19) {
 					record.Flying = f[15] == "flying";
 					int.TryParse(f[16], NumberStyles.None, CultureInfo.InvariantCulture, out record.Laps);
 					int.TryParse(f[17], NumberStyles.None, CultureInfo.InvariantCulture, out record.LapNumber);
@@ -151,6 +157,14 @@ namespace TRC.TuneLoader {
 						.ToArray();
 					if (record.SectorMs.Any(v => v < 0)) {
 						record.SectorMs = new long[0];
+					}
+				}
+				if (f.Count >= 20) {
+					record.TrapKmh = f[19].Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries)
+						.Select(t => float.TryParse(t, NumberStyles.Float, CultureInfo.InvariantCulture, out float v) ? v : -1f)
+						.ToArray();
+					if (record.TrapKmh.Any(v => v < 0)) {
+						record.TrapKmh = new float[0];
 					}
 				}
 				records.Add(record);

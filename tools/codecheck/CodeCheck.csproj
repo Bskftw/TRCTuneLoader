@@ -39,6 +39,9 @@
     <Compile Include="..\..\src\Races\RaceMessage.cs" Link="src\Races\RaceMessage.cs" />
     <Compile Include="..\..\src\Races\RaceSession.cs" Link="src\Races\RaceSession.cs" />
     <Compile Include="..\..\src\Races\Tournament.cs" Link="src\Races\Tournament.cs" />
+    <Compile Include="..\..\src\Races\RaceControl.cs" Link="src\Races\RaceControl.cs" />
+    <Compile Include="..\..\src\Races\Ratings.cs" Link="src\Races\Ratings.cs" />
+    <Compile Include="..\..\src\Courses\SpeedTrap.cs" Link="src\Courses\SpeedTrap.cs" />
     <Compile Include="..\..\src\TuneBackups.cs" Link="src\TuneBackups.cs" />
     <Compile Include="..\..\src\ICarTuneAdapter.cs" Link="src\ICarTuneAdapter.cs" />
   </ItemGroup>

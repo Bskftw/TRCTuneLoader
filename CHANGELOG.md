@@ -2,6 +2,48 @@
 
 All versions of TRC Tune Loader, newest first. "Not tested in game yet" means the version builds and its automatic tests pass, but nobody has tried it in CarX yet.
 
+## 0.13.0 (Oct 25 2026)
+
+Not tested in game yet. Speed traps, ratings and licenses, your best line on the road, race control, room games and highway battles. Everyone needs 0.13.0, for races and for battles.
+
+**New: speed traps**
+- **Free roam:** drive through a speed trap anywhere on the map and your speed flashes on screen, NFS Most Wanted style: **purple** for a new best on that trap, **green** close to it, **amber** slower. Every trap keeps your best speed.
+- **Courses here, Speed traps:** your traps and bests on this map, **Free-roam traps on / Off**, and **Add speed trap here** to place your own where your car is.
+- **Traps on a course:** in a course's **Edit**, add speed traps along the road. They flash during time attacks, battles and races, and your trap speeds are saved with the time.
+- **Speed trap races:** the host can score a race on the total of everyone's trap speeds instead of the time.
+- Maps can have their own speed traps, on the road or on a course.
+
+**New: ratings and licenses**
+- An **Elo rating** for touge, highway and circuit, moved by TRC spec battles and races.
+- A **Safety Rating** like iRacing: clean kilometres raise it, incidents lower it (resets, hits, possible contact, leaving the road, jump starts).
+- **Licenses:** Rookie, D, C, B, A. Keep your Safety Rating at 3.00 or more over enough events to go up; below 1.00 you go down one.
+- **My times, Ratings** shows yours and the latest changes. Other TRC Tune Loader players see your license and Elo on the Players page and in races.
+- Kept on your PC for now. They'll be checked and shared once the TRC server is up.
+
+**New: your best line**
+- During a time attack, where you drove on your best run (or best lap) in this car shows as dots on the road, coloured by speed (blue slow to red fast) or in one colour.
+- **Options, Best line:** speed colours, one colour, or off.
+
+**New: race control**
+- **Incidents:** a sudden stop next to another car is logged as possible contact, anywhere else as a hit. The host sees each driver's incidents.
+- **Host penalties:** in the results the host can give +5 s or +10 s, disqualify, or clear it.
+- **Flags:** yellow when a car ahead is stopped or off the road, blue when a faster car a lap ahead is right behind you.
+
+**New: room games** (Battle, Races & tournaments, What to play)
+- **Cops and runners:** a runner stopped next to a cop for 3 s is busted and becomes a cop.
+- **Tag** and **Infected:** touch to pass it on, or to spread it.
+- **King of the hill:** stay alone in the zone.
+- **Keep-up:** stay with the host or you're out.
+- **Convoy cruise:** follow the host, no winner.
+- **Highway cut-up:** points for close, fast passes on other players, with combos up to x10. A hit loses the combo.
+- They're played anywhere on the map, no course needed, in rounds of 3 to 15 minutes.
+
+**New: highway battles**
+- A third 1v1 format, Tokyo Xtreme Racer style: drive alongside each other, a rolling 3-2-1, then whoever is behind loses SP, faster the bigger the gap. A hit costs SP too. Empty SP, or 600 m behind, loses. No course needed.
+
+**Changed**
+- Battles and races changed format: they need 0.13.0 on every player.
+
 ## 0.12.0 (Oct 25 2026)
 
 Not tested in game yet. Open races and tournaments for up to 16 drivers. Everyone needs 0.12.0, for races and for battles.
@@ -37,9 +79,9 @@ Not tested in game yet. Open races and tournaments for up to 16 drivers. Everyon
 - The result at the finish shows them in the same colours, and **My times** shows each best time's sectors and every recent time's sectors, coloured against your other times.
 - **Options:** Show or Hide sector times.
 
-**Changed: other players' tunes stay private**
-- On the Players page, a player with a modified TRC tune now shows only **what** is changed ("Front spring stiffness: changed"), never the values. The same goes for their stance, engine, gearbox and suspension. Nobody can copy someone's own tune from the mod any more. Your own car still shows every number.
-- **Options → Share my tune values** (off by default): turn it on and other TRC Tune Loader users see your real numbers, like before. Players without the mod, or on an older version, are always shown without values.
+**New: private tunes**
+- On the Players page, a player with a modified TRC tune shows only **what** is changed ("Front spring stiffness: changed"), not the values. The same goes for their stance, engine, gearbox and suspension. Your own car shows every number.
+- **Options → Share my tune values** (off by default): turn it on if you don't mind other TRC Tune Loader users seeing your real numbers.
 
 **Changed**
 - The Battle view has two parts: 1v1 battles, and Races & tournaments.

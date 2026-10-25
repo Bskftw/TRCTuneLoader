@@ -567,6 +567,9 @@ namespace TRC.TuneLoader {
 				lines.Add(player.IsLocal ? "That's you: see the Mod check tab." : "No report: this player doesn't seem to run TRC Tune Loader, or hasn't answered yet.");
 			} else {
 				lines.Add($"Version {report.LoaderVersion}, reported at {report.ReceivedAt:HH:mm:ss}. Self-reported: a player who edits the game could fake it.");
+				if (report.HasRatings) {
+					lines.Add($"TRC ratings (kept on their PC for now): {report.Badge} license · Elo touge {report.EloTouge:0}, highway {report.EloHighway:0}, circuit {report.EloCircuit:0}");
+				}
 				lines.Add($"Their own check: setup {(report.SetupOfficial ? $"{report.SetupSet} spec" : $"modified ({report.SetupDifferences})")}, code {report.SetupCode}; " +
 					$"stance {(report.StanceDifferences == 0 ? "stock" : $"changed by a body kit ({report.StanceDifferences})")}; live car {LiveText(report)}");
 				if (!string.IsNullOrEmpty(report.Engine)) {

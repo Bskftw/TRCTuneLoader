@@ -26,6 +26,9 @@ namespace TRC.TuneLoader {
 	///                               finish object. Its path comes from Record path (once round).
 	///   TRC Akina Downhill Grid 1   optional: race grid spots, 1 (pole) to 16, each in the middle of where a car
 	///                               lines up, its blue (Z) arrow pointing the way the cars face.
+	///   TRC Akina Downhill Trap 1   optional: speed traps along the course, numbered in driving order, set up like a
+	///                               start line (blue arrow the way you drive, X scale the road width).
+	///   TRC Speed Trap Akina Bridge a free-roam speed trap anywhere on the map, set up the same way (either way counts).
 	///
 	/// A course whose name ends in "Downhill" also gets an uphill twin ("Akina Uphill") with the start and
 	/// finish swapped, unless the map has its own "TRC Start Akina Uphill". A circuit gets a reverse twin
@@ -41,6 +44,7 @@ namespace TRC.TuneLoader {
 		private const string UphillWord = "uphill";
 		private const string SectorWord = "sector";
 		private const string GridWord = "grid";
+		private const string TrapWord = "trap";
 		private const string CircuitWord = "circuit";
 		private const string ReverseWord = "reverse";
 
@@ -57,12 +61,14 @@ namespace TRC.TuneLoader {
 			public Transform Path;
 			public SortedDictionary<int, Transform> Sectors = new SortedDictionary<int, Transform>();
 			public SortedDictionary<int, Transform> Grid = new SortedDictionary<int, Transform>();
+			public SortedDictionary<int, Transform> Traps = new SortedDictionary<int, Transform>();
 			public List<string> Duplicates = new List<string>();
 		}
 
 		/// <summary>Every TRC course in the loaded map. <paramref name="summary"/> says what was found, for the log and the Courses tab.</summary>
 		public static List<Course> Scan(string mapKey, string mapName, out string summary) {
 			var timer = Stopwatch.StartNew();
+			SpeedTraps.Clear();
 			var found = new Dictionary<string, Parts>(StringComparer.Ordinal);
 			var roads = new Dictionary<string, HashSet<int>>(StringComparer.Ordinal);
 			var roadNames = new Dictionary<string, List<string>>(StringComparer.Ordinal);
@@ -78,14 +84,23 @@ namespace TRC.TuneLoader {
 				}
 
 				string[] words = Words(name);
-				foreach (string numbered in new[] { SectorWord, GridWord }) {
+				// "TRC Speed Trap Akina Bridge": a free-roam speed trap.
+				int trcAt = Array.IndexOf(words, "trc");
+				if (trcAt >= 0 && trcAt + 3 < words.Length && words[trcAt + 1] == "speed" && words[trcAt + 2] == TrapWord) {
+					float trapWidth = Mathf.Abs(transform.lossyScale.x);
+					if (CourseGate.TryMake(transform.position, transform.forward, trapWidth > 2f ? trapWidth : CourseGeometry.DefaultWidth, out CourseGate gate)) {
+						SpeedTraps.Add(new SpeedTrap { Name = DisplayName(name, trcAt + 3), Gate = gate, MapKey = mapKey, Source = CourseSource.Map });
+					}
+					continue;
+				}
+				foreach (string numbered in new[] { SectorWord, GridWord, TrapWord }) {
 					if (!TryParseNumbered(words, numbered, out string ownerKey, out int number)) {
 						continue;
 					}
 					if (!found.TryGetValue(ownerKey, out Parts owner)) {
 						found[ownerKey] = owner = new Parts { Name = ownerKey };
 					}
-					SortedDictionary<int, Transform> list = numbered == SectorWord ? owner.Sectors : owner.Grid;
+					SortedDictionary<int, Transform> list = numbered == SectorWord ? owner.Sectors : numbered == GridWord ? owner.Grid : owner.Traps;
 					if (list.ContainsKey(number)) {
 						owner.Duplicates.Add($"Two objects are named '{name}': the first one found is used.");
 					} else {
@@ -166,6 +181,9 @@ namespace TRC.TuneLoader {
 				: $"{courses.Count} course(s) and {roads.Count} TRC road(s) from TRC objects in this map ({objects} objects looked at in {timer.ElapsedMilliseconds} ms).{others}";
 			return courses;
 		}
+
+		/// <summary>The map's free-roam speed traps ("TRC Speed Trap &lt;name&gt;") from the last scan.</summary>
+		public static List<SpeedTrap> SpeedTraps { get; } = new List<SpeedTrap>();
 
 		/// <summary>Details of the last scan for the log: the TRC roads found and TRC names that weren't understood.</summary>
 		public static List<string> Lines { get; } = new List<string>();
@@ -273,6 +291,12 @@ namespace TRC.TuneLoader {
 			course.FinishObject = parts.Finish;
 
 			course.SectorPoints = parts.Sectors.Values.Select(t => t.position).ToList();
+			foreach (Transform t in parts.Traps.Values) {
+				float trapWidth = Mathf.Abs(t.lossyScale.x);
+				if (CourseGate.TryMake(t.position, t.forward, trapWidth > 2f ? trapWidth : CourseGeometry.DefaultWidth, out CourseGate trap)) {
+					course.Traps.Add(trap);
+				}
+			}
 			course.GridObjects = parts.Grid.Values
 				.Select(t => new GridSpot { Position = t.position, Forward = CourseGeometry.Level(t.forward) == Vector3.zero ? Vector3.forward : CourseGeometry.Level(t.forward) })
 				.ToList();

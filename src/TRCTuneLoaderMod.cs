@@ -23,7 +23,7 @@ namespace TRC.TuneLoader {
 	/// </summary>
 	[KSLMeta("TRCTuneLoader", Version, "bskftw")]
 	public partial class TRCTuneLoaderMod : BaseMod {
-		public const string Version = "0.12.0";
+		public const string Version = "0.13.0";
 
 		private const string BackupsFolderName = "Backups";
 		private const float CarRefreshSeconds = 1.0f;
@@ -121,6 +121,7 @@ namespace TRC.TuneLoader {
 			try {
 				SetupCourses();
 				SetupBattles();
+				SetupRatings();
 				SetupRaces();
 			} catch (Exception e) {
 				TrcLog.Error(e);
@@ -181,6 +182,13 @@ namespace TRC.TuneLoader {
 					battle_.Leave(BattleNow);
 					battleResult_ = $"Battle problem: {e.Message}";
 				}
+				if (courseErrors_++ < 6) {
+					TrcLog.Error(e);
+				}
+			}
+			try {
+				UpdateControl();
+			} catch (Exception e) {
 				if (courseErrors_++ < 6) {
 					TrcLog.Error(e);
 				}
@@ -672,6 +680,13 @@ namespace TRC.TuneLoader {
 					}
 				}
 				report.ShareValues = shareValues_;
+				if (ratings_ != null) {
+					report.EloTouge = (float)ratings_.Elo[0];
+					report.EloHighway = (float)ratings_.Elo[1];
+					report.EloCircuit = (float)ratings_.Elo[2];
+					report.Safety = (float)ratings_.Safety;
+					report.License = (byte)ratings_.License;
+				}
 
 				return report;
 			} catch (Exception e) {

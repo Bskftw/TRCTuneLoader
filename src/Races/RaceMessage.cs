@@ -13,6 +13,12 @@ namespace TRC.TuneLoader {
 	/// <summary>Where a driver stands in a race.</summary>
 	public enum RacerState : byte { Racing, Finished, Out, Disqualified, Eliminated }
 
+	/// <summary>What the lobby plays: a race, or one of the room games played anywhere on the map.</summary>
+	public enum RoomMode : byte { Race, CopsAndRunners, Tag, Infected, KingOfTheHill, KeepUp, Convoy, CutUp }
+
+	/// <summary>A driver's part in a room game.</summary>
+	public enum RoomRole : byte { None, Cop, Runner, It, Infected, Leader }
+
 	public enum RaceKind : byte {
 		/// <summary>The host opens the race, someone joins: Join, Leave.</summary>
 		Lobby = 1, Join = 2, Leave = 3,
@@ -55,6 +61,16 @@ namespace TRC.TuneLoader {
 		public int QualifyingMinutes = 10;
 		public int QualifyingRuns;
 
+		/// <summary>A speed trap race: finishers are ranked on the total of their speeds at the course's traps, not their time.</summary>
+		public bool SpeedTrapScoring;
+
+		/// <summary>The room game, and its rules: how long a round lasts (minutes), how many cops, the hill's time to win, keep-up's gap.</summary>
+		public RoomMode Mode;
+		public int RoundMinutes = 10;
+		public int Cops = 1;
+		public int HillSeconds = 60;
+		public int KeepUpMetres = 250;
+
 		public void Write(BinaryWriter w) {
 			w.Write(RaceMessage.Clip(Name));
 			w.Write((byte)MaxPlayers);
@@ -69,6 +85,12 @@ namespace TRC.TuneLoader {
 			w.Write(Elimination);
 			w.Write((byte)Mathf.Clamp(QualifyingMinutes, 1, 255));
 			w.Write((byte)Mathf.Clamp(QualifyingRuns, 0, 255));
+			w.Write(SpeedTrapScoring);
+			w.Write((byte)Mode);
+			w.Write((byte)Mathf.Clamp(RoundMinutes, 1, 255));
+			w.Write((byte)Mathf.Clamp(Cops, 1, 15));
+			w.Write((ushort)Mathf.Clamp(HillSeconds, 5, 3600));
+			w.Write((ushort)Mathf.Clamp(KeepUpMetres, 20, 5000));
 		}
 
 		public static RaceSettings Read(BinaryReader r) => new RaceSettings {
@@ -85,6 +107,12 @@ namespace TRC.TuneLoader {
 			Elimination = r.ReadBoolean(),
 			QualifyingMinutes = Math.Max(1, (int)r.ReadByte()),
 			QualifyingRuns = r.ReadByte(),
+			SpeedTrapScoring = r.ReadBoolean(),
+			Mode = (RoomMode)r.ReadByte(),
+			RoundMinutes = Math.Max(1, (int)r.ReadByte()),
+			Cops = Math.Max(1, (int)r.ReadByte()),
+			HillSeconds = r.ReadUInt16(),
+			KeepUpMetres = r.ReadUInt16(),
 		};
 
 		public RaceSettings Copy() => (RaceSettings)MemberwiseClone();
@@ -103,6 +131,11 @@ namespace TRC.TuneLoader {
 
 		/// <summary>Elimination races: the lap they were knocked out on (0 = still in).</summary>
 		public int EliminatedOnLap;
+
+		/// <summary>Room games: their part, their points (as the host keeps them), and whether they're out.</summary>
+		public RoomRole Role;
+		public int Points;
+		public bool Out;
 	}
 
 	/// <summary>A driver's place in a race's results.</summary>
@@ -117,6 +150,13 @@ namespace TRC.TuneLoader {
 		public double Penalty;
 		public string Reason = "";
 		public double BestLap;
+
+		/// <summary>Speed trap races: the total of their speeds at the traps. Room games: their points.</summary>
+		public float TrapTotal;
+		public int Points;
+
+		/// <summary>Incidents the driver's own mod saw in the race (resets, off the road, possible contact...).</summary>
+		public int Incidents;
 	}
 
 	/// <summary>
@@ -124,7 +164,8 @@ namespace TRC.TuneLoader {
 	/// to the whole room, says who it's from, and is ignored by mods that aren't in that race.
 	/// </summary>
 	public sealed class RaceMessage {
-		public const byte Protocol = 1;
+		/// <summary>2 since 0.13.0: positions, incidents, speed traps and room games.</summary>
+		public const byte Protocol = 2;
 		private const int MaxText = 160;
 		private const int MaxLines = 24;
 
@@ -180,6 +221,21 @@ namespace TRC.TuneLoader {
 		public int QualifyingRuns;
 		public double PersonalBest;
 
+		/// <summary>Where the car is on the map, the way it points, and its speed (km/h): for room games, flags and contact.</summary>
+		public Vector3 Position;
+		public Vector3 Heading;
+		public float Speed;
+		public float TrapTotal;
+		public int Incidents;
+		public string LastIncident = "";
+
+		/// <summary>Room games: this driver's own points (cut-up), or seconds (king of the hill) as their mod counts them.</summary>
+		public float Score;
+
+		// HostBeat (room games)
+		/// <summary>King of the hill: where the hill is, and how far it reaches.</summary>
+		public Vector3 Zone;
+		public float ZoneRadius;
 		// HostBeat
 		public double GoHostTime;
 		public int CountdownId;
@@ -215,6 +271,9 @@ namespace TRC.TuneLoader {
 							w.Write(e.Racer);
 							w.Write((sbyte)Mathf.Clamp(e.Slot, -1, 100));
 							w.Write((byte)Mathf.Clamp(e.EliminatedOnLap, 0, 255));
+							w.Write((byte)e.Role);
+							w.Write(e.Points);
+							w.Write(e.Out);
 						}
 						w.Write((byte)Math.Min(Kicked.Count, 32));
 						for (int i = 0; i < Kicked.Count && i < 32; i++) {
@@ -273,6 +332,16 @@ namespace TRC.TuneLoader {
 						w.Write(BestQualifying);
 						w.Write((byte)Mathf.Clamp(QualifyingRuns, 0, 255));
 						w.Write(PersonalBest);
+						w.Write(Position.x);
+						w.Write(Position.y);
+						w.Write(Position.z);
+						w.Write(Heading.x);
+						w.Write(Heading.z);
+						w.Write(Speed);
+						w.Write(TrapTotal);
+						w.Write((ushort)Mathf.Clamp(Incidents, 0, 65535));
+						w.Write(Clip(LastIncident));
+						w.Write(Score);
 						break;
 					case RaceKind.HostBeat:
 						w.Write(SentAt);
@@ -287,6 +356,10 @@ namespace TRC.TuneLoader {
 							w.Write(Echoes[i].Echo);
 							w.Write((float)Echoes[i].Hold);
 						}
+						w.Write(Zone.x);
+						w.Write(Zone.y);
+						w.Write(Zone.z);
+						w.Write(ZoneRadius);
 						break;
 					case RaceKind.Results:
 						w.Write((byte)Math.Min(Rows.Count, RaceSettings.MaxDrivers));
@@ -300,6 +373,9 @@ namespace TRC.TuneLoader {
 							w.Write((float)row.Penalty);
 							w.Write(Clip(row.Reason));
 							w.Write(row.BestLap);
+							w.Write(row.TrapTotal);
+							w.Write(row.Points);
+							w.Write((ushort)Mathf.Clamp(row.Incidents, 0, 65535));
 						}
 						break;
 					case RaceKind.MatchReport:
@@ -336,6 +412,7 @@ namespace TRC.TuneLoader {
 							for (int i = 0; i < count; i++) {
 								m.Entries.Add(new LobbyEntry {
 									Id = r.ReadUInt64(), Name = Clip(r.ReadString()), Racer = r.ReadBoolean(), Slot = r.ReadSByte(), EliminatedOnLap = r.ReadByte(),
+									Role = (RoomRole)r.ReadByte(), Points = r.ReadInt32(), Out = r.ReadBoolean(),
 								});
 							}
 							int kicked = r.ReadByte();
@@ -398,6 +475,13 @@ namespace TRC.TuneLoader {
 							m.BestQualifying = r.ReadDouble();
 							m.QualifyingRuns = r.ReadByte();
 							m.PersonalBest = r.ReadDouble();
+							m.Position = new Vector3(r.ReadSingle(), r.ReadSingle(), r.ReadSingle());
+							m.Heading = new Vector3(r.ReadSingle(), 0f, r.ReadSingle());
+							m.Speed = r.ReadSingle();
+							m.TrapTotal = r.ReadSingle();
+							m.Incidents = r.ReadUInt16();
+							m.LastIncident = Clip(r.ReadString());
+							m.Score = r.ReadSingle();
 							break;
 						case RaceKind.HostBeat: {
 							m.SentAt = r.ReadDouble();
@@ -410,6 +494,8 @@ namespace TRC.TuneLoader {
 							for (int i = 0; i < count; i++) {
 								m.Echoes.Add((r.ReadUInt64(), r.ReadDouble(), r.ReadSingle()));
 							}
+							m.Zone = new Vector3(r.ReadSingle(), r.ReadSingle(), r.ReadSingle());
+							m.ZoneRadius = r.ReadSingle();
 							break;
 						}
 						case RaceKind.Results: {
@@ -418,6 +504,7 @@ namespace TRC.TuneLoader {
 								m.Rows.Add(new RaceResultRow {
 									Id = r.ReadUInt64(), Name = Clip(r.ReadString()), Position = r.ReadByte(), State = (RacerState)r.ReadByte(),
 									Time = r.ReadDouble(), Penalty = r.ReadSingle(), Reason = Clip(r.ReadString()), BestLap = r.ReadDouble(),
+									TrapTotal = r.ReadSingle(), Points = r.ReadInt32(), Incidents = r.ReadUInt16(),
 								});
 							}
 							break;

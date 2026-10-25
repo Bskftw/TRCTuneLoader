@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Globalization;
 using System.IO;
 using System.Text;
@@ -31,6 +32,9 @@ namespace TRC.TuneLoader {
 	///   12.3, 45.6, -78.9             (points along the middle of the road, start to finish; a circuit's go
 	///                                  once round, back to the start line)
 	///   ...
+	///
+	///   [traps]                       (optional: speed traps along the course, in order)
+	///   12.3, 45.6, -78.9, 0.6, -0.8, 12   (position, direction x and z, width)
 	///
 	///   [grid]                        (optional: where race grids line up)
 	///   layout = grid                 (grid: two-wide, staggered; lineup: one behind the other)
@@ -72,6 +76,16 @@ namespace TRC.TuneLoader {
 					continue;
 				}
 
+				if (section == "traps") {
+					string[] parts = line.Split(',');
+					float[] n = parts.Select(p => TuneRules.TryParseValue(TuneRules.Trim(p), out float v) ? v : float.NaN).ToArray();
+					if (n.Length == 6 && n.All(x => !float.IsNaN(x)) && CourseGate.TryMake(new Vector3(n[0], n[1], n[2]), new Vector3(n[3], 0f, n[4]), n[5], out CourseGate trap)) {
+						course.Traps.Add(trap);
+					} else {
+						course.Problems.Add($"Line {lineNumber}: a speed trap should be six numbers: position, direction (x and z) and width");
+					}
+					continue;
+				}
 				if (section == "grid" && line.IndexOf('=') < 0) {
 					if (TryParseVector(line, 3, out Vector3 point)) {
 						grid.Add(point);
@@ -171,6 +185,13 @@ namespace TRC.TuneLoader {
 				text.Append("\n[path]\n");
 				foreach (Vector3 point in course.Path) {
 					text.Append(Number(point.x, 2)).Append(", ").Append(Number(point.y, 2)).Append(", ").Append(Number(point.z, 2)).Append('\n');
+				}
+			}
+			if (course.Traps.Count > 0) {
+				text.Append("\n[traps]\n");
+				foreach (CourseGate t in course.Traps) {
+					text.Append(Number(t.Center.x, 2)).Append(", ").Append(Number(t.Center.y, 2)).Append(", ").Append(Number(t.Center.z, 2)).Append(", ")
+						.Append(Number(t.Forward.x, 4)).Append(", ").Append(Number(t.Forward.z, 4)).Append(", ").Append(Number(t.Width, 1)).Append('\n');
 				}
 			}
 			if (course.GridPath.Count >= 2) {

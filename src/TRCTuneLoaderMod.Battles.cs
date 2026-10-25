@@ -12,10 +12,10 @@ namespace TRC.TuneLoader {
 	/// messages go through BattleSync.
 	/// </summary>
 	public partial class TRCTuneLoaderMod {
-		/// <summary>Players need at least this TRC Tune Loader version to battle (battle messages changed in 0.10.1, 0.11.0 and 0.12.0).</summary>
-		private static readonly System.Version BattleVersion = new System.Version(0, 12, 0);
+		/// <summary>Players need at least this TRC Tune Loader version to battle (battle messages changed in 0.10.1, 0.11.0, 0.12.0 and 0.13.0).</summary>
+		private static readonly System.Version BattleVersion = new System.Version(0, 13, 0);
 		private static readonly int[] BattleLapChoices = { 1, 2, 3, 5 };
-		private static readonly string[] BattleFormats = { "Side-by-side race", "Cat and mouse" };
+		private static readonly string[] BattleFormats = { "Side-by-side race", "Cat and mouse", "Highway battle (SP)" };
 		private static readonly string[] BattleModes = { "TRC spec", "Open" };
 		private const float InviteSeconds = 45f;
 
@@ -107,6 +107,7 @@ namespace TRC.TuneLoader {
 			if (!battle_.Active && battleEndedAt_ < 0) {
 				battleEndedAt_ = Time.unscaledTime;
 				ReportMatchBattle(battle_);
+				RateBattle(battle_);
 				TrcLog.Info($"Battle {battle_.Id} vs {battle_.PeerName} on {battle_.Course.Name}: {battle_.Message} ({BattleLog.ResultOf(battle_)}, {battle_.Runs.Count} run(s)).");
 				if (battle_.Started && !battleLogged_) {
 					battleLogged_ = true;
@@ -333,6 +334,14 @@ namespace TRC.TuneLoader {
 		/// </summary>
 		private Course CourseForChallenge(BattleMessage challenge, out string problem) {
 			problem = "";
+			if (challenge.Format == BattleFormat.Highway) {
+				// No course: anywhere on the map.
+				if (map_ == null) {
+					problem = "drive onto the map first";
+					return null;
+				}
+				return Course.FreeRoam(map_.Key);
+			}
 			Course course = challenge.Course ?? courses_.ByCode(challenge.CourseCode);
 			if (course == null) {
 				problem = "you don't have this course (another version of the map?)";
@@ -448,7 +457,7 @@ namespace TRC.TuneLoader {
 			}
 
 			GUILayout.BeginHorizontal();
-			if (b.State == BattleSession.Phase.Gridding && GUILayout.Button("Teleport to my spot", Theme.ButtonPrimary)) {
+			if (b.State == BattleSession.Phase.Gridding && !b.IsHighway && GUILayout.Button("Teleport to my spot", Theme.ButtonPrimary)) {
 				TeleportToBattleSpot();
 			}
 			if (b.Active) {
@@ -457,14 +466,14 @@ namespace TRC.TuneLoader {
 				}
 			} else {
 				PlayerRow peer = players_.FirstOrDefault(p => p.Player.SteamId == b.Peer);
-				if (peer != null && b.Course.Usable && GUILayout.Button("Rematch", Theme.ButtonPrimary)) {
+				if (peer != null && (b.Course.Usable || b.IsHighway) && GUILayout.Button("Rematch", Theme.ButtonPrimary)) {
 					pickedFormat_ = (int)b.Format;
 					pickedMode_ = b.Open ? 1 : 0;
 					pickedBattleLaps_ = Math.Max(0, Array.IndexOf(BattleLapChoices, b.Laps));
 					ChallengePlayer(peer, b.Course);
 				}
 				// A course that came with the challenge (theirs, not one this PC has): keep it to practise on.
-				if (!b.IsHost && b.Course.Source == CourseSource.Custom && string.IsNullOrEmpty(b.Course.FilePath) &&
+				if (!b.IsHost && !b.IsHighway && b.Course.Source == CourseSource.Custom && string.IsNullOrEmpty(b.Course.FilePath) &&
 					GUILayout.Button("Save this course", Theme.Button)) {
 					SaveChallengeCourse(b.Course, $"{b.PeerName}'s course");
 				}
@@ -517,7 +526,9 @@ namespace TRC.TuneLoader {
 
 			GUILayout.Label("Format", Theme.SectionLabel);
 			pickedFormat_ = Choice(BattleFormats, pickedFormat_);
-			GUILayout.Label(pickedFormat_ == 1
+			GUILayout.Label(pickedFormat_ == 2
+				? $"Tokyo Xtreme Racer style, anywhere on the map, no course: drive alongside each other at speed, a rolling 3-2-1, then whoever's behind loses SP (faster the bigger the gap; a hit costs {BattleSession.HitSp:0}). Empty SP, or {BattleSession.LostMetres:0} m behind, loses."
+				: pickedFormat_ == 1
 				? $"Runs swap who leads. The chaser wins a run by passing and staying ahead to the finish; the leader wins by finishing {BattleRules.LeaderGapSeconds:0.0} s or more ahead (1.0 s after both have led once, then 0.5 s). Otherwise swap and go again."
 				: "Side by side from a standing start. The faster time to the finish wins.", Theme.Small);
 			if (courses.FirstOrDefault(c => c.Code == pickedCourse_)?.IsCircuit == true) {
@@ -532,9 +543,10 @@ namespace TRC.TuneLoader {
 			Course picked = courses.FirstOrDefault(c => c.Code == pickedCourse_);
 			GUILayout.BeginHorizontal();
 			bool ready = GUI.enabled;
-			GUI.enabled = ready && opponent != null && picked != null;
+			bool highway = pickedFormat_ == (int)BattleFormat.Highway;
+			GUI.enabled = ready && opponent != null && (picked != null || highway);
 			if (GUILayout.Button(opponent == null ? "Challenge" : $"Challenge {opponent.Player.Name}", Theme.ButtonPrimary)) {
-				ChallengePlayer(opponent, picked);
+				ChallengePlayer(opponent, highway ? Course.FreeRoam(map_.Key) : picked);
 			}
 			GUI.enabled = ready;
 			GUILayout.FlexibleSpace();
@@ -544,9 +556,45 @@ namespace TRC.TuneLoader {
 
 		// ---- Over the track ----
 
+		/// <summary>A highway battle: the rolling countdown, then both SP bars (yours and theirs) and the gap.</summary>
+		private void DrawHighwayHud(float screenWidth, float screenHeight, BattleSession b) {
+			if (b.State == BattleSession.Phase.Countdown && b.Message.Length > 0) {
+				GUI.Label(new Rect(0f, screenHeight * 0.3f, screenWidth, 160f), b.Message, Theme.HudBig);
+				return;
+			}
+			if (b.State != BattleSession.Phase.Running) {
+				DrawHudPill(screenWidth, screenHeight, $"<b>Highway battle vs {b.PeerName}</b>\n<color={Theme.MutedHex}>{b.Message}</color>");
+				return;
+			}
+			float width = Mathf.Min(340f, screenWidth - 2 * HudMargin);
+			Rect rect = HudRect(screenWidth, screenHeight, width, 78f);
+			hudRect_ = rect;
+			HandleHudDrag(rect, screenWidth, screenHeight);
+			if (Event.current.type != EventType.Repaint) {
+				return;
+			}
+			GUI.Box(rect, GUIContent.none, Theme.HudPanel);
+			void Bar(float y, string who, float sp, Texture2D fill) {
+				GUI.Label(new Rect(rect.x + 12f, y, 90f, 18f), who, Theme.HudSmall);
+				var back = new Rect(rect.x + 100f, y + 5f, rect.width - 150f, 8f);
+				GUI.DrawTexture(back, Theme.ProgressBack);
+				GUI.DrawTexture(new Rect(back.x, back.y, back.width * Mathf.Clamp01(sp / BattleSession.FullSp), back.height), fill);
+				GUI.Label(new Rect(back.xMax + 6f, y, 40f, 18f), $"{sp:0}", Theme.HudSmall);
+			}
+			Bar(rect.y + 8f, "You", b.MySp, Theme.AccentLine);
+			Bar(rect.y + 30f, b.PeerName, b.PeerSp, Theme.FinishLine);
+			string gap = Mathf.Abs(b.HighwayGap) < 3f ? "Side by side" : b.HighwayGap > 0 ? $"Ahead by {b.HighwayGap:0} m" : $"Behind by {-b.HighwayGap:0} m: losing SP";
+			GUI.Label(new Rect(rect.x, rect.y + 52f, rect.width, 20f), gap, Theme.HudSmall);
+			DrawMoveHint(rect);
+		}
+
 		/// <summary>The battle over the track: the countdown, the timer with the gap, and messages.</summary>
 		private void DrawBattleHud(float screenWidth, float screenHeight) {
 			BattleSession b = battle_;
+			if (b.IsHighway) {
+				DrawHighwayHud(screenWidth, screenHeight, b);
+				return;
+			}
 			TimeAttackRun run = b.Run;
 			if (b.State == BattleSession.Phase.Countdown && run.CountdownNumber > 0) {
 				GUI.Label(new Rect(0f, screenHeight * 0.3f, screenWidth, 160f), run.CountdownNumber.ToString(CultureInfo.InvariantCulture), Theme.HudBig);

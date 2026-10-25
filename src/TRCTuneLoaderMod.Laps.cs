@@ -22,6 +22,14 @@ namespace TRC.TuneLoader {
 		private const float FlashSeconds = 4f;
 
 		private const string SectorsPref = "show_sectors";
+		private const string BestLinePref = "best_line";
+		private static readonly string[] BestLineModes = { "Best line in speed colours", "Best line in one colour", "No best line" };
+
+		/// <summary>Your best line on the road during a time attack: 0 coloured by speed, 1 one colour, 2 off (Options).</summary>
+		private int bestLineMode_;
+		private readonly SpeedLine speedLine_ = new SpeedLine();
+		private List<Vector3> bestLine_;
+		private List<float> bestLineKmh_;
 
 		/// <summary>Sector times on the timer, with the result and in My times (Options).</summary>
 		private bool showSectors_ = true;
@@ -85,8 +93,17 @@ namespace TRC.TuneLoader {
 			}
 		}
 
+		/// <summary>Called every frame: your best line on the road while a time attack is on (not in races or battles).</summary>
+		private void UpdateBestLine() {
+			Camera camera = HudCamera();
+			bool show = hasPose_ && run_ != null && bestLineMode_ != 2 && bestLine_ != null && camera != null;
+			speedLine_.Show(show ? bestLine_ : null, bestLineKmh_, bestLineMode_ == 0, show ? camera.transform.position : Vector3.zero);
+		}
+
 		/// <summary>A new run (or the same one again): nothing from the last one carries over.</summary>
 		private void ResetRunExtras() {
+			bestLine_ = null;
+			bestLineKmh_ = null;
 			lapsSeen_ = 0;
 			lapFlash_ = "";
 			lapFlashUntil_ = 0;
@@ -108,7 +125,11 @@ namespace TRC.TuneLoader {
 			if (!referenceLoaded_ && runStart_ != null) {
 				referenceLoaded_ = true;
 				TimeKind kind = CompareKind(run_);
-				run_.Reference = TimeAttackTraces.Load(TimesFolder, TimeAttackTraces.Key(run_.Course.Code, runStart_.CarId, runStart_.Set, kind))?.Trace;
+				string key = TimeAttackTraces.Key(run_.Course.Code, runStart_.CarId, runStart_.Set, kind);
+				run_.Reference = TimeAttackTraces.Load(TimesFolder, key)?.Trace;
+				var line = TimeAttackTraces.LoadLine(TimesFolder, key);
+				bestLine_ = line?.Line;
+				bestLineKmh_ = line?.Kmh;
 				int sectors = run_.Course.SectorEnds.Length;
 				sectorBestAll_ = TimeAttackLog.BestSectorsMs(times_, r => r.CourseCode == run_.Course.Code && kind.Matches(r), sectors);
 				int car = runStart_.CarId;
@@ -192,8 +213,12 @@ namespace TRC.TuneLoader {
 				record.LapNumber = lap.Number;
 				record.SectorMs = lap.Sectors.Select(s => (long)Math.Round(s * 1000.0, MidpointRounding.AwayFromZero)).ToArray();
 				SaveRecord(record);
-				if (TimeAttackTraces.SaveIfFaster(TimesFolder, TimeAttackTraces.Key(run_.Course.Code, start.CarId, start.Set, LapKind), lap.Trace, ms)) {
+				string key = TimeAttackTraces.Key(run_.Course.Code, start.CarId, start.Set, LapKind);
+				if (TimeAttackTraces.SaveIfFaster(TimesFolder, key, lap.Trace, ms)) {
 					run_.Reference = lap.Trace;
+					TimeAttackTraces.SaveLine(TimesFolder, key, lap.Line, lap.LineKmh, ms);
+					bestLine_ = lap.Line;
+					bestLineKmh_ = lap.LineKmh;
 				}
 			}
 

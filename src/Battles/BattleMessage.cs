@@ -6,7 +6,8 @@ using System.Text.RegularExpressions;
 using UnityEngine;
 
 namespace TRC.TuneLoader {
-	public enum BattleFormat : byte { Race = 0, CatAndMouse = 1 }
+	/// <summary>Race and cat and mouse run on a course; a highway battle (Tokyo Xtreme Racer style) anywhere, on SP bars.</summary>
+	public enum BattleFormat : byte { Race = 0, CatAndMouse = 1, Highway = 2 }
 
 	public enum BattleKind : byte {
 		/// <summary>Host to guest: a challenge, with the course (its data too, unless it's an official course the guest has).</summary>
@@ -51,8 +52,8 @@ namespace TRC.TuneLoader {
 	/// channel can't be aimed reliably), so each says who it's from and for, and the other players ignore it.
 	/// </summary>
 	public sealed class BattleMessage {
-		/// <summary>2 since 0.10.1: small pieces, the path packed in centimetres, and Seen. 3 since 0.11.0: laps, and circuit courses. 4 since 0.12.0: tournament matches.</summary>
-		public const byte Protocol = 4;
+		/// <summary>2 since 0.10.1: small pieces, the path packed in centimetres, and Seen. 3 since 0.11.0: laps, and circuit courses. 4 since 0.12.0: tournament matches. 5 since 0.13.0: positions and SP (highway battles).</summary>
+		public const byte Protocol = 5;
 
 		public BattleKind Kind;
 		public uint BattleId;
@@ -98,6 +99,12 @@ namespace TRC.TuneLoader {
 		/// <summary>The sender's latest run result (any run), so it still arrives if the other side moved on.</summary>
 		public RunResult Result;
 
+		/// <summary>Where the sender's car is, the way it points and its speed (km/h), and (highway battles) its SP.</summary>
+		public Vector3 Position;
+		public Vector3 Heading;
+		public float Kmh;
+		public float Sp;
+
 		// Countdown and Abort
 		public int CountdownId;
 		public double GoHostTime;
@@ -142,6 +149,13 @@ namespace TRC.TuneLoader {
 						writer.Write(Progress);
 						writer.Write(RunIndex);
 						writer.Write(Phase);
+						writer.Write(Position.x);
+						writer.Write(Position.y);
+						writer.Write(Position.z);
+						writer.Write(Heading.x);
+						writer.Write(Heading.z);
+						writer.Write(Kmh);
+						writer.Write(Sp);
 						writer.Write(Result != null);
 						if (Result != null) {
 							writer.Write(Result.Run);
@@ -210,6 +224,10 @@ namespace TRC.TuneLoader {
 							message.Progress = reader.ReadSingle();
 							message.RunIndex = reader.ReadInt32();
 							message.Phase = reader.ReadByte();
+							message.Position = new Vector3(reader.ReadSingle(), reader.ReadSingle(), reader.ReadSingle());
+							message.Heading = new Vector3(reader.ReadSingle(), 0f, reader.ReadSingle());
+							message.Kmh = reader.ReadSingle();
+							message.Sp = reader.ReadSingle();
 							if (reader.ReadBoolean()) {
 								message.Result = new RunResult {
 									Run = reader.ReadInt32(),
