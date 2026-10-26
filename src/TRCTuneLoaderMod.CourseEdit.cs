@@ -56,6 +56,12 @@ namespace TRC.TuneLoader {
 			if (course.Traps.Count > 0 && GUILayout.Button($"Remove its {course.Traps.Count} speed trap(s)", Theme.Button)) {
 				RemoveCourseTraps(course);
 			}
+			GUILayout.FlexibleSpace();
+			GUI.enabled = enabled && course.Usable && roomSync_.IsAvailable;
+			if (GUILayout.Button("Share with the room", Theme.Button)) {
+				ShareCourse(course);
+			}
+			GUI.enabled = enabled;
 			GUILayout.EndHorizontal();
 			GUILayout.BeginHorizontal();
 			if (GUILayout.Button(course.IsCircuit ? "Drive it the other way" : "Flip direction", Theme.Button)) {

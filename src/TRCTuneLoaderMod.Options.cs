@@ -13,7 +13,7 @@ namespace TRC.TuneLoader {
 	/// with Kino.Input: it's matched in OnGUI against Unity's key events.
 	/// </summary>
 	public partial class TRCTuneLoaderMod {
-		private const int OptionsTab = 6;
+		private const int OptionsTab = 7;
 		private const string ShortcutPref = "open_shortcut";
 		private const string RestartPref = "restart_shortcut";
 		private const string ShareValuesPref = "share_tune_values";
@@ -34,8 +34,11 @@ namespace TRC.TuneLoader {
 		/// <summary>How many backups to keep per car and setup; 0 keeps them all.</summary>
 		private static readonly int[] BackupLimits = { 0, 5, 10, 20 };
 
-		/// <summary>Raise this when the tour changes enough that everyone should see it again. 2: TRC and Project Dream, time attack and battles.</summary>
-		private const int TourVersion = 2;
+		/// <summary>
+		/// The tour's version, saved when it's seen. 2: TRC and Project Dream, time attack and battles. 3 (0.14): Home and
+		/// everything since. Players who saw any tour get What's new instead of the tour again (Home).
+		/// </summary>
+		private const int TourVersion = 3;
 
 		/// <summary>How long the player is on the garage screen before the first-run tour opens.</summary>
 		private const float TourGarageDelaySeconds = 2f;
@@ -79,7 +82,7 @@ namespace TRC.TuneLoader {
 			try {
 				shortcut_ = Shortcut.Parse(Kino.Prefs.Get(ShortcutPref, Shortcut.Default.Save()));
 				restartShortcut_ = Shortcut.Parse(Kino.Prefs.Get(RestartPref, Shortcut.RestartDefault.Save()), Shortcut.RestartDefault);
-				tourSeen_ = Kino.Prefs.Get(TourPref, 0) >= TourVersion;
+				tourSeen_ = Kino.Prefs.Get(TourPref, 0) >= 1;
 				float scale = Kino.Prefs.Get(WindowScalePref, 1f);
 				windowScale_ = WindowScales.OrderBy(s => Math.Abs(s - scale)).First();
 				showBadge_ = Kino.Prefs.Get(BadgePref, true);
@@ -395,6 +398,12 @@ namespace TRC.TuneLoader {
 			GUILayout.EndVertical();
 
 			GUILayout.Space(10);
+			DrawWheelOptions();
+
+			GUILayout.Space(10);
+			DrawBugReport();
+
+			GUILayout.Space(10);
 			GUILayout.Label("Tour", Theme.SectionLabel);
 			GUILayout.BeginVertical(Theme.Card);
 			GUILayout.Label("A quick walk through every part of this window.", Theme.Body);
@@ -454,8 +463,8 @@ namespace TRC.TuneLoader {
 		private TourStep[] TourSteps() => new[] {
 			new TourStep {
 				Title = "Welcome to TRC Tune Loader",
-				Text = "This mod puts the official TRC tunes on your car and checks that it's TRC spec, so your runs count on the TRC leaderboards. " +
-					"This short tour shows what each part of the window does. Use Next and Back, or Skip if you already know your way around.",
+				Text = "This mod puts the official TRC tunes on your car and checks that it's TRC spec, and it's a whole racing toolkit: time attack, battles, races, " +
+					"tournaments, room games, speed traps and ratings. This tour shows each part of the window. Use Next and Back, or Skip if you know your way around.",
 				Tab = -1,
 			},
 			new TourStep {
@@ -468,74 +477,73 @@ namespace TRC.TuneLoader {
 			new TourStep {
 				Title = "Opening this window",
 				Text = $"Press <b>{shortcut_}</b> anytime in the game, or open the KSL menu and click TRCTuneLoader. " +
-					"Press it again or click × to close the window. You can change the shortcut in the Options tab.",
+					"Press it again or click × to close the window. You can change the shortcut in Options, and set a wheel or controller button for it too.",
 				Tab = -1,
+			},
+			new TourStep {
+				Title = "Home",
+				Text = "Home has a button to every part of the mod, anything waiting for you (a challenge, a race that just opened), and the room board: " +
+					"what every TRC Tune Loader player in the room is doing. Tick I'm up for a battle so others know, and challenge or join them in one click. " +
+					"Courses shared with the room show here too, ready to save, and Report a bug makes one zip with everything needed to fix a problem.",
+				Tab = HomeTab,
 			},
 			new TourStep {
 				Title = "My car: the status bar",
 				Text = "My car shows the car you're in and its setup. The coloured bar says whether it's TRC spec right now: " +
-					"green is spec, amber means it hasn't been fully checked yet, and red means something isn't spec. " +
-					"Under it you'll see your engine and drivetrain, and any Workshop body on the car.",
-				Tab = 0,
+					"green is spec, amber means it hasn't been fully checked yet, and red means something isn't spec.",
+				Tab = MyCarTab,
 			},
 			new TourStep {
 				Title = "Putting a TRC tune on",
 				Text = "Pick a tune set (TRC Revival is the newest), then press Apply on the main garage screen. " +
 					"When CarX's tuning screen is open, the button says Load into the dyno instead, and that works in online rooms too: " +
 					"leave the tuning screen and choose Yes to save. Your own tune is always backed up first.",
-				Tab = 0,
+				Tab = MyCarTab,
 			},
 			new TourStep {
 				Title = "Checking your car",
 				Text = "Check my tune lists anything that isn't TRC spec: your saved setup, the car you're driving, body kit stance, " +
 					"Workshop bodies, engine swaps, and gearbox or drivetrain changes from mods like KINO. " +
-					"The live check records what to compare with by itself, a few seconds after your car reaches the garage or the track. " +
-					"Real numbers shows every setting the way CarX's tuning screen does. " +
-					"While you drive, a small badge in a corner shows whether you're spec, and a message pops up if something isn't.",
-				Tab = 0,
+					"While you drive, a small badge in a corner shows whether you're spec, and a message pops up if something isn't. " +
+					"Your code (like TRC-95F4-06D9) is what the TRC bot uses to verify leaderboard runs.",
+				Tab = MyCarTab,
 			},
 			new TourStep {
-				Title = "Your tune code",
-				Text = "Your code (like TRC-95F4-06D9) is made from your car, its setup and every tune value. " +
-					"It only matches the official code when your car really is spec, and it's what the TRC bot uses to verify leaderboard runs.",
-				Tab = 0,
-			},
-			new TourStep {
-				Title = "Tune sets",
-				Text = "Every official set built into the mod: TRC Revival, V3.0, V2.6, V2.0 and V1.0. Click a car to see all its settings.",
-				Tab = 1,
-			},
-			new TourStep {
-				Title = "Players in the room",
-				Text = "In an online room, every player's car gets checked: their setup, engine, stance and Workshop bodies. " +
-					"Players who also run TRC Tune Loader send their own check and their mod list. Use those as hints, not proof. " +
-					"Only problems shows just the players worth a closer look.",
-				Tab = 2,
-			},
-			new TourStep {
-				Title = "Mod check",
-				Text = "Every mod KSL has loaded, whether KSL says they're verified, and a warning for tools that can edit the game, like Unity Explorer.",
-				Tab = 3,
-			},
-			new TourStep {
-				Title = "Backups",
-				Text = "Whenever a TRC tune replaces your own tune, your tune is saved here first. Restore puts it back.",
-				Tab = 4,
+				Title = "Tune sets, Players, Mod check, Backups",
+				Text = "Tune sets lists every official set built into the mod. Players checks every car in an online room. " +
+					"Mod check lists the mods KSL has loaded. Backups keeps your own tune whenever a TRC tune replaces it.",
+				Tab = PlayersTab,
 			},
 			new TourStep {
 				Title = "Time attack",
-				Text = "Courses here lists the courses on the map you're driving: official TRC courses and your own. " +
-					"Press Time attack, stop behind the start line, and a 3-2-1-GO countdown starts your run (or pick a flying start, and laps on a circuit). " +
-					"Teleport to start, or Ctrl + R, puts you back on the line. Each course is split into sectors, and the timer shows how far ahead or behind your best you are. " +
-					"Battle challenges another TRC Tune Loader player in the room to a side-by-side race or a cat and mouse, with a 3-2-1-GO on both screens at once. " +
-					"My times keeps your best times for each car and tune set, and the Course builder lets you make your own practice courses.",
+				Text = "Courses here lists the courses on the map you're driving: touge, highway and circuits. Press Time attack and stop behind the start line for 3-2-1-GO " +
+					"(or pick a flying start, and laps on a circuit). Your sectors stay on the timer in purple, green or amber, the live delta shows how far ahead or behind your best you are, " +
+					$"and your best line is drawn on the road. {restartShortcut_} sends you back to the start.",
+				Tab = CoursesTab,
+			},
+			new TourStep {
+				Title = "Speed traps",
+				Text = "Drive through a speed trap and your speed flashes up: purple for a new best, green close to it, amber slower. " +
+					"Courses here lists the map's traps with your bests, and Add speed trap here places your own. A course's Edit can add traps along it, and share the course with the room.",
+				Tab = CoursesTab,
+			},
+			new TourStep {
+				Title = "Battles, races and room games",
+				Text = "Battle has 1v1 battles (side by side, cat and mouse, or a Tokyo Xtreme Racer style highway battle on SP) and Races & tournaments for up to 16 drivers: " +
+					"qualifying, grids, points series, knockouts, heats. Pick What to play for room games: cops and runners, tag, infected, king of the hill, keep-up, convoy and highway cut-up. " +
+					"When it's over, Run it back plays it again.",
+				Tab = CoursesTab,
+			},
+			new TourStep {
+				Title = "My times and ratings",
+				Text = "My times keeps your best times and laps for each car and tune set, and Ratings shows your Elo for touge, highway and circuit, your Safety Rating and your license (Rookie to A). " +
+					"Clean driving raises the Safety Rating; resets, hits and contact lower it. The Course builder makes your own courses.",
 				Tab = CoursesTab,
 			},
 			new TourStep {
 				Title = "Options",
-				Text = "Change the shortcut that opens this window, the window size, the badge and track check, " +
-					"and how many backups to keep, or take this tour again. " +
-					"That's it: pick a set, press Apply, then Check my tune. See you on the touge!",
+				Text = "Change the shortcut, the restart key, wheel or controller buttons, the window size, the badge and track check, sectors and best line, " +
+					"and how many backups to keep, or take this tour again. Report a bug is here too. See you on the touge!",
 				Tab = OptionsTab,
 			},
 		};
@@ -574,12 +582,15 @@ namespace TRC.TuneLoader {
 		/// <summary>Ends the tour (finished, skipped or the window closed) and remembers that it's been seen.</summary>
 		private void EndTour() {
 			tourStep_ = -1;
-			if (tourSeen_) {
+			if (tourSeen_ && Kino.Prefs.Get(TourPref, 0) >= TourVersion) {
 				return;
 			}
 			tourSeen_ = true;
 			try {
 				Kino.Prefs.Set(TourPref, TourVersion);
+				// A new player who took the tour doesn't need What's new as well.
+				whatsNewPending_ = false;
+				Kino.Prefs.Set(WhatsNewPref, WhatsNewVersion);
 			} catch (Exception e) {
 				TrcLog.Warning($"Couldn't save that the tour was seen: {e.Message}");
 			}

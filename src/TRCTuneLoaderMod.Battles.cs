@@ -113,6 +113,7 @@ namespace TRC.TuneLoader {
 					battleLogged_ = true;
 					try {
 						BattleLog.Append(TimesFolder, battle_, lastBattleCar_?.Car ?? "", lastBattleCar_?.TuneSet ?? "", Version);
+						LedgerEvent("battle", EventLedger.BattleFields(battle_, lastBattleCar_?.Car ?? "", lastBattleCar_?.TuneSet ?? ""));
 					} catch (Exception e) {
 						TrcLog.Error(e);
 					}
@@ -466,11 +467,8 @@ namespace TRC.TuneLoader {
 				}
 			} else {
 				PlayerRow peer = players_.FirstOrDefault(p => p.Player.SteamId == b.Peer);
-				if (peer != null && (b.Course.Usable || b.IsHighway) && GUILayout.Button("Rematch", Theme.ButtonPrimary)) {
-					pickedFormat_ = (int)b.Format;
-					pickedMode_ = b.Open ? 1 : 0;
-					pickedBattleLaps_ = Math.Max(0, Array.IndexOf(BattleLapChoices, b.Laps));
-					ChallengePlayer(peer, b.Course);
+				if (peer != null && (b.Course.Usable || b.IsHighway) && GUILayout.Button("Run it back", Theme.ButtonPrimary)) {
+					RunItBack(b);
 				}
 				// A course that came with the challenge (theirs, not one this PC has): keep it to practise on.
 				if (!b.IsHost && !b.IsHighway && b.Course.Source == CourseSource.Custom && string.IsNullOrEmpty(b.Course.FilePath) &&

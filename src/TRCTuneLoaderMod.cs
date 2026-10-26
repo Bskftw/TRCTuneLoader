@@ -23,7 +23,7 @@ namespace TRC.TuneLoader {
 	/// </summary>
 	[KSLMeta("TRCTuneLoader", Version, "bskftw")]
 	public partial class TRCTuneLoaderMod : BaseMod {
-		public const string Version = "0.13.0";
+		public const string Version = "0.14.0";
 
 		private const string BackupsFolderName = "Backups";
 		private const float CarRefreshSeconds = 1.0f;
@@ -127,6 +127,11 @@ namespace TRC.TuneLoader {
 				TrcLog.Error(e);
 			}
 			SetupWindow();
+			try {
+				SetupHome();
+			} catch (Exception e) {
+				TrcLog.Error(e);
+			}
 		}
 
 		private void Update() {
@@ -188,6 +193,13 @@ namespace TRC.TuneLoader {
 			}
 			try {
 				UpdateControl();
+			} catch (Exception e) {
+				if (courseErrors_++ < 6) {
+					TrcLog.Error(e);
+				}
+			}
+			try {
+				UpdateHome();
 			} catch (Exception e) {
 				if (courseErrors_++ < 6) {
 					TrcLog.Error(e);

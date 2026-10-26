@@ -13,14 +13,21 @@ namespace TRC.TuneLoader {
 	/// </summary>
 	public partial class TRCTuneLoaderMod {
 		private const int WindowId = 0x7C1A11;
-		private const float WindowWidth = 720f;
+		private const float WindowWidth = 780f;
 		private const float WindowHeight = 640f;
 		private const float StatusRefreshSeconds = 2.0f;
-		private static readonly string[] TabNames = { "My car", "Tune sets", "Players", "Mod check", "Backups", "Time attack", "Options", "About" };
+		private static readonly string[] TabNames = { "Home", "My car", "Tune sets", "Players", "Mod check", "Backups", "Time attack", "Options", "About" };
 
 		// UGUI's EventSystem lives in UnityEngine.UI; found by name so the mod doesn't need that DLL.
 		private static readonly PropertyInfo CurrentEventSystem =
 			Type.GetType("UnityEngine.EventSystems.EventSystem, UnityEngine.UI")?.GetProperty("current", BindingFlags.Public | BindingFlags.Static);
+
+		private const int HomeTab = 0;
+		private const int MyCarTab = 1;
+		private const int TuneSetsTab = 2;
+		private const int PlayersTab = 3;
+		private const int ModCheckTab = 4;
+		private const int BackupsTab = 5;
 
 		private bool windowOpen_;
 		private Rect windowRect_;
@@ -142,7 +149,7 @@ namespace TRC.TuneLoader {
 				TrcLog.Error(e);
 			}
 			bool hud = !windowOpen_ && OnTrack && (showBadge_ || autoCheck_);
-			bool courseHud = CourseHudVisible;
+			bool courseHud = CourseHudVisible || NoticeVisible;
 			if (!windowOpen_ && !hud && !courseHud) {
 				return;
 			}
@@ -165,6 +172,7 @@ namespace TRC.TuneLoader {
 				if (hud) {
 					DrawHud(screenWidth, screenHeight);
 				}
+				DrawNotice(screenWidth, screenHeight);
 				if (!windowOpen_) {
 					return;
 				}
@@ -197,11 +205,12 @@ namespace TRC.TuneLoader {
 				GUILayout.FlexibleSpace();
 			} else {
 				switch (tab_) {
-					case 0: DrawMyCarTab(); break;
-					case 1: DrawTuneSetsTab(); break;
-					case 2: DrawPlayersTab(); break;
-					case 3: DrawModCheckTab(); break;
-					case 4: DrawBackupsTab(); break;
+					case HomeTab: DrawHomeTab(); break;
+					case MyCarTab: DrawMyCarTab(); break;
+					case TuneSetsTab: DrawTuneSetsTab(); break;
+					case PlayersTab: DrawPlayersTab(); break;
+					case ModCheckTab: DrawModCheckTab(); break;
+					case BackupsTab: DrawBackupsTab(); break;
 					case CoursesTab: DrawCoursesTab(); break;
 					case OptionsTab: DrawOptionsTab(); break;
 					default: DrawAboutTab(); break;
@@ -236,8 +245,9 @@ namespace TRC.TuneLoader {
 		private void DrawTabs() {
 			GUILayout.BeginHorizontal(TabArea);
 			for (int i = 0; i < TabNames.Length; i++) {
-				string label = i == 2 && players_.Count > 0 ? $"Players ({players_.Count})"
+				string label = i == PlayersTab && players_.Count > 0 ? $"Players ({players_.Count})"
 					: i == CoursesTab && invites_.Count > 0 ? $"{TabNames[i]} ({invites_.Count})"
+					: i == HomeTab && whatsNewPending_ ? "Home (new)"
 					: TabNames[i];
 				if (GUILayout.Button(label, i == tab_ ? Theme.TabActive : Theme.Tab)) {
 					tab_ = i;
@@ -255,10 +265,11 @@ namespace TRC.TuneLoader {
 
 		private void OnTabOpened(int tab) {
 			switch (tab) {
-				case 0: nextStatusRefresh_ = 0; break;
-				case 2: nextPlayersRefresh_ = 0; nextReportRequest_ = 0; break;
-				case 3: modCheck_.Refresh(); break;
-				case 4: backupResult_ = ""; RefreshBackups(); break;
+				case HomeTab: nextStatusRefresh_ = 0; nextPlayersRefresh_ = 0; break;
+				case MyCarTab: nextStatusRefresh_ = 0; break;
+				case PlayersTab: nextPlayersRefresh_ = 0; nextReportRequest_ = 0; break;
+				case ModCheckTab: modCheck_.Refresh(); break;
+				case BackupsTab: backupResult_ = ""; RefreshBackups(); break;
 				case CoursesTab: deletePending_ = null; break;
 			}
 		}

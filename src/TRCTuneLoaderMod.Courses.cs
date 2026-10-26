@@ -13,7 +13,7 @@ namespace TRC.TuneLoader {
 	/// The course logic itself (lines, paths, the run, the recorder, the run log) is in src/Courses/.
 	/// </summary>
 	public partial class TRCTuneLoaderMod {
-		private const int CoursesTab = 5;
+		private const int CoursesTab = 6;
 		private const string CoursesFolderName = "Courses";
 		private const string TimesFolderName = "TimeAttack";
 		private const float MapCheckSeconds = 1f;

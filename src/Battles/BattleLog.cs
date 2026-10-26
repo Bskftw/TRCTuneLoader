@@ -37,7 +37,7 @@ namespace TRC.TuneLoader {
 				DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture),
 				battle.Id.ToString(CultureInfo.InvariantCulture),
 				battle.Course.Code, battle.Course.Name, battle.Course.MapKey,
-				battle.Format == BattleFormat.CatAndMouse ? "cat and mouse" : "race",
+				battle.Format == BattleFormat.CatAndMouse ? "cat and mouse" : battle.Format == BattleFormat.Highway ? "highway" : "race",
 				battle.Open ? "open" : "TRC spec",
 				battle.Counted && battle.Winner != 0 ? "yes" : "no",
 				battle.PeerName, battle.Peer.ToString(CultureInfo.InvariantCulture),

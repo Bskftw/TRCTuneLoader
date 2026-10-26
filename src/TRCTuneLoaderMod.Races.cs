@@ -476,6 +476,7 @@ namespace TRC.TuneLoader {
 			} catch (Exception e) {
 				TrcLog.Error(e);
 			}
+			LedgerEvent(race_.IsGame ? "game" : "race", EventLedger.RaceFields(race_, mine));
 		}
 
 		// ---- The window ----
@@ -840,7 +841,7 @@ namespace TRC.TuneLoader {
 						if (r.Settings.Order == GridOrder.Qualifying && GUILayout.Button("Start qualifying", Theme.Button)) {
 							r.StartQualifying(now);
 						}
-						if (GUILayout.Button(r.Phase == RacePhase.Finished ? "Race again" : "Start race", Theme.ButtonPrimary)) {
+						if (GUILayout.Button(r.Phase == RacePhase.Finished ? "Run it back" : "Start race", Theme.ButtonPrimary)) {
 							r.StartRace(now);
 						}
 					}

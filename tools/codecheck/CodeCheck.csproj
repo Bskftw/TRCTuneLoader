@@ -42,6 +42,10 @@
     <Compile Include="..\..\src\Races\RaceControl.cs" Link="src\Races\RaceControl.cs" />
     <Compile Include="..\..\src\Races\Ratings.cs" Link="src\Races\Ratings.cs" />
     <Compile Include="..\..\src\Courses\SpeedTrap.cs" Link="src\Courses\SpeedTrap.cs" />
+    <Compile Include="..\..\src\Races\RoomMessage.cs" Link="src\Races\RoomMessage.cs" />
+    <Compile Include="..\..\src\Races\EventLedger.cs" Link="src\Races\EventLedger.cs" />
+    <Compile Include="..\..\src\Battles\BattleLog.cs" Link="src\Battles\BattleLog.cs" />
+    <Compile Include="..\..\src\BugReport.cs" Link="src\BugReport.cs" />
     <Compile Include="..\..\src\TuneBackups.cs" Link="src\TuneBackups.cs" />
     <Compile Include="..\..\src\ICarTuneAdapter.cs" Link="src\ICarTuneAdapter.cs" />
   </ItemGroup>
@@ -50,6 +54,7 @@
     <CarXPath>D:\SteamLibrary\steamapps\common\CarX Drift Racing Online</CarXPath>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="System.IO.Compression" />
     <Reference Include="UnityEngine.CoreModule">
       <HintPath>$(CarXPath)\Drift Racing Online_Data\Managed\UnityEngine.CoreModule.dll</HintPath>
     </Reference>

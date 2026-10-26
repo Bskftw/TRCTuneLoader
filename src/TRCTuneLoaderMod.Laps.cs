@@ -256,6 +256,7 @@ namespace TRC.TuneLoader {
 			try {
 				TimeAttackLog.Append(TimesFolder, record);
 				times_.Add(record);
+				LedgerEvent(record.IsLap ? "lap" : "run", EventLedger.RunFields(record));
 			} catch (Exception e) {
 				courseResult_ = $"Couldn't save the time: {e.Message}";
 				TrcLog.Error(e);

@@ -99,7 +99,7 @@ namespace TRC.TuneLoader {
 				var rect = new Rect((screenWidth - width) / 2f, HudMargin + 40f, width, height);
 				if (GUI.Button(rect, content, Theme.Popup)) {
 					popupUntil_ = 0;
-					tab_ = 0;
+					tab_ = MyCarTab;
 					OpenWindow();
 				}
 			}

@@ -8,7 +8,7 @@ namespace TRC.TuneLoader {
 	/// TRC wrote (docs/source/TRC and Project Dream background.md). The tour has the short version.
 	/// </summary>
 	public partial class TRCTuneLoaderMod {
-		private const int AboutTab = 7;
+		private const int AboutTab = 8;
 		private const string ModPage = "https://github.com/Bskftw/TRCTuneLoader";
 
 		private Vector2 aboutScroll_;

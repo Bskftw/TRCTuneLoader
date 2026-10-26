@@ -2,6 +2,36 @@
 
 All versions of TRC Tune Loader, newest first. "Not tested in game yet" means the version builds and its automatic tests pass, but nobody has tried it in CarX yet.
 
+## 0.14.0 (Oct 26 2026)
+
+Not tested in game yet. A Home tab, the room board, sharing courses, wheel buttons, Run it back and Report a bug. Battles and races work with 0.13.0 players as before; the room board and shared courses need 0.14.0.
+
+**New: Home**
+- The window opens on **Home**: buttons to every part of the mod (practice, challenge someone, races and room games, my times and ratings, make a course, put a TRC tune on), and anything waiting for you: challenges, and races you can join.
+- **What's new** shows on Home after an update. The window opens by itself once, in the garage.
+- **New tour** covering everything since 0.10 (Options, Take the tour). New players get it the first time.
+
+**New: room board**
+- See what every TRC Tune Loader player in the room is doing: in the garage, free roam, time attack, battling, racing, in a race lobby, playing a room game, or making a course.
+- Tick **I'm up for a battle** so others know. **Challenge** or **Join** them in one click.
+
+**New: share a course**
+- In a course's **Edit**, **Share with the room** sends it, with its speed traps and grid, to everyone in the room. It shows up on their Home, ready to save.
+
+**New: wheel and controller buttons** (Options)
+- A **TRC action** button that does what fits right now: accepts a challenge, joins a race that just opened, runs it back, or restarts your time attack.
+- A button that opens and closes the window.
+- Pick buttons CarX doesn't use: CarX still sees every press.
+
+**New: Run it back**
+- After a battle, **Run it back** challenges the same driver again with the same course and format. After a race, the host's **Run it back** starts the same race again with the same drivers.
+
+**New: Report a bug** (Home and Options)
+- Say what happened and press **Make a bug report**: a zip lands on your Desktop with the mod's logs, what you were doing, your options and your mods. Send it to bskftw.
+
+**Changed**
+- Your times, battles and races are also saved, ready for the TRC server when it comes.
+
 ## 0.13.0 (Oct 25 2026)
 
 Not tested in game yet. Speed traps, ratings and licenses, your best line on the road, race control, room games and highway battles. Everyone needs 0.13.0, for races and for battles.

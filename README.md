@@ -2,9 +2,9 @@
 
 A KSL mod for CarX Drift Racing Online, made for TRC (Touge Racing Community). It puts the official TRC spec tunes on your car in one click, gives every tune a short code the TRC Discord bot uses to verify leaderboard runs, and checks your car, and every car in the room, for anything that isn't TRC spec. It also times your runs on TRC courses with a 3-2-1-GO time attack.
 
-**Version 0.13.0** (Oct 25 2026). What changed in each version: [CHANGELOG.md](CHANGELOG.md).
+**Version 0.14.0** (Oct 26 2026). What changed in each version: [CHANGELOG.md](CHANGELOG.md).
 
-**Still in testing.** The mod is new and still being tested, so bugs will happen, especially in the newest features (see "Tested in game" below). If something goes wrong, send bskftw the log file `kino\mods\TRCTuneLoader\TRCTuneLoader.log` and what you were doing.
+**Still in testing.** The mod is new and still being tested, so bugs will happen, especially in the newest features (see "Tested in game" below). If something goes wrong, press **Report a bug** (Home or Options) and send bskftw the zip it puts on your Desktop.
 
 ## Installing
 
@@ -20,11 +20,21 @@ Either way, KSL keeps the mod up to date by itself: new versions install when yo
 - Press **Ctrl + T** (you can change this in the Options tab), or
 - open the KSL menu and click **TRCTuneLoader**, then **Open the TRC Tune Loader window**.
 
-The window has eight tabs: **My car**, **Tune sets**, **Players**, **Mod check**, **Backups**, **Time attack**, **Options** and **About**. While your mouse is over it, clicks don't go through to the game.
+The window has nine tabs: **Home**, **My car**, **Tune sets**, **Players**, **Mod check**, **Backups**, **Time attack**, **Options** and **About**. While your mouse is over it, clicks don't go through to the game.
 
-**First time?** The first time you reach the garage after installing, the window opens with a short tour: a quick word about TRC, the tunes and Project Dream, then each tab. You can skip it, and take it again any time from Options.
+**First time?** The first time you reach the garage after installing, the window opens with a short tour: a quick word about TRC, the tunes and Project Dream, then each tab. You can skip it, and take it again any time from Options. After an update, the window opens once on Home with **What's new** instead.
 
 ## Features
+
+### Home
+
+The window opens on Home:
+
+- **Go to:** a button for each thing you'd want to do: practice a course, challenge someone, races and room games, my times and ratings, make a course, put a TRC tune on.
+- **Waiting for you:** challenges to answer and races you can join.
+- **In this room:** the room board. Every TRC Tune Loader player in the room (0.14 or newer) and what they're doing: in the garage, free roam, a time attack, battling, racing, in a race lobby, a room game or making a course, with their car and rating. Tick **I'm up for a battle** so others know you're free. **Challenge** takes you to the battle form with them picked; **Join** joins their race.
+- **Courses shared with the room:** courses other players sent, with **Save** to keep them as your own (speed traps and grid included).
+- **Report a bug:** write what happened (optional) and press **Make a bug report**. A zip lands on your Desktop with the mod's logs, a summary of what you were doing, your options and your mods. It has the names of players you raced, and no one's tune values. Send it to bskftw.
 
 ### My car
 
@@ -136,7 +146,7 @@ A run is stopped if you take a shortcut, leave the course, reset the car, change
 
 **1v1 battles** challenge another player in the same online room:
 
-1. Pick the opponent, a course on this map, the format, the laps (on a circuit) and the mode, and press **Challenge**. They see the challenge on screen and press the shortcut to answer it. A course of your own, or your recorded path, is sent to them with the challenge. You see when it gets to them, and why if they can't accept it. If you both challenge each other at once to the same course, format and mode, it becomes one battle by itself.
+1. Pick the opponent, a course on this map, the format, the laps (on a circuit) and the mode, and press **Challenge**. They see the challenge on screen and press the shortcut to answer it. A course of your own, or your recorded path, is sent to them with the challenge. You see when it gets to them, and why if they can't accept it. If you both challenge each other at once to the same course, format and mode, it becomes one battle by itself. The room board on Home shows who's up for a battle.
 2. Both drive to the start, or press **Teleport to my spot**. In a race you line up side by side (the challenger on the left); in cat and mouse the leader is just behind the line (within 5 m) and the chaser at least 5 m back.
 3. Stop in your spot. When both are ready, **3-2-1-GO** shows on both screens at the same moment (the mods measure the connection between you). Moving before GO calls the countdown off for both.
 4. Each mod times its own car from GO to the finish line, with the same rules as time attack, except that a **reset doesn't end your run**: mess up, reset and keep going, and you can still win if the other driver messes up too. A reset that puts you further along the course does stop it. When the other driver's run stops, you're told straight away: finish to win.
@@ -147,7 +157,7 @@ A run is stopped if you take a shortcut, leave the course, reset the car, change
 | Cat and mouse | The chaser wins a run by passing and staying ahead to the finish. The leader wins by finishing far enough ahead: 1.5 s while you both have your first lead, 1 s for your second, then 0.5 s. Otherwise you swap places and go again; the first run with a winner wins. |
 | Highway battle (SP) | Tokyo Xtreme Racer style, anywhere on the map, no course. Drive alongside each other at speed for a rolling 3-2-1, then whoever's behind loses SP, faster the bigger the gap. A hit costs SP too. Empty SP, or 600 m behind, loses. |
 
-A driver who doesn't finish loses the run to one who does. After a battle against someone else's course, **Save this course** keeps it in your courses, to practise on. **TRC spec** battles need both cars TRC spec on the same tune set, with no flagged mods, at every start and finish; **Open** battles take any setup and don't count. After ten runs without a winner it's a draw. If the other driver leaves or stops answering for 10 seconds, the battle ends. Every battle is saved in `kino\mods\TRCTuneLoader\TimeAttack\battles.csv`.
+A driver who doesn't finish loses the run to one who does. When it's over, **Run it back** challenges them again with the same course and format. After a battle against someone else's course, **Save this course** keeps it in your courses, to practise on. **TRC spec** battles need both cars TRC spec on the same tune set, with no flagged mods, at every start and finish; **Open** battles take any setup and don't count. After ten runs without a winner it's a draw. If the other driver leaves or stops answering for 10 seconds, the battle ends. Every battle is saved in `kino\mods\TRCTuneLoader\TimeAttack\battles.csv`.
 
 **Races & tournaments** are for up to 16 drivers:
 
@@ -156,7 +166,7 @@ A driver who doesn't finish loses the run to one who does. After a battle agains
 3. The host can run **qualifying** first: everyone drives time attacks for a few minutes, and the best times set the grid.
 4. The host presses **Start race**. Drive to your grid spot or press **Teleport to my spot**, and stop. When everyone's lined up (or the host presses **Go now**), 3-2-1-GO lands on every screen at once.
 5. The timer shows your place (P3/12), the lap, and the gaps to the cars just ahead and behind. The race ends when everyone has finished, or when the host ends it (in 60 s or now). Resets don't end your race; jump starts get the penalty the host picked.
-6. Everyone gets the same results, with times, gaps and best laps.
+6. Everyone gets the same results, with times, gaps and best laps. The host's **Run it back** starts the same race again with the same drivers.
 
 | Tournament | How it works |
 | --- | --- |
@@ -211,7 +221,7 @@ A time counts as **TRC spec** when your car is TRC spec at the start and at the 
 3. **Finish** (point to point only): stop with the middle of your car on the finish line and press **Set finish here**. If that's back where you started, the builder tells you to make it a circuit.
 4. **Save**: name it (the car is stopped, so typing doesn't move it), pick Touge or Highway, and press **Save course**.
 
-Your courses are saved in `kino\mods\TRCTuneLoader\Courses`. In Courses here, **Edit** on one of them lets you rename it, change the line width, flip its direction (a circuit: drive it the other way), record the path again, or delete it. Anything but the name gives the course a new code, so your old times stay under the old one.
+Your courses are saved in `kino\mods\TRCTuneLoader\Courses`. In Courses here, **Edit** on one of them lets you **share it with the room** (everyone with 0.14 or newer can save it), rename it, change the line width, flip its direction (a circuit: drive it the other way), record the path again, or delete it. Anything but the name gives the course a new code, so your old times stay under the old one.
 
 ### Options
 
@@ -219,6 +229,8 @@ Your courses are saved in `kino\mods\TRCTuneLoader\Courses`. In Courses here, **
 - **Restart key** (Ctrl + R): during a time attack, sends your car back to the start line, ready to go again. **Change restart key** picks another.
 - **Best line**: speed colours, one colour, or off.
 - **Share my tune values** (off by default): lets other TRC Tune Loader users see your tune's real values on their Players page. Off, they only see what you changed.
+- **Wheel and controller buttons**: **Pick a button**, then press it on your wheel or controller. The **TRC action** button does what fits right now: accepts a challenge, joins a race that just opened, runs the last battle or race back, or restarts your time attack. **Open the window** opens and closes this window. Pick buttons CarX doesn't use: CarX still sees every press.
+- **Report a bug**: the same as on Home.
 - **Window size**: 80% to 150%. Also sizes the badge and the pop-up.
 - **TRC spec badge** (on by default): a small tag in a corner while you drive. Green "TRC SPEC" with your set, amber for the few seconds before the car you're driving has been checked, red "NOT TRC SPEC". Pick the corner it sits in.
 - **Time attack timer**: drag it while the window is open during a run. **Put the timer back at the top** resets it.
@@ -251,7 +263,7 @@ The mod writes what it does to its own log, `kino\mods\TRCTuneLoader\TRCTuneLoad
 - KINO is closed code, so the mod sees what a KINO swap does to the car, not the swap's name.
 - Taking a KINO swap off can leave values behind (seen with the clutch). Press Apply to put CarX's own values back.
 - CarX's paint screen briefly changes some engine values, so a Check while it's open can show differences.
-- Time attack times are saved on your own PC only, for now.
+- Times, battles, races and ratings are saved on your own PC only, for now. They're kept ready for the TRC server.
 
 ## Feature status
 
@@ -276,4 +288,5 @@ The mod writes what it does to its own log, `kino\mods\TRCTuneLoader\TRCTuneLoad
 | Circuits, laps, flying start, sectors, live delta, restart key, My times views, course editing, resets in battles | 0.11 | Not yet |
 | Open races for 16, qualifying, grids, tournaments (points, knockout, heats, shootout), elimination races | 0.12 | Not yet |
 | Speed traps, ratings and licenses, best line, race control, room games, highway battles | 0.13 | Not yet |
+| Home, room board, share a course, wheel buttons, Run it back, Report a bug, new tour | 0.14 | Not yet |
 

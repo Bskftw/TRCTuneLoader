@@ -22,6 +22,12 @@ namespace TRC.TuneLoader {
 		}
 	}
 
+	/// <summary>Carries the room board (who's doing what) and shared courses, on their own KSL packet.</summary>
+	public sealed class RoomSync : SyncChannel<RoomMessage> {
+		public RoomSync() : base("trc_room", "Room messages", RoomMessage.Protocol, m => m.Encode(), RoomMessage.Decode, m => m.From) {
+		}
+	}
+
 	/// <summary>A KSL packet that carries one kind of message: split into pieces, paced, put back together, queued for Update.</summary>
 	public class SyncChannel<T> where T : class {
 		private readonly string packetName_;
