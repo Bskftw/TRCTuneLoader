@@ -23,7 +23,7 @@ namespace TRC.TuneLoader {
 	/// </summary>
 	[KSLMeta("TRCTuneLoader", Version, "bskftw")]
 	public partial class TRCTuneLoaderMod : BaseMod {
-		public const string Version = "0.14.0";
+		public const string Version = "0.14.1";
 
 		private const string BackupsFolderName = "Backups";
 		private const float CarRefreshSeconds = 1.0f;
@@ -223,6 +223,7 @@ namespace TRC.TuneLoader {
 			RefreshCarIfDue();
 
 			Kino.UI.GroupLabel("TRC Tune Loader");
+			Kino.UI.Label(Theme.Tagline);
 			Kino.UI.Label(car_ != null
 				? $"Your car: {car_.Describe()}, {(car_.InGarage ? "in the garage" : "on track")}"
 				: carError_);
@@ -237,7 +238,7 @@ namespace TRC.TuneLoader {
 		}
 
 		public override void OnAdditionalAboutUIDraw() {
-			Kino.UI.Label("Loads and checks official TRC (Touge Racing Community) spec tunes.");
+			Kino.UI.Label($"{Theme.Tagline}. Made for TRC (Touge Racing Community): the official TRC spec tunes and checks, plus time attack, a course builder, battles, races and tournaments.");
 			Kino.UI.Label($"Version {Version}, {official_.Tunes.Count} official tune(s) built in: {string.Join(", ", official_.Sets.Select(TuneSets.NameOf))}.");
 		}
 

@@ -55,9 +55,9 @@ namespace TRC.TuneLoader {
 
 		/// <summary>Size of the window, badge and pop-up, on top of KSL's own UI scale.</summary>
 		private float windowScale_ = 1f;
-		private bool showBadge_ = true;
+		private bool showBadge_;
 		private int badgeCorner_ = 1;
-		private bool autoCheck_ = true;
+		private bool autoCheck_;
 		private int backupsKeep_;
 		private bool problemsOnly_;
 
@@ -85,9 +85,9 @@ namespace TRC.TuneLoader {
 				tourSeen_ = Kino.Prefs.Get(TourPref, 0) >= 1;
 				float scale = Kino.Prefs.Get(WindowScalePref, 1f);
 				windowScale_ = WindowScales.OrderBy(s => Math.Abs(s - scale)).First();
-				showBadge_ = Kino.Prefs.Get(BadgePref, true);
+				showBadge_ = Kino.Prefs.Get(BadgePref, false);
 				badgeCorner_ = Mathf.Clamp(Kino.Prefs.Get(BadgeCornerPref, 1), 0, Corners.Length - 1);
-				autoCheck_ = Kino.Prefs.Get(AutoCheckPref, true);
+				autoCheck_ = Kino.Prefs.Get(AutoCheckPref, false);
 				int keep = Kino.Prefs.Get(BackupsKeepPref, 0);
 				backupsKeep_ = BackupLimits.Contains(keep) ? keep : 0;
 				problemsOnly_ = Kino.Prefs.Get(ProblemsOnlyPref, false);
@@ -305,7 +305,7 @@ namespace TRC.TuneLoader {
 			GUILayout.Label("While driving", Theme.SectionLabel);
 			GUILayout.BeginVertical(Theme.Card);
 			GUILayout.Label("<b>TRC spec badge</b>: a small tag in a corner of the screen. Green when your car is TRC spec, " +
-				"amber when the car you're driving hasn't been checked yet (press Check my tune in the garage), red when something isn't spec.", Theme.Body);
+				"amber when the car you're driving hasn't been checked yet (press Check my tune in the garage), red when something isn't spec. Off unless you turn it on.", Theme.Body);
 			bool badge = OnOff(showBadge_);
 			if (badge != showBadge_) {
 				showBadge_ = badge;
@@ -320,7 +320,7 @@ namespace TRC.TuneLoader {
 			}
 			GUILayout.Space(8);
 			GUILayout.Label("<b>Check my car on the track</b>: a few seconds after you reach the track, and whenever it changes while you drive, " +
-				"your car is checked. A short message pops up only if something isn't TRC spec.", Theme.Body);
+				"your car is checked. A short message pops up only if something isn't TRC spec. Off unless you turn it on.", Theme.Body);
 			bool check = OnOff(autoCheck_);
 			if (check != autoCheck_) {
 				autoCheck_ = check;
@@ -504,7 +504,7 @@ namespace TRC.TuneLoader {
 				Title = "Checking your car",
 				Text = "Check my tune lists anything that isn't TRC spec: your saved setup, the car you're driving, body kit stance, " +
 					"Workshop bodies, engine swaps, and gearbox or drivetrain changes from mods like KINO. " +
-					"While you drive, a small badge in a corner shows whether you're spec, and a message pops up if something isn't. " +
+					"Turn on the TRC spec badge (Options) and a small tag in a corner shows whether you're spec while you drive; turn on Check my car on the track and a message pops up if something isn't. " +
 					"Your code (like TRC-95F4-06D9) is what the TRC bot uses to verify leaderboard runs.",
 				Tab = MyCarTab,
 			},

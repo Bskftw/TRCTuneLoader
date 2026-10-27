@@ -2,6 +2,15 @@
 
 All versions of TRC Tune Loader, newest first. "Not tested in game yet" means the version builds and its automatic tests pass, but nobody has tried it in CarX yet.
 
+## 0.14.1 (Oct 26 2026)
+
+Not tested in game yet. A small update; works with 0.14.0 and 0.13.0 players as before.
+
+**Changed**
+- **TRC spec badge** and **Check my car on the track** are now off by default. Turn them on in Options (While driving) if you want them.
+- **Home's Go to** is grouped into the four parts of the mod, each in its colour: Tunes & TRC spec, Time attack & course builder, Battles, races & tournaments, and Speed traps, room games & ratings. New buttons for Tune sets, Players, Speed traps and My ratings.
+- The window's header shows what the mod does: official TRC tunes, time attack, course builder, battles & races.
+
 ## 0.14.0 (Oct 26 2026)
 
 Not tested in game yet. A Home tab, the room board, sharing courses, wheel buttons, Run it back and Report a bug. Battles and races work with 0.13.0 players as before; the room board and shared courses need 0.14.0.

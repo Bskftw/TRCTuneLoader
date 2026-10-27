@@ -241,6 +241,12 @@ namespace TRC.TuneLoader {
 			GUILayout.EndVertical();
 		}
 
+		private void GoToTimeAttack(int view) {
+			tab_ = CoursesTab;
+			OnTabOpened(CoursesTab);
+			coursesView_ = view;
+		}
+
 		private void GoToBattle(bool races) {
 			tab_ = CoursesTab;
 			OnTabOpened(CoursesTab);
@@ -585,36 +591,61 @@ namespace TRC.TuneLoader {
 			GUILayout.Label(map_ == null ? "Not on a map." : $"On <b>{map_.Name}</b>{(car_ != null ? $" in the {car_.CarName}" : "")}", Theme.Body);
 			DrawStatusPill(carStatus_);
 
+			// The four parts of the mod, in their colours.
 			GUILayout.Label("Go to", Theme.SectionLabel);
-			GUILayout.BeginHorizontal();
-			if (GUILayout.Button("Practice a course", Theme.Button)) {
-				tab_ = CoursesTab;
-				coursesView_ = 0;
-				OnTabOpened(CoursesTab);
+			GUILayout.BeginVertical(Theme.Card);
+			for (int pillar = 0; pillar < Theme.Pillars.Length; pillar++) {
+				GUILayout.BeginHorizontal();
+				GUILayout.Label($"<b><color={Theme.PillarHex[pillar]}>{Theme.Pillars[pillar]}</color></b>", Theme.Body, GUILayout.Width(250));
+				switch (pillar) {
+					case 0:
+						if (GUILayout.Button("Put a TRC tune on", Theme.Button)) {
+							tab_ = MyCarTab;
+							OnTabOpened(MyCarTab);
+						}
+						if (GUILayout.Button("Tune sets", Theme.Button)) {
+							tab_ = TuneSetsTab;
+							OnTabOpened(TuneSetsTab);
+						}
+						if (GUILayout.Button("Players here", Theme.Button)) {
+							tab_ = PlayersTab;
+							OnTabOpened(PlayersTab);
+						}
+						break;
+					case 1:
+						if (GUILayout.Button("Practice a course", Theme.Button)) {
+							GoToTimeAttack(0);
+						}
+						if (GUILayout.Button("Make a course", Theme.Button)) {
+							GoToTimeAttack(3);
+						}
+						if (GUILayout.Button("My times", Theme.Button)) {
+							timesView_ = 0;
+							GoToTimeAttack(2);
+						}
+						break;
+					case 2:
+						if (GUILayout.Button("Challenge someone", Theme.Button)) {
+							GoToBattle(races: false);
+						}
+						if (GUILayout.Button("Races and room games", Theme.Button)) {
+							GoToBattle(races: true);
+						}
+						break;
+					default:
+						if (GUILayout.Button("Speed traps", Theme.Button)) {
+							GoToTimeAttack(0);
+						}
+						if (GUILayout.Button("My ratings", Theme.Button)) {
+							timesView_ = 3;
+							GoToTimeAttack(2);
+						}
+						break;
+				}
+				GUILayout.FlexibleSpace();
+				GUILayout.EndHorizontal();
 			}
-			if (GUILayout.Button("Challenge someone", Theme.Button)) {
-				GoToBattle(races: false);
-			}
-			if (GUILayout.Button("Races and room games", Theme.Button)) {
-				GoToBattle(races: true);
-			}
-			GUILayout.EndHorizontal();
-			GUILayout.BeginHorizontal();
-			if (GUILayout.Button("My times and ratings", Theme.Button)) {
-				tab_ = CoursesTab;
-				coursesView_ = 2;
-				OnTabOpened(CoursesTab);
-			}
-			if (GUILayout.Button("Make a course", Theme.Button)) {
-				tab_ = CoursesTab;
-				coursesView_ = 3;
-				OnTabOpened(CoursesTab);
-			}
-			if (GUILayout.Button("Put a TRC tune on", Theme.Button)) {
-				tab_ = MyCarTab;
-				OnTabOpened(MyCarTab);
-			}
-			GUILayout.EndHorizontal();
+			GUILayout.EndVertical();
 
 			// What's waiting: challenges and open races.
 			List<RaceMessage> races = race_ == null ? openRaces_.Values.Select(v => v.Lobby).Where(l => l.Phase == RacePhase.Lobby || l.Phase == RacePhase.Finished).ToList() : new List<RaceMessage>();

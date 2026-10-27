@@ -231,7 +231,7 @@ namespace TRC.TuneLoader {
 
 			GUILayout.BeginVertical();
 			GUILayout.Label("TRC Tune Loader", Theme.Title);
-			GUILayout.Label($"Touge Racing Community · v{Version}", Theme.Subtitle);
+			GUILayout.Label($"{Theme.Tagline} · v{Version}", Theme.Subtitle);
 			GUILayout.EndVertical();
 
 			GUILayout.FlexibleSpace();

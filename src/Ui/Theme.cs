@@ -35,6 +35,14 @@ namespace TRC.TuneLoader {
 		/// <summary>The best a sector or lap has ever been driven (like purple sectors in racing).</summary>
 		public const string PurpleHex = "#C9A7FF";
 
+		/// <summary>
+		/// The tagline, and the four parts of the mod with their colours: the same on the README, the images and
+		/// Discord. Tunes pink, time attack purple, battles amber, traps/games/ratings green.
+		/// </summary>
+		public const string Tagline = "Official TRC tunes · Time attack · Course builder · Battles & races";
+		public static readonly string[] Pillars = { "Tunes & TRC spec", "Time attack & course builder", "Battles, races & tournaments", "Speed traps, room games & ratings" };
+		public static readonly string[] PillarHex = { AccentHex, PurpleHex, WarnHex, GoodHex };
+
 		public static GUIStyle Window, Title, Subtitle, Tab, TabActive, Close;
 		public static GUIStyle Heading, Body, Small, SectionLabel, Group;
 		public static GUIStyle Chip, ChipActive, Button, ButtonPrimary;

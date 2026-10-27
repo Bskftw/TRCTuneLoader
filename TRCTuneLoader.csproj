@@ -19,7 +19,7 @@
     <LangVersion>9</LangVersion>
     <AssemblyName>TRCTuneLoader</AssemblyName>
     <RootNamespace>TRC.TuneLoader</RootNamespace>
-    <Version>0.14.0</Version>
+    <Version>0.14.1</Version>
     <Configurations>Debug;Release;Release_Encrypted</Configurations>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <Nullable>disable</Nullable>

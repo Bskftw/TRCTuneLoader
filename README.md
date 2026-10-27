@@ -1,8 +1,23 @@
 ﻿# TRC Tune Loader
 
-A KSL mod for CarX Drift Racing Online, made for TRC (Touge Racing Community). It puts the official TRC spec tunes on your car in one click, gives every tune a short code the TRC Discord bot uses to verify leaderboard runs, and checks your car, and every car in the room, for anything that isn't TRC spec. It also times your runs on TRC courses with a 3-2-1-GO time attack.
+![TRC Tune Loader: official TRC tunes, time attack, course builder, battles and races](docs/images/banner.png)
 
-**Version 0.14.0** (Oct 26 2026). What changed in each version: [CHANGELOG.md](CHANGELOG.md).
+**Official TRC tunes · Time attack · Course builder · Battles & races**
+
+A KSL mod for CarX Drift Racing Online, made for TRC (Touge Racing Community). Build a course on any map, run it against the clock with a real 3-2-1-GO, then take it to the room: 1v1 battles, races for up to 16 drivers, tournaments and room games. And it keeps it fair: everyone races on the official TRC tunes, checked by the mod. Made with Project Dream in mind: maps can come with their own courses, sectors, grids and speed traps.
+
+## What you can do
+
+| | |
+| --- | --- |
+| **Tunes & TRC spec** | Put the official TRC tunes on your car in one click, and check your car, and every car in the room, for anything that isn't TRC spec. Every tune has a code the TRC Discord bot uses to verify leaderboard runs. |
+| **Time attack & course builder** | Make your own courses on any map by driving them, or race the official ones. 3-2-1-GO or flying starts, circuits with laps, sectors in purple, green and amber, a live delta, and your best line drawn on the road. |
+| **Battles, races & tournaments** | Challenge anyone in the room: side by side, cat and mouse, or a Tokyo Xtreme Racer style highway battle. Races for up to 16 drivers with qualifying and grids, then points series, knockouts and heats. |
+| **Speed traps, room games & ratings** | Speed traps in free roam and on courses, room games (cops and runners, tag, infected, king of the hill, highway cut-up and more), and an Elo rating, Safety Rating and license that move as you drive. |
+
+![The four parts of TRC Tune Loader](docs/images/overview.png)
+
+**Version 0.14.1** (Oct 26 2026). What changed in each version: [CHANGELOG.md](CHANGELOG.md).
 
 **Still in testing.** The mod is new and still being tested, so bugs will happen, especially in the newest features (see "Tested in game" below). If something goes wrong, press **Report a bug** (Home or Options) and send bskftw the zip it puts on your Desktop.
 
@@ -232,9 +247,9 @@ Your courses are saved in `kino\mods\TRCTuneLoader\Courses`. In Courses here, **
 - **Wheel and controller buttons**: **Pick a button**, then press it on your wheel or controller. The **TRC action** button does what fits right now: accepts a challenge, joins a race that just opened, runs the last battle or race back, or restarts your time attack. **Open the window** opens and closes this window. Pick buttons CarX doesn't use: CarX still sees every press.
 - **Report a bug**: the same as on Home.
 - **Window size**: 80% to 150%. Also sizes the badge and the pop-up.
-- **TRC spec badge** (on by default): a small tag in a corner while you drive. Green "TRC SPEC" with your set, amber for the few seconds before the car you're driving has been checked, red "NOT TRC SPEC". Pick the corner it sits in.
+- **TRC spec badge** (off by default): a small tag in a corner while you drive. Green "TRC SPEC" with your set, amber for the few seconds before the car you're driving has been checked, red "NOT TRC SPEC". Pick the corner it sits in.
 - **Time attack timer**: drag it while the window is open during a run. **Put the timer back at the top** resets it.
-- **Check my car on the track** (on by default): a few seconds after you reach the track, and whenever your car changes while you drive, it's checked. A short message pops up only if something isn't TRC spec. Click it or press the shortcut for details.
+- **Check my car on the track** (off by default): a few seconds after you reach the track, and whenever your car changes while you drive, it's checked. A short message pops up only if something isn't TRC spec. Click it or press the shortcut for details.
 - **Backups**: keep all of them, or only the last 5, 10 or 20 for each car and setup. Older ones are deleted when a new backup is saved. **Clean up now** shows how many would go and asks again before deleting.
 - **Take the tour**: the first-run tour again.
 
