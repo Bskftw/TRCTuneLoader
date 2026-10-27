@@ -17,7 +17,7 @@ A KSL mod for CarX Drift Racing Online, made for TRC (Touge Racing Community). B
 
 ![The four parts of TRC Tune Loader](docs/images/overview.png)
 
-**Version 0.14.1** (Oct 26 2026). What changed in each version: [CHANGELOG.md](CHANGELOG.md).
+**Version 0.14.2** (Oct 27 2026). What changed in each version: [CHANGELOG.md](CHANGELOG.md).
 
 **Still in testing.** The mod is new and still being tested, so bugs will happen, especially in the newest features (see "Tested in game" below). If something goes wrong, press **Report a bug** (Home or Options) and send bskftw the zip it puts on your Desktop.
 
@@ -26,7 +26,9 @@ A KSL mod for CarX Drift Racing Online, made for TRC (Touge Racing Community). B
 You need [KSL](https://github.com/trbflxr/ksl) (the CarX mod loader) installed. Then:
 
 - **The easy way:** find **TRC Tune Loader** in KSL's mod list (ModDB) in game and install it from there.
-- **Or by hand:** download `TRCTuneLoader.zip` from the [latest release](https://github.com/Bskftw/TRCTuneLoader/releases/latest) and unzip it into `CarX Drift Racing Online\kino\mods\`, so you end up with `kino\mods\TRCTuneLoader\TRCTuneLoader.ksm`. Then start CarX (KSL only looks for mods when the game starts).
+- **Or by hand:** download `TRCTuneLoader.zip` from the [latest release](https://github.com/Bskftw/TRCTuneLoader/releases/latest) and unzip it into `CarX Drift Racing Online\kino\mods\`, so you end up with `kino\mods\TRCTuneLoader.ksm`. Then start CarX (KSL only looks for mods when the game starts).
+
+Either way, the mod keeps its files (times, courses, backups, logs) in one folder: `kino\mods\TRCTuneLoader`. If you ever have two copies of `TRCTuneLoader.ksm`, the Home tab tells you which one to delete.
 
 Either way, KSL keeps the mod up to date by itself: new versions install when you start the game.
 

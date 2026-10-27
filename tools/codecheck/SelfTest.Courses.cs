@@ -29,6 +29,7 @@ namespace TRC.TuneLoader.CodeCheck {
 			RaceTests();
 			ModeTests();
 			HomeTests();
+			DataFolderTests();
 		}
 
 		private static void UphillIsDownhillReversed() {

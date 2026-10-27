@@ -23,7 +23,7 @@ namespace TRC.TuneLoader {
 	/// </summary>
 	[KSLMeta("TRCTuneLoader", Version, "bskftw")]
 	public partial class TRCTuneLoaderMod : BaseMod {
-		public const string Version = "0.14.1";
+		public const string Version = "0.14.2";
 
 		private const string BackupsFolderName = "Backups";
 		private const float CarRefreshSeconds = 1.0f;
@@ -104,7 +104,23 @@ namespace TRC.TuneLoader {
 
 		private void Start() {
 			modFolder_ = GetModFolder();
+			// Files that older versions kept next to a loose .ksm come into the mod's folder first, logs included.
+			List<string> moved = new List<string>();
+			string moveError = "";
+			try {
+				moved = DataFolder.MoveIn(string.IsNullOrEmpty(Location) ? null : Path.GetDirectoryName(Location), modFolder_);
+			} catch (Exception e) {
+				moveError = e.Message;
+			}
 			TrcLog.Start(modFolder_, $"TRC Tune Loader {Version} log, started {DateTime.Now:yyyy-MM-dd HH:mm:ss}. KSL's own log is kino/output.log.");
+			TrcLog.Info($"Running from {Location}; files in {modFolder_}.");
+			foreach (string line in moved) {
+				TrcLog.Info($"Tidied up: {line}.");
+			}
+			if (moveError.Length > 0) {
+				TrcLog.Warning($"Couldn't move all the old files into {modFolder_}: {moveError}");
+			}
+			FindOtherCopies();
 			adapter_ = new CarXTuneAdapter();
 
 			official_.Load();
@@ -791,10 +807,22 @@ namespace TRC.TuneLoader {
 			return false;
 		}
 
+		/// <summary>
+		/// The mod's files always live in kino/mods/TRCTuneLoader, wherever the .ksm is (KSL's mod list can put it loose
+		/// in kino/mods). Only when KSL doesn't say where its mods are, next to the .ksm.
+		/// </summary>
 		private string GetModFolder() {
-			// The mod sits in kino/mods/TRCTuneLoader/; backups go next to it.
+			string mods = "";
+			try {
+				mods = Kino.Paths.Mods;
+			} catch (Exception) {
+				// Below.
+			}
+			if (!string.IsNullOrEmpty(mods)) {
+				return DataFolder.For(mods);
+			}
 			string folder = string.IsNullOrEmpty(Location) ? null : Path.GetDirectoryName(Location);
-			return string.IsNullOrEmpty(folder) ? Path.Combine(Kino.Paths.Mods, "TRCTuneLoader") : folder;
+			return string.IsNullOrEmpty(folder) ? DataFolder.Name : folder;
 		}
 	}
 }

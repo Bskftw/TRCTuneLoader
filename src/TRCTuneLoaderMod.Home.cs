@@ -39,6 +39,9 @@ namespace TRC.TuneLoader {
 		private EventLedger ledger_;
 
 		private bool whatsNewPending_;
+
+		/// <summary>Other TRCTuneLoader.ksm files than the one running (an old install or update left them).</summary>
+		private List<string> otherCopies_ = new List<string>();
 		private bool upForBattle_;
 		private string homeResult_ = "";
 		private string bugNote_ = "";
@@ -89,6 +92,35 @@ namespace TRC.TuneLoader {
 			if (whatsNewPending_ && !windowOpen_ && !whatsNewShownThisSession_ && tourStep_ < 0) {
 				OpenWhatsNewWhenReady();
 			}
+		}
+
+		private void FindOtherCopies() {
+			try {
+				otherCopies_ = DataFolder.OtherCopies(Location, Kino.Paths.Mods, Kino.Paths.GameRoot);
+			} catch (Exception e) {
+				TrcLog.Warning($"Couldn't look for other copies of the mod: {e.Message}");
+				return;
+			}
+			foreach (string copy in otherCopies_) {
+				TrcLog.Warning($"Another copy of TRC Tune Loader is at {copy}. The one running is {Location}: delete the other one.");
+			}
+			if (otherCopies_.Count > 0) {
+				ShowNotice($"<b>TRC Tune Loader is installed twice</b>\n<color={Theme.MutedHex}>Open the window (Home) to see which file to delete</color>", 15f);
+			}
+		}
+
+		private void DrawOtherCopies() {
+			if (otherCopies_.Count == 0) {
+				return;
+			}
+			GUILayout.BeginVertical(Theme.Guide);
+			GUILayout.Label("TRC Tune Loader is installed twice", Theme.Heading);
+			GUILayout.Label($"The one running is <b>{Location}</b>. Close CarX and delete:", Theme.Body);
+			foreach (string copy in otherCopies_) {
+				GUILayout.Label($"• {copy}", Theme.Body);
+			}
+			GUILayout.Label("An old version's update put the mod in a second place. Your times, courses and backups are safe: they're in kino\\mods\\TRCTuneLoader.", Theme.Small);
+			GUILayout.EndVertical();
 		}
 
 		private void ShowNotice(string text, float seconds = 6f) {
@@ -511,6 +543,9 @@ namespace TRC.TuneLoader {
 				}
 			}
 			Line("TRC Tune Loader", Version);
+			Line("Running from", Location);
+			Line("Files in", modFolder_);
+			Line("Other copies", otherCopies_.Count == 0 ? "none" : string.Join(", ", otherCopies_));
 			Line("Made", when.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture));
 			Safe("Unity", () => Application.unityVersion);
 			Safe("System", () => SystemInfo.operatingSystem);
@@ -565,6 +600,7 @@ namespace TRC.TuneLoader {
 			RefreshCarIfDue();
 			RefreshPlayersIfDue();
 			homeScroll_ = GUILayout.BeginScrollView(homeScroll_);
+			DrawOtherCopies();
 			if (whatsNewPending_) {
 				GUILayout.BeginVertical(Theme.Guide);
 				GUILayout.Label($"What's new in {WhatsNewVersion}", Theme.Heading);

@@ -2,6 +2,14 @@
 
 All versions of TRC Tune Loader, newest first. "Not tested in game yet" means the version builds and its automatic tests pass, but nobody has tried it in CarX yet.
 
+## 0.14.2 (Oct 27 2026)
+
+Not tested in game yet. Tidier files, thanks to a player's report.
+
+**Fixed**
+- The mod's files (times, courses, backups, logs) now always go in one folder, `kino\mods\TRCTuneLoader`, wherever KSL installed the mod. Before, when the mod was installed loose in `kino\mods`, its TimeAttack, Courses and Backups folders were made loose there too. They're moved into `kino\mods\TRCTuneLoader` by themselves the first time you start this version, with nothing lost.
+- Updates no longer leave a second copy of `TRCTuneLoader.ksm` behind. If you already have two, the Home tab says which one to delete.
+
 ## 0.14.1 (Oct 26 2026)
 
 Not tested in game yet. A small update; works with 0.14.0 and 0.13.0 players as before.
