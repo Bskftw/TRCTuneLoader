@@ -375,12 +375,12 @@ namespace TRC.TuneLoader.CodeCheck {
 		}
 
 		private static void OpponentOutIsToldAtOnce() {
-			// The guest's car is reset 80 m further along at 150 m: its run stops. The host hears it at once and wins by finishing.
+			// The guest's car is moved 200 m further along at 150 m (a teleport: since 0.15.1 a reset alone doesn't stop a battle run): its run stops. The host hears it at once and wins by finishing.
 			Course course = StraightCourse();
 			string toldWhileRunning = "";
 			var (host, guest) = PlayBattle(course, BattleFormat.Race, 14, open: true, onFrame: (t, h, g) => {
 				if (g.Session?.Run?.State == TimeAttackRun.Phase.Running && g.Session.Run.Progress > 150f && g.Skip == 0f) {
-					g.Skip = 80f;
+					g.Skip = 200f;
 				}
 				if (h.Session?.State == BattleSession.Phase.Running && h.Session.PeerOut.Length > 0 && toldWhileRunning.Length == 0) {
 					toldWhileRunning = h.Session.PeerOut;

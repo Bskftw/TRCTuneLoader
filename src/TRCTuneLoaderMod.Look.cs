@@ -14,6 +14,7 @@ namespace TRC.TuneLoader {
 		private const string LookAccentPref = "ui_accent";
 		private const string LookTextPref = "ui_text";
 		private const string LookTextSizePref = "ui_text_size";
+		private const string LookMutedPref = "ui_text_muted";
 
 		private static readonly float[] TextSizes = { 0.9f, 1f, 1.15f, 1.3f, 1.5f };
 
@@ -42,9 +43,12 @@ namespace TRC.TuneLoader {
 		private Color lookAccent_ = Theme.DefaultAccent;
 		private Color lookText_ = Theme.DefaultText;
 		private float lookTextSize_ = 1f;
+
+		/// <summary>The second text colour (the grey notes and labels), or null to follow the text colour.</summary>
+		private Color? lookMuted_;
 		private bool lookPending_;
 
-		/// <summary>Which colour has its sliders open (0 none, 1 background, 2 accent, 3 text).</summary>
+		/// <summary>Which colour has its sliders open (0 none, 1 background, 2 accent, 3 text, 4 second text).</summary>
 		private int lookEditing_;
 
 		private void LoadLook() {
@@ -57,9 +61,10 @@ namespace TRC.TuneLoader {
 			if (Theme.TryHex(KSL.API.Kino.Prefs.Get(LookTextPref, ""), out Color text)) {
 				lookText_ = text;
 			}
+			lookMuted_ = Theme.TryHex(KSL.API.Kino.Prefs.Get(LookMutedPref, ""), out Color muted) ? muted : (Color?)null;
 			float size = KSL.API.Kino.Prefs.Get(LookTextSizePref, 1f);
 			lookTextSize_ = TextSizes.OrderBy(s => Math.Abs(s - size)).First();
-			Theme.Configure(lookBackground_, lookAccent_, lookText_, lookTextSize_);
+			Theme.Configure(lookBackground_, lookAccent_, lookText_, lookTextSize_, lookMuted_);
 		}
 
 		/// <summary>Called from Update: a changed look goes through here, between frames.</summary>
@@ -68,8 +73,9 @@ namespace TRC.TuneLoader {
 				return;
 			}
 			lookPending_ = false;
-			Theme.Configure(lookBackground_, lookAccent_, lookText_, lookTextSize_);
+			Theme.Configure(lookBackground_, lookAccent_, lookText_, lookTextSize_, lookMuted_);
 			SavePref(LookBackgroundPref, Theme.ToHex(lookBackground_));
+			SavePref(LookMutedPref, lookMuted_ is Color muted ? Theme.ToHex(muted) : "");
 			SavePref(LookAccentPref, Theme.ToHex(lookAccent_));
 			SavePref(LookTextPref, Theme.ToHex(lookText_));
 			SavePref(LookTextSizePref, lookTextSize_);
@@ -88,11 +94,12 @@ namespace TRC.TuneLoader {
 			GUILayout.Label("Colours: pick a look, or your own colours below.", Theme.Body);
 			GUILayout.BeginHorizontal();
 			foreach (Look look in Looks) {
-				bool current = SameColour(look.Background, lookBackground_) && SameColour(look.Accent, lookAccent_) && SameColour(look.Text, lookText_);
+				bool current = SameColour(look.Background, lookBackground_) && SameColour(look.Accent, lookAccent_) && SameColour(look.Text, lookText_) && lookMuted_ == null;
 				if (GUILayout.Button(look.Name, current ? Theme.ChipActive : Theme.Chip)) {
 					lookBackground_ = look.Background;
 					lookAccent_ = look.Accent;
 					lookText_ = look.Text;
+					lookMuted_ = null;
 					lookPending_ = true;
 				}
 			}
@@ -102,6 +109,13 @@ namespace TRC.TuneLoader {
 			ColourRow("Background", ref lookBackground_, 1);
 			ColourRow("Accent (buttons, tabs)", ref lookAccent_, 2);
 			ColourRow("Text", ref lookText_, 3);
+			Color muted = lookMuted_ ?? Theme.Muted;
+			if (ColourRow("Second text (notes, labels)", ref muted, 4, lookMuted_ == null ? "Auto" : "Reset")) {
+				lookMuted_ = null;
+				lookPending_ = true;
+			} else if (!SameColour(muted, lookMuted_ ?? Theme.Muted)) {
+				lookMuted_ = muted;
+			}
 			if (Mathf.Abs(Theme.Luminance(lookBackground_) - Theme.Luminance(lookText_)) < 0.35f) {
 				GUILayout.Label("The text and the background are close: the text may be hard to read.", Theme.PillWarn);
 			} else if (Theme.Luminance(lookBackground_) > 0.5f) {
@@ -109,8 +123,12 @@ namespace TRC.TuneLoader {
 			}
 		}
 
-		/// <summary>A colour: its swatch and hex, a row of ready colours, and (Custom) sliders for hue, colour and brightness.</summary>
-		private void ColourRow(string label, ref Color colour, int which) {
+		/// <summary>
+		/// A colour: its swatch and hex, a row of ready colours, and (Custom) sliders for hue, colour and brightness.
+		/// With <paramref name="reset"/>, a button with that text comes first; true when it's clicked.
+		/// </summary>
+		private bool ColourRow(string label, ref Color colour, int which, string reset = null) {
+			bool resetClicked = false;
 			GUILayout.Space(4);
 			GUILayout.BeginHorizontal();
 			GUILayout.Label($"<b>{label}</b>  <color={Theme.MutedHex}>{Theme.ToHex(colour)}</color>", Theme.Body, GUILayout.Width(230));
@@ -123,12 +141,18 @@ namespace TRC.TuneLoader {
 				}
 			}
 			GUILayout.FlexibleSpace();
+			if (reset != null) {
+				// "Auto" while it follows the text colour (nothing to undo), "Reset" once it's the player's own.
+				GUI.enabled = reset != "Auto";
+				resetClicked = GUILayout.Button(reset, Theme.Button);
+				GUI.enabled = true;
+			}
 			if (GUILayout.Button(lookEditing_ == which ? "Done" : "Custom", Theme.Button)) {
 				lookEditing_ = lookEditing_ == which ? 0 : which;
 			}
 			GUILayout.EndHorizontal();
 			if (lookEditing_ != which) {
-				return;
+				return resetClicked;
 			}
 			Color.RGBToHSV(colour, out float h, out float s, out float v);
 			float nh = SliderRow("Hue", h);
@@ -138,6 +162,7 @@ namespace TRC.TuneLoader {
 				colour = Color.HSVToRGB(nh, ns, nv);
 				lookPending_ = true;
 			}
+			return resetClicked;
 		}
 
 		private static float SliderRow(string label, float value) {

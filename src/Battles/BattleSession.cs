@@ -186,6 +186,11 @@ namespace TRC.TuneLoader {
 		/// <summary>The other driver's metres along the course in the current run, as of their last heartbeat.</summary>
 		public float PeerProgress { get; private set; }
 
+		/// <summary>The other driver's trap total so far in this run (speed trap battles).</summary>
+		public float PeerTrapTotal { get; private set; }
+
+		public bool IsSpeedTraps => Format == BattleFormat.SpeedTraps;
+
 		/// <summary>
 		/// Where the other driver is now: their last progress moved on by their speed for as long as it took to
 		/// get here, so it can be compared with this driver's live position (heartbeats come 5 times a second,
@@ -609,6 +614,9 @@ namespace TRC.TuneLoader {
 			challenge.MatchGame = MatchGame;
 			challenge.CourseCode = IsHighway ? "" : Course.Code;
 			challenge.Course = IsHighway || Course.Official ? null : Course;
+			if (IsSpeedTraps) {
+				challenge.Traps = new List<CourseGate>(Course.Traps);
+			}
 			outbox_.Add(challenge);
 		}
 
@@ -627,7 +635,7 @@ namespace TRC.TuneLoader {
 				PeerSp = FullSp;
 			} else {
 				// A reset doesn't end a battle run: a driver who messes up can still win if the other does too.
-				Run = new TimeAttackRun(Course, Laps) { ExternalStart = true, AllowResets = true };
+				Run = new TimeAttackRun(Course, Laps) { ExternalStart = true, AllowResets = true, KeepGoing = true };
 				if (Format == BattleFormat.CatAndMouse && !IAmLeader) {
 					Run.GridFront = ChaserBoxFront;
 					Run.GridBack = ChaserBoxBack;
@@ -642,6 +650,7 @@ namespace TRC.TuneLoader {
 			MyCar = null;
 			MyReady = false;
 			PeerProgress = 0f;
+			PeerTrapTotal = 0f;
 			PeerOut = "";
 			peerProgressAt_ = -1;
 			peerSpeed_ = 0;
@@ -753,6 +762,7 @@ namespace TRC.TuneLoader {
 					Time = Run.Result,
 					Reason = Run.State == TimeAttackRun.Phase.Finished ? "" : Run.Message,
 					SpecAtEnd = Open || (checkMyCar_?.Invoke()?.Spec ?? false),
+					TrapTotal = Run.TrapTotal,
 				};
 				lastResult_ = myResult_;
 				if (firstResultAt_ < 0) {
@@ -774,7 +784,9 @@ namespace TRC.TuneLoader {
 			if (myResult_ != null && peerResult_ != null) {
 				Decide(now);
 			} else if (myResult_ != null) {
-				Message = myResult_.Finished
+				Message = myResult_.Finished && IsSpeedTraps
+					? $"Your traps: {myResult_.TrapTotal:0} km/h. Waiting for {PeerName}"
+					: myResult_.Finished
 					? $"Your time: {TimeAttackRun.FormatTime(myResult_.Time)}. Waiting for {PeerName}"
 					: $"{myResult_.Reason} Waiting for {PeerName}";
 			}
@@ -843,6 +855,7 @@ namespace TRC.TuneLoader {
 				}
 				if (since > 0 || peerProgressAt_ < 0) {
 					PeerProgress = message.Progress;
+					PeerTrapTotal = message.TrapTotal;
 					peerProgressAt_ = at;
 				}
 			}
@@ -874,6 +887,7 @@ namespace TRC.TuneLoader {
 			beat.TuneCode = MyCar?.TuneCode ?? "";
 			beat.Car = MyCar?.Car ?? "";
 			beat.Progress = Run?.TotalProgress ?? 0f;
+			beat.TrapTotal = Run?.TrapTotal ?? 0f;
 			beat.RunIndex = RunIndex;
 			beat.Phase = (byte)State;
 			beat.Result = lastResult_;

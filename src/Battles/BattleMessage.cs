@@ -6,8 +6,11 @@ using System.Text.RegularExpressions;
 using UnityEngine;
 
 namespace TRC.TuneLoader {
-	/// <summary>Race and cat and mouse run on a course; a highway battle (Tokyo Xtreme Racer style) anywhere, on SP bars.</summary>
-	public enum BattleFormat : byte { Race = 0, CatAndMouse = 1, Highway = 2 }
+	/// <summary>
+	/// Race and cat and mouse run on a course; a highway battle (Tokyo Xtreme Racer style) anywhere, on SP bars;
+	/// speed traps (0.15.1, for fun) on a course, won on the total of every trap.
+	/// </summary>
+	public enum BattleFormat : byte { Race = 0, CatAndMouse = 1, Highway = 2, SpeedTraps = 3 }
 
 	public enum BattleKind : byte {
 		/// <summary>Host to guest: a challenge, with the course (its data too, unless it's an official course the guest has).</summary>
@@ -45,6 +48,9 @@ namespace TRC.TuneLoader {
 
 		/// <summary>TRC spec at the finish (TRC spec battles only care).</summary>
 		public bool SpecAtEnd;
+
+		/// <summary>Every speed caught at the course's traps added up (km/h): what a speed trap battle is won on.</summary>
+		public float TrapTotal;
 	}
 
 	/// <summary>
@@ -54,6 +60,15 @@ namespace TRC.TuneLoader {
 	public sealed class BattleMessage {
 		/// <summary>2 since 0.10.1: small pieces, the path packed in centimetres, and Seen. 3 since 0.11.0: laps, and circuit courses. 4 since 0.12.0: tournament matches. 5 since 0.13.0: positions and SP (highway battles).</summary>
 		public const byte Protocol = 5;
+
+		/// <summary>
+		/// A speed trap challenge (0.15.1) goes out as protocol 6, so a 0.15.0 copy, which doesn't know the format,
+		/// never sees it. Everything else stays 5; the trap totals ride at the end of a heartbeat, where 0.15.0 stops reading.
+		/// </summary>
+		public const byte TrapProtocol = 6;
+
+		/// <summary>The most traps a speed trap challenge carries.</summary>
+		public const int MaxTraps = 64;
 
 		public BattleKind Kind;
 		public uint BattleId;
@@ -75,6 +90,9 @@ namespace TRC.TuneLoader {
 
 		/// <summary>The course itself, sent when the guest may not have it (anything but an official course).</summary>
 		public Course Course;
+
+		/// <summary>A speed trap battle's traps (the course's own, or the free-roam ones along it), in driving order.</summary>
+		public List<CourseGate> Traps = new List<CourseGate>();
 
 		// Answer, Abort and Leave
 		public bool Accept;
@@ -105,6 +123,9 @@ namespace TRC.TuneLoader {
 		public float Kmh;
 		public float Sp;
 
+		/// <summary>The sender's trap total so far in this run (speed trap battles), for the live standings.</summary>
+		public float TrapTotal;
+
 		// Countdown and Abort
 		public int CountdownId;
 		public double GoHostTime;
@@ -112,7 +133,7 @@ namespace TRC.TuneLoader {
 		public byte[] Encode() {
 			using (var memory = new MemoryStream())
 			using (var writer = new BinaryWriter(memory, Encoding.UTF8)) {
-				writer.Write(Protocol);
+				writer.Write(Kind == BattleKind.Challenge && Format == BattleFormat.SpeedTraps ? TrapProtocol : Protocol);
 				writer.Write((byte)Kind);
 				writer.Write(BattleId);
 				writer.Write(From);
@@ -129,6 +150,13 @@ namespace TRC.TuneLoader {
 						writer.Write(Course != null);
 						if (Course != null) {
 							WriteCourse(writer, Course);
+						}
+						if (Format == BattleFormat.SpeedTraps) {
+							int traps = Math.Min(MaxTraps, Traps.Count);
+							writer.Write((byte)traps);
+							for (int i = 0; i < traps; i++) {
+								WriteGate(writer, Traps[i]);
+							}
 						}
 						break;
 					case BattleKind.Answer:
@@ -164,6 +192,9 @@ namespace TRC.TuneLoader {
 							writer.Write(Clip(Result.Reason));
 							writer.Write(Result.SpecAtEnd);
 						}
+						// 0.15.1: read only when there.
+						writer.Write(TrapTotal);
+						writer.Write(Result?.TrapTotal ?? 0f);
 						break;
 					case BattleKind.Countdown:
 						writer.Write(CountdownId);
@@ -184,7 +215,8 @@ namespace TRC.TuneLoader {
 		public static BattleMessage Decode(byte[] data) {
 			try {
 				using (var reader = new BinaryReader(new MemoryStream(data), Encoding.UTF8)) {
-					if (reader.ReadByte() != Protocol) {
+					byte protocol = reader.ReadByte();
+					if (protocol != Protocol && protocol != TrapProtocol) {
 						return null;
 					}
 					var message = new BattleMessage {
@@ -204,6 +236,15 @@ namespace TRC.TuneLoader {
 							message.CourseCode = Clip(reader.ReadString());
 							if (reader.ReadBoolean()) {
 								message.Course = ReadCourse(reader);
+							}
+							if (message.Format == BattleFormat.SpeedTraps) {
+								int traps = reader.ReadByte();
+								for (int i = 0; i < traps; i++) {
+									message.Traps.Add(ReadGate(reader));
+								}
+							}
+							if (message.Format > BattleFormat.SpeedTraps) {
+								return null;
 							}
 							break;
 						case BattleKind.Answer:
@@ -236,6 +277,13 @@ namespace TRC.TuneLoader {
 									Reason = Clip(reader.ReadString()),
 									SpecAtEnd = reader.ReadBoolean(),
 								};
+							}
+							if (reader.BaseStream.Length - reader.BaseStream.Position >= 8) {
+								message.TrapTotal = reader.ReadSingle();
+								float resultTraps = reader.ReadSingle();
+								if (message.Result != null) {
+									message.Result.TrapTotal = resultTraps;
+								}
 							}
 							break;
 						case BattleKind.Countdown:

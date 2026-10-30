@@ -922,6 +922,9 @@ namespace TRC.TuneLoader {
 		private const string TurboPressureKey = "Turbo pressure";
 		private const string FinalDriveKey = "Final drive";
 		private const string DrivetrainKey = "Drivetrain";
+		private const string MassKey = "Weight";
+		private const string WeightFrontKey = "Weight balance (front)";
+		private const string WeightUpKey = "Centre of gravity height";
 		private static string GearKey(int index) => $"Gear {index + 1} ratio";
 
 		/// <summary>
@@ -989,6 +992,9 @@ namespace TRC.TuneLoader {
 						case ParameterType.TurboCharged: expected.Values[TurboKey] = real > 0.5f; break;
 						case ParameterType.TurboPressure: expected.Values[TurboPressureKey] = real; break;
 						case ParameterType.FinalDrive: expected.Values[FinalDriveKey] = real; break;
+						case ParameterType.Mass: expected.Values[MassKey] = real; break;
+						case ParameterType.WeightFrontPercent: expected.Values[WeightFrontKey] = real; break;
+						case ParameterType.WeightUpPercent: expected.Values[WeightUpKey] = real; break;
 						case ParameterType.DrivetrainType:
 							expectedType = DrivetrainSwitchDynoParamViewModel.GetDrivetrainType(Mathf.RoundToInt(real));
 							expected.Values[DrivetrainKey] = DrivetrainName(expectedType);
@@ -1049,6 +1055,16 @@ namespace TRC.TuneLoader {
 
 			AddSuspension(values, "Front", desc.frontSuspension);
 			AddSuspension(values, "Rear", desc.rearSuspension);
+
+			// KINO's weight and distribution menu changes these (a tester lowered the centre of gravity and added 50 kg).
+			CarX.CarDesc.Weight weight = desc.weight;
+			values[MassKey] = weight.mass;
+			values[WeightFrontKey] = weight.frontPercent;
+			values[WeightUpKey] = weight.upPercent;
+			values["Weight balance (right)"] = weight.rightPercent;
+			values["Front balance from the wheels"] = weight.calcFrontCenterMassFromWheels;
+			values["Side balance from the wheels"] = weight.calcRightCenterMassFromWheels;
+			values["Body inertia"] = weight.bodyInertiaMultiplier;
 			return snapshot;
 		}
 
@@ -1128,6 +1144,20 @@ namespace TRC.TuneLoader {
 			for (int i = 0; i < gears.Length; i++) {
 				int gear = i + 1;
 				Add($"Gear {gear} ratio", () => physics.GetGearRatio(gear), gears[i]);
+			}
+
+			// CarX sets the body's mass and centre of mass from the description (Car.cs): logged to learn whether
+			// KINO's weight menu changes the physics directly too.
+			try {
+				Rigidbody body = physics.getRigidbody;
+				CarX.CarDesc.Weight weight = desc.weight;
+				Vector3 centre = physics.CalcCenterMassLocalSpace(weight.rightPercent, weight.calcRightCenterMassFromWheels,
+					weight.frontPercent, weight.calcFrontCenterMassFromWheels, weight.upPercent, weight.bounds);
+				lines.Add($"Mass: {Format(body.mass)} / {Format(weight.mass)}");
+				lines.Add($"Centre of mass: {Format(body.centerOfMass.x)}, {Format(body.centerOfMass.y)}, {Format(body.centerOfMass.z)} / " +
+					$"{Format(centre.x)}, {Format(centre.y)}, {Format(centre.z)}");
+			} catch (Exception e) {
+				lines.Add($"Mass: couldn't read ({e.GetType().Name})");
 			}
 
 			// No description value to set these against: logged to learn what KINO's air suspension and hydraulics change.

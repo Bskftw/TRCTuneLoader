@@ -37,7 +37,8 @@ namespace TRC.TuneLoader {
 		/// the text (lighter on a dark background, darker on a light one); the accent gives the pink parts. The
 		/// default colours give exactly the TRC look.
 		/// </summary>
-		public static void Configure(Color background, Color accent, Color text, float textScale) {
+		/// <param name="muted">The second text colour (notes, labels, the grey text), or null to work it out from the text.</param>
+		public static void Configure(Color background, Color accent, Color text, float textScale, Color? muted = null) {
 			TextScale = Mathf.Clamp(textScale, 0.8f, 1.6f);
 			bool standard = Same(background, DefaultBackground) && Same(accent, DefaultAccent) && Same(text, DefaultText);
 			if (standard) {
@@ -69,6 +70,11 @@ namespace TRC.TuneLoader {
 				AccentSoft = Color.Lerp(background, accent, 0.28f);
 				AccentText = Color.Lerp(accent, toward == Color.white ? Color.white : Color.black, 0.6f);
 			}
+			if (muted is Color own) {
+				own.a = 1f;
+				Muted = own;
+			}
+			MutedHex = ToHex(Muted);
 			ready_ = false;
 		}
 
@@ -96,7 +102,8 @@ namespace TRC.TuneLoader {
 		public static readonly Color WarnText = Hex(0xFAC775);
 		public static readonly Color Neutral = Hex(0x26262C);
 
-		public const string MutedHex = "#9A9AA3";
+		/// <summary>The grey text inside rich text: follows <see cref="Muted"/>, so Options > Look changes it too.</summary>
+		public static string MutedHex { get; private set; } = "#9A9AA3";
 		public const string GoodHex = "#C0DD97";
 		public const string BadHex = "#F7C1C1";
 		public const string WarnHex = "#FAC775";

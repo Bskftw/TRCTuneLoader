@@ -34,7 +34,8 @@ namespace TRC.TuneLoader {
 		private bool freeRoamTraps_ = true;
 		private string trapFlash_ = "";
 		private float trapFlashUntil_;
-		private (int Index, float Kmh)? runTrapSeen_;
+		private TimeAttackRun runTrapRun_;
+		private int runTrapsSeen_;
 		private SpeedTrap trapDeletePending_;
 
 		// Placing and editing.
@@ -89,6 +90,15 @@ namespace TRC.TuneLoader {
 		/// <summary>The course being driven (a run, a battle or a race), whose own traps count in it.</summary>
 		private Course ActiveCourse => InRace && race_.Course != null ? race_.Course : InBattle ? battle_.Course : run_?.Course;
 
+		/// <summary>The run being driven: a race's, a battle's or a time attack.</summary>
+		private TimeAttackRun ActiveRun => InRace ? race_.Run : InBattle ? battle_.Run : run_;
+
+		/// <summary>Traps driven out of the course's (on a circuit, this lap's and the laps before): "3/8", or "3" on a circuit.</summary>
+		private static string TrapCountText(TimeAttackRun run) =>
+			run.Course.IsCircuit ? run.TrapSpeeds.Count.ToString(CultureInfo.InvariantCulture) : $"{run.TrapSpeeds.Count}/{run.Course.Traps.Count}";
+
+		private static string Ordinal(int n) => n <= 0 ? "-" : n % 100 is 11 or 12 or 13 ? $"{n}th" : (n % 10) switch { 1 => $"{n}st", 2 => $"{n}nd", 3 => $"{n}rd", _ => $"{n}th" };
+
 		/// <summary>
 		/// Called from UpdateCourses every frame. Free-roam traps work all the time when they're on, during a time
 		/// attack, a battle or a race too (since 0.15.0), except one sitting where the course has its own trap.
@@ -101,10 +111,15 @@ namespace TRC.TuneLoader {
 				return;
 			}
 			Course active = ActiveCourse;
+			TimeAttackRun activeRun = ActiveRun;
 			List<CourseGate> courseTraps = active?.Traps ?? new List<CourseGate>();
+			// A free-roam trap where the course has its own is left to the run, but only while the run is really going:
+			// after a reset, a stopped run or a race you're out of, every trap records again (bskftw, 0.15.1).
+			bool runScores = activeRun != null && activeRun.State == TimeAttackRun.Phase.Running && !activeRun.BeforeLine;
+			List<CourseGate> scored = runScores ? courseTraps : new List<CourseGate>();
 			bool freeRoam = freeRoamTraps_ && recorder_.State == CourseRecorder.Phase.Idle;
 			List<SpeedTrap> watched = freeRoam
-				? mapTraps_.Where(t => !courseTraps.Any(c => Vector3.Distance(c.Center, t.Gate.Center) < 3f)).ToList()
+				? mapTraps_.Where(t => !scored.Any(c => Vector3.Distance(c.Center, t.Gate.Center) < 3f)).ToList()
 				: new List<SpeedTrap>();
 			if (watched.Count > 0) {
 				SpeedTrapHit? hit = trapWatcher_.Tick(Time.timeAsDouble, pose_.Position, pose_.SpeedKmh, watched);
@@ -115,13 +130,17 @@ namespace TRC.TuneLoader {
 				trapWatcher_.Reset();
 			}
 
-			// A run's course traps: caught by the run itself; flashed and saved here.
-			if (run_ != null && run_.LastTrap.HasValue && !run_.LastTrap.Equals(runTrapSeen_)) {
-				runTrapSeen_ = run_.LastTrap;
-				var (index, kmh) = run_.LastTrap.Value;
-				TrapCaught(CourseTrap(run_.Course, index), kmh, run_.Course.Code);
-			} else if (run_ == null || !run_.LastTrap.HasValue) {
-				runTrapSeen_ = null;
+			// A run's course traps (a time attack, a battle or a race): caught by the run itself; flashed with the
+			// total so far and saved here. Before 0.15.1 only a time attack's were shown.
+			if (activeRun != null && activeRun.LastTrap.HasValue && (!ReferenceEquals(activeRun, runTrapRun_) || activeRun.TrapSpeeds.Count != runTrapsSeen_)) {
+				runTrapRun_ = activeRun;
+				runTrapsSeen_ = activeRun.TrapSpeeds.Count;
+				var (index, kmh) = activeRun.LastTrap.Value;
+				string total = activeRun.TrapSpeeds.Count > 1 ? $"Traps {TrapCountText(activeRun)} · total {activeRun.TrapTotal:0} km/h" : "";
+				TrapCaught(CourseTrap(activeRun.Course, index), kmh, activeRun.Course.Code, total);
+			} else if (activeRun == null || !activeRun.LastTrap.HasValue) {
+				runTrapRun_ = null;
+				runTrapsSeen_ = 0;
 			}
 
 			// The line on the road only for the trap being placed or edited; every trap gets its sign.
@@ -192,12 +211,14 @@ namespace TRC.TuneLoader {
 			new SpeedTrap { Name = $"{course.Name} trap {index + 1}", Gate = course.Traps[index], MapKey = course.MapKey, Source = course.Source };
 
 		/// <summary>The car went through a trap: the speed flashes with how it compares, and it's saved.</summary>
-		private void TrapCaught(SpeedTrap trap, float kmh, string context) {
+		/// <param name="total">A line under it with the run's total so far, or "".</param>
+		private void TrapCaught(SpeedTrap trap, float kmh, string context, string total = "") {
 			var mine = trapRecords_.Where(r => r.TrapKey == trap.Key && r.CarId == pose_.CarId).Select(r => r.Kmh).DefaultIfEmpty(0f).Max();
 			var all = trapRecords_.Where(r => r.TrapKey == trap.Key).Select(r => r.Kmh).DefaultIfEmpty(0f).Max();
 			string colour = all > 0 && kmh > all ? Theme.PurpleHex : mine <= 0 || kmh >= mine ? Theme.GoodHex : Theme.WarnHex;
 			string compare = all > 0 && kmh > all ? "best ever!" : mine > 0 ? $"your best {mine:0} km/h" : "first time through";
-			trapFlash_ = $"<b>SPEED TRAP · {trap.Name}</b>\n<color={colour}><b>{kmh:0} km/h</b></color>  <color={Theme.MutedHex}>{compare}</color>";
+			trapFlash_ = $"<b>SPEED TRAP · {trap.Name}</b>\n<color={colour}><b>{kmh:0} km/h</b></color>  <color={Theme.MutedHex}>{compare}</color>" +
+				(total.Length > 0 ? $"\n<color={Theme.WarnHex}>{total}</color>" : "");
 			trapFlashUntil_ = Time.unscaledTime + TrapFlashSeconds;
 			lastTrapKmh_[trap.Key] = kmh;
 			var record = new SpeedTrapRecord {
@@ -592,5 +613,27 @@ namespace TRC.TuneLoader {
 
 		/// <summary>The traps a speed trap race on this course scores: its own, or the free-roam ones along it.</summary>
 		private List<CourseGate> RaceTrapsFor(Course course) => course == null ? new List<CourseGate>() : course.Traps.Count > 0 ? course.Traps : TrapsAlong(course);
+
+		/// <summary>
+		/// <see cref="RaceTrapsFor"/> for the window, kept for 2 s: the race form lists every course on each redraw,
+		/// and measuring every trap against every course's whole path each time cost a tester about 70 fps.
+		/// </summary>
+		private int RaceTrapCount(Course course) {
+			if (course == null) {
+				return 0;
+			}
+			if (Time.realtimeSinceStartup > raceTrapCountsAt_ + 2f) {
+				raceTrapCounts_.Clear();
+				raceTrapCountsAt_ = Time.realtimeSinceStartup;
+			}
+			if (!raceTrapCounts_.TryGetValue(course, out int count)) {
+				count = RaceTrapsFor(course).Count;
+				raceTrapCounts_[course] = count;
+			}
+			return count;
+		}
+
+		private readonly Dictionary<Course, int> raceTrapCounts_ = new Dictionary<Course, int>();
+		private float raceTrapCountsAt_ = -10f;
 	}
 }

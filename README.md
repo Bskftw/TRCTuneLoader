@@ -158,7 +158,7 @@ A run is stopped if you take a shortcut, leave the course, reset the car, change
 
 **Speed traps** (the section, and while you drive):
 
-- Drive through a speed trap and your speed flashes on screen: **purple** for a new best on that trap, **green** close to it, **amber** slower.
+- Drive through a speed trap and your speed flashes on screen: **purple** for a new best on that trap, **green** close to it, **amber** slower. In a time attack, battle or race, the flash also shows your total so far. Free-roam traps always record, also after a reset or when you're out of a race.
 - Each trap has a floating **SPEED CHECK** sign over the road showing your last speed through it. A trap only shows a line on the road while you place or edit it, so you can see how wide it is.
 - Free-roam traps work all the time when they're on: in free roam, and during time attacks, battles and races too.
 - **New speed trap**: stop on the road where you want it, facing along the road, give it a name, pick a width (4 to 30 m) and press **Place it here**. The next one is named for you, so you can drive on and place the next.
@@ -174,13 +174,14 @@ The Battles tab has four sections down the left: **1v1 battles**, **Races & tour
 1. Pick the opponent, a course on this map, the format, the laps (on a circuit) and the mode, and press **Challenge**. They see the challenge on screen and press the shortcut to answer it. A course of your own, or your recorded path, is sent to them with the challenge: a long course can take up to a minute to get there, so give it time. You see when it gets to them, and why if they can't accept it. If you both challenge each other at once to the same course, format and mode, it becomes one battle by itself. The room board on Home shows who's up for a battle.
 2. Both drive to the start, or press **Teleport to my spot**. In a race you line up side by side (the challenger on the left); in cat and mouse the leader is just behind the line (within 5 m) and the chaser at least 5 m back.
 3. Stop in your spot. When both are ready, **3-2-1-GO** shows on both screens at the same moment (the mods measure the connection between you). Moving before GO calls the countdown off for both.
-4. Each mod times its own car from GO to the finish line, with the same rules as time attack, except that a **reset doesn't end your run**: mess up, reset and keep going, and you can still win if the other driver messes up too. A reset that puts you further along the course does stop it. When the other driver's run stops, you're told straight away: finish to win.
+4. Each mod times its own car from GO to the finish line, with the same rules as time attack, except that a **reset or going off the road doesn't end your run**: mess up, reset and keep going, and you can still win if the other driver messes up too. Only a shortcut, or a jump of over 100 m further along the course, stops it. When the other driver's run stops, you're told straight away: finish to win.
 
 | Format | Who wins |
 | --- | --- |
 | Side-by-side race | The faster time. Closer than 0.1 s is a dead heat: run it again. |
 | Cat and mouse | The chaser wins a run by passing and staying ahead to the finish. The leader wins by finishing far enough ahead: 1.5 s while you both have your first lead, 1 s for your second, then 0.5 s. Otherwise you swap places and go again; the first run with a winner wins. |
 | Highway battle (SP) | Tokyo Xtreme Racer style, anywhere on the map, no course. Drive alongside each other at speed for a rolling 3-2-1, then whoever's behind loses SP, faster the bigger the gap. A hit costs SP too. Empty SP, or 600 m behind, loses. |
+| Speed traps | For fun, like Most Wanted: side by side from a standing start, and the higher total of every speed trap on the course wins (every lap on a circuit), whoever gets to the finish first. You have to finish for yours to count. A course without traps of its own uses the free-roam traps along its road. Your total and theirs show live while you drive. It doesn't change your Elo, and both of you need 0.15.1 or newer. |
 
 A driver who doesn't finish loses the run to one who does. When it's over, **Run it back** challenges them again with the same course and format. After a battle against someone else's course, **Save this course** keeps it in your courses, to practise on. **TRC spec** battles need both cars TRC spec on the same tune set, with no flagged mods, at every start and finish; **Open** battles take any setup and don't count. After ten runs without a winner it's a draw. If the other driver leaves or stops answering for 10 seconds, the battle ends. Every battle is saved in `kino\mods\TRCTuneLoader\TimeAttack\battles.csv`.
 
@@ -190,7 +191,7 @@ A driver who doesn't finish loses the run to one who does. When it's over, **Run
 2. Everyone in the room with the mod sees a pop-up and the race in **Open races**, and presses **Join**.
 3. The host can run **qualifying** first: everyone drives time attacks for a few minutes, and the best times set the grid.
 4. The host presses **Start race**. Drive to your grid spot or press **Teleport to my spot**, and stop. When everyone's lined up (or the host presses **Go now**), 3-2-1-GO lands on every screen at once.
-5. The timer shows your place (P3/12), the lap, and the gaps to the cars just ahead and behind. The race ends when everyone has finished, or when the host ends it (in 60 s or now). Resets don't end your race; jump starts get the penalty the host picked.
+5. The timer shows your place (P3/12), the lap, and the gaps to the cars just ahead and behind. The race ends when everyone has finished, or when the host ends it (in 60 s or now). Resets and going off the road don't end your race (only a shortcut does); jump starts get the penalty the host picked.
 6. Everyone gets the same results, with times, gaps and best laps. The host's **Run it back** starts the same race again with the same drivers.
 
 | Tournament | How it works |
@@ -200,7 +201,7 @@ A driver who doesn't finish loses the run to one who does. When it's over, **Run
 | Heats and final | Heats of 4 to 8 drivers; the top of each goes through to one final race. |
 | Shootout | A timed session of time attacks: the best time wins. |
 
-**Speed trap races**, like Need for Speed Most Wanted: pick **Race for: Speed traps**. The highest total of every speed trap on the course wins (on a circuit, every lap's traps count again). You have to finish for yours to count. The course's own traps are used, or, when it has none, the free-roam traps along its road. Everyone in the race scores the same traps.
+**Speed trap races**, like Need for Speed Most Wanted: pick **Race for: Speed traps**. The highest total of every speed trap on the course wins (on a circuit, every lap's traps count again). You have to finish for yours to count. The course's own traps are used, or, when it has none, the free-roam traps along its road. Everyone in the race scores the same traps. While you drive, every trap flashes your speed and your total so far, and the timer shows your total, your place on the traps and the top three totals, live.
 
 **Race control:** the mod notices when your car suddenly loses a lot of speed: next to another car it's **contact**, anywhere else a **hit**. A light touch in close racing is only noted, never counted. The host sees each driver's incidents and can give +5 s, +10 s or a disqualification in the results (or clear it). A **yellow flag** shows when a car ahead is stopped or off the road, a **blue flag** when a car a lap ahead is right behind you.
 
@@ -318,5 +319,6 @@ The mod writes what it does to its own log, `kino\mods\TRCTuneLoader\TRCTuneLoad
 | Open races for 16, qualifying, grids, tournaments (points, knockout, heats, shootout), elimination races | 0.12 | Not yet |
 | Speed traps, ratings and licenses, best line, race control, room games, highway battles | 0.13 | Partly (Oct 29, with a second player): speed traps, tag, highway battles and ratings were tried, and fixed in 0.15 |
 | Home, room board, share a course, wheel buttons, Run it back, Report a bug, new tour | 0.14 | Partly: room board and Report a bug |
-| Tracks / Speed traps / Battles layout, named speed traps with signs, speed trap races, colours and text size, delete times, reverse on save, new Safety Rating | 0.15 | Not yet |
+| Tracks / Speed traps / Battles layout, named speed traps with signs, speed trap races, colours and text size, delete times, reverse on save, new Safety Rating | 0.15 | Partly (Oct 29, with a second player): colours, speed trap races and the weight check were tried, and fixed in 0.15.1 |
+| Speed trap battles, live trap totals, races that keep going after resets, KINO weight check, second text colour | 0.15.1 | Not yet |
 

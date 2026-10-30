@@ -20,6 +20,7 @@ namespace TRC.TuneLoader.CodeCheck {
 			RoomGames();
 			PenaltiesAndTrapScoring();
 			Fixes015Tests();
+			Fixes0151Tests();
 		}
 
 		private static void SpeedTrapsCatchSpeed() {

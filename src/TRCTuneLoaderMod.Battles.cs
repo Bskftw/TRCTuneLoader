@@ -15,7 +15,7 @@ namespace TRC.TuneLoader {
 		/// <summary>Players need at least this TRC Tune Loader version to battle (battle messages changed in 0.10.1, 0.11.0, 0.12.0 and 0.13.0).</summary>
 		private static readonly System.Version BattleVersion = new System.Version(0, 13, 0);
 		private static readonly int[] BattleLapChoices = { 1, 2, 3, 5 };
-		private static readonly string[] BattleFormats = { "Side-by-side race", "Cat and mouse", "Highway battle (SP)" };
+		private static readonly string[] BattleFormats = { "Side-by-side race", "Cat and mouse", "Highway battle (SP)", "Speed traps" };
 		private static readonly string[] BattleModes = { "TRC spec", "Open" };
 		private const float InviteSeconds = 45f;
 
@@ -274,7 +274,23 @@ namespace TRC.TuneLoader {
 				battleResult_ = "Finish or leave your race first.";
 				return;
 			}
-			StartBattle(opponent.Player.SteamId, opponent.Player.Name, course, (BattleFormat)pickedFormat_, pickedMode_ == 1, BattleLapChoices[pickedBattleLaps_], 0, 0);
+			var format = (BattleFormat)pickedFormat_;
+			if (format == BattleFormat.SpeedTraps && sync_?.ReportFrom(opponent.Player.SteamId) is TrcSync.Report report &&
+				report.LoaderVersion.Length > 0 && RoomBoard.IsNewer("0.15.1", report.LoaderVersion)) {
+				// Their copy never sees a speed trap challenge (it goes out as a newer protocol).
+				battleResult_ = $"{opponent.Player.Name} has TRC Tune Loader {report.LoaderVersion}: speed trap battles need 0.15.1 or newer on both sides.";
+				return;
+			}
+			if (format == BattleFormat.SpeedTraps && course.Traps.Count == 0) {
+				// A course without traps of its own: the map's free-roam traps along it, like a speed trap race.
+				List<CourseGate> along = TrapsAlong(course);
+				if (along.Count == 0) {
+					battleResult_ = "That course has no speed traps on it: place some along it in Time attack > Speed traps, or add them in the course's Edit.";
+					return;
+				}
+				course = course.WithTraps(along);
+			}
+			StartBattle(opponent.Player.SteamId, opponent.Player.Name, course, format, pickedMode_ == 1, BattleLapChoices[pickedBattleLaps_], 0, 0);
 		}
 
 		/// <summary>Challenges a driver: from the Battle view, or by itself for a knockout battle the race host called.</summary>
@@ -364,6 +380,14 @@ namespace TRC.TuneLoader {
 					course.StartObject = local.StartObject;
 					course.FinishObject = local.FinishObject;
 				}
+			}
+			if (challenge.Format == BattleFormat.SpeedTraps) {
+				// The challenger's traps, so both drivers score the same ones.
+				if (challenge.Traps.Count == 0) {
+					problem = "the challenge came without its speed traps";
+					return null;
+				}
+				course = course.WithTraps(challenge.Traps);
 			}
 			return course;
 		}
@@ -464,8 +488,9 @@ namespace TRC.TuneLoader {
 			GUILayout.Label(b.Message, b.Active ? Theme.Body : b.Winner == b.Me ? Theme.PillGood : b.Winner == b.Peer ? Theme.PillBad : Theme.PillNeutral);
 
 			foreach (BattleRun run in b.Runs) {
-				string mine = run.Mine.Finished ? TimeAttackRun.FormatTime(run.Mine.Time) : "DNF";
-				string theirs = run.Theirs.Finished ? TimeAttackRun.FormatTime(run.Theirs.Time) : "DNF";
+				string Shown(RunResult r) => !r.Finished ? "DNF" : b.IsSpeedTraps ? $"{r.TrapTotal:0} km/h at the traps" : TimeAttackRun.FormatTime(r.Time);
+				string mine = Shown(run.Mine);
+				string theirs = Shown(run.Theirs);
 				string led = b.Format == BattleFormat.CatAndMouse ? (run.Leader == b.Me ? " (you led)" : " (you chased)") : "";
 				GUILayout.Label($"Run {run.Index + 1}{led}: you {mine}, {b.PeerName} {theirs}. {run.Text}", Theme.Small);
 			}
@@ -545,6 +570,8 @@ namespace TRC.TuneLoader {
 			pickedFormat_ = Choice(BattleFormats, pickedFormat_);
 			GUILayout.Label(pickedFormat_ == 2
 				? $"Tokyo Xtreme Racer style, anywhere on the map, no course: drive alongside each other at speed, a rolling 3-2-1, then whoever's behind loses SP (faster the bigger the gap; a hit costs {BattleSession.HitSp:0}). Empty SP, or {BattleSession.LostMetres:0} m behind, loses."
+				: pickedFormat_ == 3
+				? "For fun, like Most Wanted: side by side from a standing start, and the higher total of every speed trap on the course wins (every lap on a circuit). You have to finish for yours to count. A course without traps of its own uses the free-roam traps along its road. It doesn't change your Elo."
 				: pickedFormat_ == 1
 				? $"Runs swap who leads. The chaser wins a run by passing and staying ahead to the finish; the leader wins by finishing {BattleRules.LeaderGapSeconds:0.0} s or more ahead (1.0 s after both have led once, then 0.5 s). Otherwise swap and go again."
 				: "Side by side from a standing start. The faster time to the finish wins.", Theme.Small);
@@ -628,6 +655,12 @@ namespace TRC.TuneLoader {
 				string place = Mathf.Abs(gap) < SideBySideMetres ? "Side by side" : gap > 0 ? $"Ahead by {gap:0} m" : $"Behind by {-gap:0} m";
 				if (b.Course.IsCircuit) {
 					place = $"Lap {run.Lap}/{b.Laps} · {place}";
+				}
+				if (b.IsSpeedTraps) {
+					float mine = run.TrapTotal;
+					float theirs = b.PeerTrapTotal;
+					string lead = Mathf.Abs(mine - theirs) < BattleRules.TrapDeadHeatKmh ? "level" : mine > theirs ? $"you lead by {mine - theirs:0}" : $"{b.PeerName} leads by {theirs - mine:0}";
+					place += $"\n<color={Theme.WarnHex}>Traps {TrapCountText(run)}: you {mine:0} · {b.PeerName} {theirs:0} km/h ({lead})</color>";
 				}
 				if (b.PeerOut.Length > 0) {
 					place += $"\n<color={Theme.GoodHex}>{b.PeerOut}</color>";

@@ -55,6 +55,7 @@ namespace TRC.TuneLoader {
 	/// A shortcut, leaving the course, a reset or a change of game speed stops the run. With unlimited laps on a
 	/// circuit (practice) only the lap is spoiled: it's marked invalid and the run goes on. In battles
 	/// (<see cref="AllowResets"/>) a reset is fine as long as it doesn't put the car further along the course.
+	/// In races and battles since 0.15.1 (<see cref="KeepGoing"/>) only a shortcut or the game speed stops it.
 	///
 	/// It knows nothing about CarX: the mod feeds it positions, so the self-test can drive it too.
 	/// </summary>
@@ -103,6 +104,12 @@ namespace TRC.TuneLoader {
 
 		/// <summary>In a battle, a reset may put the car this far (metres) further along the course, no more.</summary>
 		public const float ResetAheadMetres = 15f;
+
+		/// <summary>
+		/// In a race or battle (<see cref="KeepGoing"/>), any reset is fine except one that puts the car this far (metres)
+		/// further along: that's a teleport, not CarX's respawn, which puts the car back on the road where it was.
+		/// </summary>
+		public const float TeleportMetres = 100f;
 
 		/// <summary>The car is looked for this many path segments (about 2 m each) behind and ahead of where it was.</summary>
 		private const int LookBehind = 10;
@@ -276,6 +283,12 @@ namespace TRC.TuneLoader {
 
 		/// <summary>For battles: a reset doesn't stop the run, unless it puts the car further along the course.</summary>
 		public bool AllowResets { get; set; }
+
+		/// <summary>
+		/// For races and battles (bskftw, 0.15.1: "the race should just continue"): a reset, leaving the course or
+		/// leaving the road never stops the run; the lap is only marked invalid. A shortcut still stops it.
+		/// </summary>
+		public bool KeepGoing { get; set; }
 
 		/// <summary>The car stands still in its start box, facing the right way (for battles, with <see cref="ExternalStart"/>).</summary>
 		public bool ReadyToStart { get; private set; }
@@ -646,8 +659,14 @@ namespace TRC.TuneLoader {
 				if (at.Offset > OffCourseLimit) {
 					at = CourseGeometry.Project(Course.Path, Course.Distances, position, 0, Course.Path.Count);
 				}
-				if (Practice) {
+				if (KeepGoing && !Practice && at.Progress > lastProgress_ + TeleportMetres) {
+					Cancel("The reset put the car further along the course, so the run was stopped.");
+					return;
+				} else if (Practice || KeepGoing) {
 					Spoil("the car was reset");
+					if (KeepGoing) {
+						Resets++;
+					}
 				} else if (!AllowResets) {
 					Cancel("The car was reset or moved, so the run was stopped.");
 					return;
@@ -664,9 +683,13 @@ namespace TRC.TuneLoader {
 			}
 
 			at = CourseGeometry.Project(Course.Path, Course.Distances, position, segment_ - LookBehind, segment_ + LookAhead);
-			if (Practice && at.Offset > OffCourseLimit * 3f) {
-				// Far off the course in practice: find the car again wherever it comes back to.
+			if ((Practice || KeepGoing) && at.Offset > OffCourseLimit * 3f) {
+				// Far off the course in practice or a race: find the car again wherever it comes back to.
 				PathPosition anywhere = CourseGeometry.Project(Course.Path, Course.Distances, position, 0, Course.Path.Count);
+				if (!Practice && anywhere.Offset <= OffCourseLimit && anywhere.Progress > lastProgress_ + OffCourseLimit * 3f) {
+					Cancel("Shortcut: the car came back to the course further along than it left it.");
+					return;
+				}
 				if (anywhere.Offset < at.Offset) {
 					at = anywhere;
 					lastProgress_ = at.Progress;
@@ -674,7 +697,7 @@ namespace TRC.TuneLoader {
 			}
 			if (Course.HasPath) {
 				if (at.Progress - lastProgress_ > moved + ShortcutMargin) {
-					if (!Fail("Shortcut: the car got ahead along the course faster than it drove.", "shortcut")) {
+					if (!Fail("Shortcut: the car got ahead along the course faster than it drove.", "shortcut", stopsAnyRun: true)) {
 						return;
 					}
 				}
@@ -813,8 +836,8 @@ namespace TRC.TuneLoader {
 		}
 
 		/// <summary>A rule was broken: in practice the lap is spoiled and the run goes on (true); otherwise the run stops (false).</summary>
-		private bool Fail(string stop, string spoil) {
-			if (!Practice) {
+		private bool Fail(string stop, string spoil, bool stopsAnyRun = false) {
+			if (!Practice && (!KeepGoing || stopsAnyRun)) {
 				Cancel(stop);
 				return false;
 			}

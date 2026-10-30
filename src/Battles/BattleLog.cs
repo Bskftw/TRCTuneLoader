@@ -37,7 +37,7 @@ namespace TRC.TuneLoader {
 				DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture),
 				battle.Id.ToString(CultureInfo.InvariantCulture),
 				battle.Course.Code, battle.Course.Name, battle.Course.MapKey,
-				battle.Format == BattleFormat.CatAndMouse ? "cat and mouse" : battle.Format == BattleFormat.Highway ? "highway" : "race",
+				battle.Format == BattleFormat.CatAndMouse ? "cat and mouse" : battle.Format == BattleFormat.Highway ? "highway" : battle.Format == BattleFormat.SpeedTraps ? "speed traps" : "race",
 				battle.Open ? "open" : "TRC spec",
 				battle.Counted && battle.Winner != 0 ? "yes" : "no",
 				battle.PeerName, battle.Peer.ToString(CultureInfo.InvariantCulture),
@@ -54,7 +54,7 @@ namespace TRC.TuneLoader {
 
 		/// <summary>Each run's time ("1:23.456"), or "DNF", separated by spaces.</summary>
 		private static string Times(IEnumerable<RunResult> results) =>
-			string.Join(" ", results.Select(r => r == null || !r.Finished ? "DNF" : TimeAttackRun.FormatTime(r.Time)));
+			string.Join(" ", results.Select(r => r == null || !r.Finished ? "DNF" : r.TrapTotal > 0 ? $"{TimeAttackRun.FormatTime(r.Time)}/{r.TrapTotal:0}kmh" : TimeAttackRun.FormatTime(r.Time)));
 
 		private static string Quote(string field) {
 			field = (field ?? "").Replace("\r", " ").Replace("\n", " ");

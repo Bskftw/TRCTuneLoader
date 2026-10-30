@@ -155,7 +155,8 @@ namespace TRC.TuneLoader {
 			ratedBattle_ = b.Id;
 			CourseKind kind = b.IsHighway ? CourseKind.Highway : b.Course.Kind;
 			bool driven = !b.Open && b.State == BattleSession.Phase.Finished && b.Runs.Count > 0;
-			if (b.Counted && driven) {
+			if (b.Counted && driven && !b.IsSpeedTraps) {
+				// Speed trap battles are for fun: no Elo.
 				double opponent = sync_?.ReportFrom(b.Peer) is TrcSync.Report r && r.HasRatings ? r.EloFor(kind) : RatingBook.StartElo;
 				double score = b.Winner == b.Me ? 1 : b.Winner == 0 ? 0.5 : 0;
 				ratings_.Battle(kind, opponent, score, b.PeerName, DateTime.Now);

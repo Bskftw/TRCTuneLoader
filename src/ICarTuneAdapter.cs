@@ -110,7 +110,7 @@ namespace TRC.TuneLoader {
 	/// <summary>
 	/// A car's engine, gearbox and drivetrain compared with what CarX's own data for the setup and the
 	/// setup's tune give. CarX's engine swap and CarX's drivetrain setting are named; anything else that
-	/// changed them (KINO's engine or gearbox swaps, another mod, an editor) shows as differences.
+	/// changed them (KINO's engine or gearbox swaps, air suspension or weight menu, another mod, an editor) shows as differences.
 	/// </summary>
 	public sealed class DrivetrainCheck {
 		/// <summary>"Stock engine", or the CarX engine swap.</summary>
@@ -141,8 +141,8 @@ namespace TRC.TuneLoader {
 			string drivetrain = string.IsNullOrEmpty(StockDrivetrain) ? Drivetrain : $"{Drivetrain} (CarX drivetrain setting; stock {StockDrivetrain})";
 			string result = EngineSwap ? "not compared"
 				: !Compared ? Note
-				: Differences.Count == 0 ? "engine, gearbox, drivetrain and suspension match CarX's own data"
-				: $"{Differences.Count} engine, gearbox, drivetrain or suspension value(s) changed outside CarX's tuning (a KINO swap or air suspension, or another mod)";
+				: Differences.Count == 0 ? "engine, gearbox, drivetrain, suspension and weight match CarX's own data"
+				: $"{Differences.Count} engine, gearbox, drivetrain, suspension or weight value(s) changed outside CarX's tuning (a KINO swap, air suspension or weight menu, or another mod)";
 			return $"{Engine} · {drivetrain} · {result}";
 		}
 	}

@@ -2,6 +2,24 @@
 
 All versions of TRC Tune Loader, newest first. "Not tested in game yet" means the version builds and its automatic tests pass, but nobody has tried it in CarX yet.
 
+## 0.15.1 (Oct 30 2026)
+
+Not tested in game yet. Fixes from testing 0.15.0, and speed traps the way they were meant to be.
+
+**New**
+- **Speed trap battles** in 1v1 battles, for fun, like Most Wanted: side by side, and the higher total of every trap on the course wins. You have to finish for yours to count. Both of you need 0.15.1; it doesn't change your Elo.
+- **Live speed traps** in races and battles: every trap flashes your speed and your total so far, and the timer shows your total, your place on the traps and the top three, live. Before, you only saw the totals at the end.
+- **Second text colour** (Options, Look): the grey notes and labels can have their own colour now. "Reset" makes them follow your text colour again.
+
+**Changed**
+- **Races and battles keep going** after a reset or going off the road. That lap doesn't count for a best lap, but your race goes on to the finish. Only a shortcut, or a jump of over 100 m further along the course, stops it.
+- **Free-roam traps always record**, also after a reset or when you're out of a race.
+
+**Fixed**
+- **KINO's weight and distribution menu** wasn't caught. A lower centre of gravity or extra weight now makes the car not TRC spec, from the moment it's on, even if it was already on when you reached the track.
+- **The speed trap race menu** cost a lot of fps for players with many speed traps. It's now as light as the rest of the window.
+- **A speed trap race's own traps** didn't flash or get saved while you raced (only a time attack's did), and the host's own trap total was missing from the live standings.
+
 ## 0.15.0 (Oct 29 2026)
 
 Not tested in game yet. Built from a night of testing with a second player: tidier tabs, much better speed traps, and fixes for what went wrong. Works with 0.13 and 0.14 players, but update together for the fixes to battles and speed trap races.

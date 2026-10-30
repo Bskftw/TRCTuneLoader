@@ -836,6 +836,7 @@ namespace TRC.TuneLoader {
 				Run = new TimeAttackRun(Course, Settings.Laps) {
 					ExternalStart = true,
 					AllowResets = true,
+					KeepGoing = true,
 					OnJump = Settings.Jump == JumpRule.Disqualify ? JumpRule.Disqualify : JumpRule.Penalty,
 					Spot = MySpot(),
 				};
@@ -897,6 +898,7 @@ namespace TRC.TuneLoader {
 			me.Progress = Run.TotalProgress;
 			me.LapsDone = Run.LapTimes.Count;
 			me.BestLap = Run.BestLap?.Time ?? 0;
+			me.TrapTotal = qualifyingRun_ ? 0f : Run.TrapTotal;
 			me.Ready = MyReady;
 		}
 

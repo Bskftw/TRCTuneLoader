@@ -26,10 +26,15 @@ namespace TRC.TuneLoader {
 	/// have their first lead, 1 s for their second, then 0.5 s (TRC, Oct 23). Anything in between has no winner:
 	/// swap places and go again. The first run with a winner wins the battle.
 	///
-	/// In both, a driver who doesn't finish (shortcut, off the road, reset...) loses the run to one who does.
+	/// Speed traps (0.15.1, for fun): the higher total of every trap on the course wins, closer than
+	/// <see cref="TrapDeadHeatKmh"/> is run again. You have to finish for yours to count.
+	///
+	/// In all of them, a driver who doesn't finish (a shortcut, the other driver leaving...) loses the run to one who
+	/// does. Since 0.15.1 a reset or going off the road doesn't stop a run.
 	/// </summary>
 	public static class BattleRules {
 		public const double DeadHeatSeconds = 0.1;
+		public const float TrapDeadHeatKmh = 0.5f;
 
 		/// <summary>The chaser must finish at least this much ahead to have passed: closer is too close to call over the network.</summary>
 		public const double PassMarginSeconds = 0.05;
@@ -43,6 +48,28 @@ namespace TRC.TuneLoader {
 		public static BattleRun Decide(BattleFormat format, int index, ulong leader, ulong me, ulong peer, string peerName, RunResult mine, RunResult theirs) {
 			var run = new BattleRun { Index = index, Leader = leader, Mine = mine, Theirs = theirs };
 			string Name(ulong id) => id == me ? "You" : peerName;
+
+			if (format == BattleFormat.SpeedTraps) {
+				if (mine.Finished && theirs.Finished) {
+					float gap = Math.Abs(mine.TrapTotal - theirs.TrapTotal);
+					string totals = $"{Math.Max(mine.TrapTotal, theirs.TrapTotal):0} to {Math.Min(mine.TrapTotal, theirs.TrapTotal):0} km/h at the traps";
+					if (gap < TrapDeadHeatKmh) {
+						run.Text = $"Dead heat at the traps ({mine.TrapTotal:0} km/h each): run it again";
+					} else {
+						run.Winner = mine.TrapTotal > theirs.TrapTotal ? me : peer;
+						run.Text = run.Winner == me ? $"You win, {totals}" : $"{peerName} wins, {totals}";
+					}
+				} else if (mine.Finished) {
+					run.Winner = me;
+					run.Text = $"You win: {peerName} didn't finish ({theirs.Reason.TrimEnd('.')})";
+				} else if (theirs.Finished) {
+					run.Winner = peer;
+					run.Text = $"{peerName} wins: you didn't finish ({mine.Reason.TrimEnd('.')})";
+				} else {
+					run.Text = "Neither of you finished: run it again";
+				}
+				return run;
+			}
 
 			if (format == BattleFormat.Race) {
 				if (mine.Finished && theirs.Finished) {

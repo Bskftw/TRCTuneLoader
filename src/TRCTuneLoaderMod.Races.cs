@@ -611,7 +611,7 @@ namespace TRC.TuneLoader {
 				string grid = course.GridObjects.Count > 0 ? "map grid" : course.GridPath.Count >= 2 ? "laid-out grid" : "grid straight back";
 				string traps = "";
 				if (hostTrapScoring_) {
-					int count = RaceTrapsFor(course).Count;
+					int count = RaceTrapCount(course);
 					traps = count == 0 ? $" · <color={Theme.WarnHex}>no speed traps on it</color>" : $" · {count} speed trap(s)";
 				}
 				string text = $"<b>{course.Name}</b>  <color={Theme.MutedHex}>{course.KindName} · {TimeAttackRun.Distance(course.Length)} · {grid}</color>{traps}";
@@ -992,6 +992,15 @@ namespace TRC.TuneLoader {
 					if (blue.Length > 0) {
 						lines.Add($"<color=#8FB8FF>{blue}</color>");
 					}
+				}
+				if (r.Settings.SpeedTrapScoring) {
+					// Won on the trap totals, not the order on the road: the live totals, highest first.
+					float TotalOf(RaceStanding s) => s.Driver.Id == MySteamId ? run.TrapTotal : s.Driver.TrapTotal;
+					var byTraps = standings.Where(s => s.Driver.State == RacerState.Racing || s.Driver.State == RacerState.Finished)
+						.OrderByDescending(TotalOf).ToList();
+					int myRank = byTraps.FindIndex(s => s.Driver.Id == MySteamId) + 1;
+					lines.Add($"<color={Theme.WarnHex}><b>Traps {TrapCountText(run)}: {run.TrapTotal:0} km/h · {Ordinal(myRank)} on traps</b></color>");
+					lines.Add($"<color={Theme.MutedHex}>{string.Join("   ", byTraps.Take(3).Select((s, i) => $"{i + 1}. {(s.Driver.Id == MySteamId ? "You" : s.Driver.Name)} {TotalOf(s):0}"))}</color>");
 				}
 				if (r.EndAt >= 0) {
 					lines.Add($"<color={Theme.WarnHex}>The race ends in {Math.Max(0, r.EndAt - now):0} s</color>");
