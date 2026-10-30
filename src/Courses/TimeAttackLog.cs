@@ -122,11 +122,52 @@ namespace TRC.TuneLoader {
 					header = false;
 					continue;
 				}
+				TimeAttackRecord record = Parse(line);
+				if (record != null) {
+					records.Add(record);
+				}
+			}
+			return records;
+		}
+
+		/// <summary>
+		/// Deletes the runs <paramref name="remove"/> picks (My times' Delete), keeping every other line as it was.
+		/// The file as it was before is kept next to it (runs-before-delete.csv) in case it was a mistake. Returns how many went.
+		/// </summary>
+		public static int Delete(string folder, Func<TimeAttackRecord, bool> remove) {
+			string path = Path.Combine(folder, FileName);
+			if (!File.Exists(path)) {
+				return 0;
+			}
+			string[] lines = File.ReadAllLines(path, Encoding.UTF8);
+			var kept = new List<string>();
+			int removed = 0;
+			for (int i = 0; i < lines.Length; i++) {
+				TimeAttackRecord record = i == 0 ? null : Parse(lines[i]);
+				if (record != null && remove(record)) {
+					removed++;
+				} else if (lines[i].Length > 0) {
+					kept.Add(lines[i]);
+				}
+			}
+			if (removed > 0) {
+				File.Copy(path, Path.Combine(folder, "runs-before-delete.csv"), true);
+				File.WriteAllText(path, string.Join("\n", kept) + "\n", new UTF8Encoding(false));
+			}
+			return removed;
+		}
+
+		/// <summary>The same run (for deleting one): when it was, where, which car and lap, and its time.</summary>
+		public static bool Same(TimeAttackRecord a, TimeAttackRecord b) =>
+			a.When == b.When && a.CourseCode == b.CourseCode && a.CarId == b.CarId && a.TimeMs == b.TimeMs && a.LapNumber == b.LapNumber && a.Flying == b.Flying;
+
+		private static TimeAttackRecord Parse(string line) {
+			{
 				List<string> f = Split(line);
 				if (f.Count < OldColumns ||
 					!DateTime.TryParseExact(f[0], "yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime when) ||
 					!long.TryParse(f[13], NumberStyles.None, CultureInfo.InvariantCulture, out long ms)) {
-					continue;
+					return null;
 				}
 				int.TryParse(f[6], NumberStyles.Integer, CultureInfo.InvariantCulture, out int carId);
 				int.TryParse(f[12], NumberStyles.None, CultureInfo.InvariantCulture, out int flagged);
@@ -167,9 +208,8 @@ namespace TRC.TuneLoader {
 						record.TrapKmh = new float[0];
 					}
 				}
-				records.Add(record);
+				return record;
 			}
-			return records;
 		}
 
 		/// <summary>The fastest whole run (or, on a circuit, lap) on this course that counts (TRC spec, nothing flagged), or null.</summary>

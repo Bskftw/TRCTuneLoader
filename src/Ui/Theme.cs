@@ -5,19 +5,89 @@ namespace TRC.TuneLoader {
 	/// The TRC window's look: dark panels with TRC sakura pink, drawn with Unity's IMGUI.
 	/// Styles need an active GUI, so they're built on first use inside OnGUI. The rounded
 	/// shapes are small textures generated here, stretched with 9-slice borders.
+	///
+	/// Since 0.15.0 the player can pick the background, accent and text colours and a text size (Options):
+	/// <see cref="Configure"/> works out the other shades from those and builds the styles again.
 	/// </summary>
 	internal static class Theme {
-		public static readonly Color Background = Hex(0x16161A);
-		public static readonly Color Panel = Hex(0x1D1D22);
-		public static readonly Color Border = Hex(0x2E2E35);
-		public static readonly Color Control = Hex(0x3A3A42);
-		public static readonly Color Hover = Hex(0x26262C);
-		public static readonly Color Text = Hex(0xEDEDED);
-		public static readonly Color Muted = Hex(0x9A9AA3);
-		public static readonly Color Accent = Hex(0xD4537E);
-		public static readonly Color AccentHover = Hex(0xE0668F);
-		public static readonly Color AccentSoft = Hex(0x4B1528);
-		public static readonly Color AccentText = Hex(0xF4C0D1);
+		public static readonly Color DefaultBackground = Hex(0x16161A);
+		public static readonly Color DefaultAccent = Hex(0xD4537E);
+		public static readonly Color DefaultText = Hex(0xEDEDED);
+
+		public static Color Background = DefaultBackground;
+		public static Color Panel = Hex(0x1D1D22);
+		public static Color Border = Hex(0x2E2E35);
+		public static Color Control = Hex(0x3A3A42);
+		public static Color Hover = Hex(0x26262C);
+		public static Color Text = DefaultText;
+		public static Color Muted = Hex(0x9A9AA3);
+		public static Color Accent = DefaultAccent;
+		public static Color AccentHover = Hex(0xE0668F);
+		public static Color AccentSoft = Hex(0x4B1528);
+		public static Color AccentText = Hex(0xF4C0D1);
+
+		/// <summary>Text size, on top of the window size: 1 is the normal size.</summary>
+		public static float TextScale { get; private set; } = 1f;
+
+		/// <summary>The textures the styles use, so a rebuild can let the old ones go.</summary>
+		private static readonly System.Collections.Generic.List<Texture2D> made_ = new System.Collections.Generic.List<Texture2D>();
+
+		/// <summary>
+		/// The player's colours and text size. Panels, borders and buttons are shades between the background and
+		/// the text (lighter on a dark background, darker on a light one); the accent gives the pink parts. The
+		/// default colours give exactly the TRC look.
+		/// </summary>
+		public static void Configure(Color background, Color accent, Color text, float textScale) {
+			TextScale = Mathf.Clamp(textScale, 0.8f, 1.6f);
+			bool standard = Same(background, DefaultBackground) && Same(accent, DefaultAccent) && Same(text, DefaultText);
+			if (standard) {
+				Background = DefaultBackground;
+				Panel = Hex(0x1D1D22);
+				Border = Hex(0x2E2E35);
+				Control = Hex(0x3A3A42);
+				Hover = Hex(0x26262C);
+				Text = DefaultText;
+				Muted = Hex(0x9A9AA3);
+				Accent = DefaultAccent;
+				AccentHover = Hex(0xE0668F);
+				AccentSoft = Hex(0x4B1528);
+				AccentText = Hex(0xF4C0D1);
+			} else {
+				background.a = 1f;
+				accent.a = 1f;
+				text.a = 1f;
+				Color toward = Luminance(background) > 0.5f ? Color.black : Color.white;
+				Background = background;
+				Panel = Color.Lerp(background, toward, 0.04f);
+				Hover = Color.Lerp(background, toward, 0.07f);
+				Border = Color.Lerp(background, toward, 0.12f);
+				Control = Color.Lerp(background, toward, 0.17f);
+				Text = text;
+				Muted = Color.Lerp(text, background, 0.38f);
+				Accent = accent;
+				AccentHover = Color.Lerp(accent, Color.white, 0.12f);
+				AccentSoft = Color.Lerp(background, accent, 0.28f);
+				AccentText = Color.Lerp(accent, toward == Color.white ? Color.white : Color.black, 0.6f);
+			}
+			ready_ = false;
+		}
+
+		public static float Luminance(Color c) => 0.2126f * c.r + 0.7152f * c.g + 0.0722f * c.b;
+
+		private static bool Same(Color a, Color b) => Mathf.Abs(a.r - b.r) < 0.003f && Mathf.Abs(a.g - b.g) < 0.003f && Mathf.Abs(a.b - b.b) < 0.003f;
+
+		/// <summary>"#D4537E" for a colour (saved in the prefs), and back (false when it isn't one).</summary>
+		public static string ToHex(Color c) => $"#{Mathf.RoundToInt(c.r * 255):X2}{Mathf.RoundToInt(c.g * 255):X2}{Mathf.RoundToInt(c.b * 255):X2}";
+
+		public static bool TryHex(string text, out Color color) {
+			color = Color.black;
+			string hex = (text ?? "").Trim().TrimStart('#');
+			if (hex.Length != 6 || !int.TryParse(hex, System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out int rgb)) {
+				return false;
+			}
+			color = Hex(rgb);
+			return true;
+		}
 		public static readonly Color Good = Hex(0x173404);
 		public static readonly Color GoodText = Hex(0xC0DD97);
 		public static readonly Color Bad = Hex(0x501313);
@@ -63,6 +133,12 @@ namespace TRC.TuneLoader {
 			if (ready_ && Window?.normal.background != null && Skin != null) {
 				return;
 			}
+			foreach (Texture2D old in made_) {
+				if (old != null) {
+					Object.Destroy(old);
+				}
+			}
+			made_.Clear();
 
 			Window = Box(Rounded(Background, Border, 10), 10, new RectOffset(0, 0, 0, 0));
 
@@ -116,7 +192,7 @@ namespace TRC.TuneLoader {
 			BadgeBad = Badge(Bad, BadText);
 			BadgeWarn = Badge(Warn, WarnText);
 			Popup = Box(Rounded(Bad, BadText, 8), 8, new RectOffset(16, 16, 12, 12));
-			Popup.fontSize = 14;
+			Popup.fontSize = Size(14);
 			Popup.wordWrap = true;
 			Popup.richText = true;
 			Popup.alignment = TextAnchor.MiddleCenter;
@@ -130,7 +206,7 @@ namespace TRC.TuneLoader {
 			ScrollThumb = new GUIStyle { normal = { background = Rounded(Control, Control, 3) }, border = new RectOffset(4, 4, 4, 4), fixedWidth = 8 };
 
 			Field = Box(Rounded(Panel, Control, 6), 6, new RectOffset(10, 10, 7, 7));
-			Field.fontSize = 13;
+			Field.fontSize = Size(13);
 			Field.normal.textColor = Theme.Text;
 			Field.hover.background = Rounded(Panel, Muted, 6);
 			Field.hover.textColor = Theme.Text;
@@ -143,7 +219,7 @@ namespace TRC.TuneLoader {
 			Texture2D hudBackground = Rounded(new Color(Background.r, Background.g, Background.b, 0.78f), new Color(Border.r, Border.g, Border.b, 0.78f), 8);
 			HudPanel = Box(hudBackground, 8, new RectOffset(0, 0, 0, 0));
 			HudPill = Box(hudBackground, 8, new RectOffset(14, 14, 8, 9));
-			HudPill.fontSize = 13;
+			HudPill.fontSize = Size(13);
 			HudPill.wordWrap = true;
 			HudPill.richText = true;
 			HudPill.alignment = TextAnchor.MiddleCenter;
@@ -177,9 +253,12 @@ namespace TRC.TuneLoader {
 			ready_ = true;
 		}
 
+		/// <summary>A font size with the player's text size on it.</summary>
+		private static int Size(int size) => Mathf.Max(8, Mathf.RoundToInt(size * TextScale));
+
 		private static GUIStyle TextStyle(int size, Color color, FontStyle style = FontStyle.Normal) =>
 			new GUIStyle {
-				fontSize = size,
+				fontSize = Size(size),
 				fontStyle = style,
 				wordWrap = true,
 				richText = true,
@@ -197,7 +276,7 @@ namespace TRC.TuneLoader {
 		private static GUIStyle Clickable(Texture2D normal, Texture2D hover, int fontSize, Color textColor, RectOffset padding) {
 			int border = normal.width / 2 - 1;
 			return new GUIStyle {
-				fontSize = fontSize,
+				fontSize = Size(fontSize),
 				alignment = TextAnchor.MiddleCenter,
 				normal = { background = normal, textColor = textColor },
 				hover = { background = hover, textColor = textColor },
@@ -210,7 +289,7 @@ namespace TRC.TuneLoader {
 
 		private static GUIStyle Pill(Color fill, Color text) {
 			GUIStyle style = Box(Rounded(fill, fill, 6), 6, new RectOffset(10, 10, 8, 8));
-			style.fontSize = 13;
+			style.fontSize = Size(13);
 			style.wordWrap = true;
 			style.richText = true;
 			style.normal.textColor = text;
@@ -221,7 +300,7 @@ namespace TRC.TuneLoader {
 		/// <summary>A one-line pill for the on-screen TRC spec badge, bordered so it stands out over the track.</summary>
 		private static GUIStyle Badge(Color fill, Color text) {
 			GUIStyle style = Box(Rounded(fill, text, 6), 6, new RectOffset(12, 12, 6, 7));
-			style.fontSize = 13;
+			style.fontSize = Size(13);
 			style.fontStyle = FontStyle.Bold;
 			style.wordWrap = false;
 			style.normal.textColor = text;
@@ -232,6 +311,7 @@ namespace TRC.TuneLoader {
 			var texture = new Texture2D(1, 1, TextureFormat.RGBA32, false) { hideFlags = HideFlags.HideAndDontSave };
 			texture.SetPixel(0, 0, color);
 			texture.Apply();
+			made_.Add(texture);
 			return texture;
 		}
 
@@ -260,6 +340,7 @@ namespace TRC.TuneLoader {
 			}
 
 			texture.Apply();
+			made_.Add(texture);
 			return texture;
 		}
 

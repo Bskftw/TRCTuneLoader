@@ -166,6 +166,9 @@ namespace TRC.TuneLoader {
 	public sealed class RaceMessage {
 		/// <summary>2 since 0.13.0: positions, incidents, speed traps and room games.</summary>
 		public const byte Protocol = 2;
+
+		/// <summary>Speed traps sent with a race's course, at most.</summary>
+		public const int MaxTraps = 64;
 		private const int MaxText = 160;
 		private const int MaxLines = 24;
 
@@ -259,7 +262,7 @@ namespace TRC.TuneLoader {
 				w.Write((ushort)RaceNumber);
 				switch (Kind) {
 					case RaceKind.Lobby:
-						w.Write(Clip(HostName));
+						w.Write(Clip(BattleMessage.PlainName(HostName)));
 						Settings.Write(w);
 						w.Write(Clip(CourseCode));
 						w.Write((byte)Phase);
@@ -267,7 +270,7 @@ namespace TRC.TuneLoader {
 						for (int i = 0; i < Entries.Count && i < RaceSettings.MaxDrivers; i++) {
 							LobbyEntry e = Entries[i];
 							w.Write(e.Id);
-							w.Write(Clip(e.Name));
+							w.Write(Clip(BattleMessage.PlainName(e.Name)));
 							w.Write(e.Racer);
 							w.Write((sbyte)Mathf.Clamp(e.Slot, -1, 100));
 							w.Write((byte)Mathf.Clamp(e.EliminatedOnLap, 0, 255));
@@ -291,7 +294,7 @@ namespace TRC.TuneLoader {
 						w.Write((byte)Math.Max(1, Math.Min(255, MatchLaps)));
 						break;
 					case RaceKind.Join:
-						w.Write(Clip(Name));
+						w.Write(Clip(BattleMessage.PlainName(Name)));
 						w.Write(HasCourse);
 						break;
 					case RaceKind.Leave:
@@ -313,6 +316,18 @@ namespace TRC.TuneLoader {
 							w.Write(s.Position.z);
 							w.Write(s.Forward.x);
 							w.Write(s.Forward.z);
+						}
+						// Since 0.15.0, at the end (older mods stop reading before it): the course's speed traps, so a
+						// speed trap race scores the same traps for everyone.
+						w.Write((byte)Math.Min(Course.Traps.Count, MaxTraps));
+						for (int i = 0; i < Course.Traps.Count && i < MaxTraps; i++) {
+							CourseGate t = Course.Traps[i];
+							w.Write(t.Center.x);
+							w.Write(t.Center.y);
+							w.Write(t.Center.z);
+							w.Write(t.Forward.x);
+							w.Write(t.Forward.z);
+							w.Write(t.Width);
 						}
 						break;
 					case RaceKind.Beat:
@@ -366,7 +381,7 @@ namespace TRC.TuneLoader {
 						for (int i = 0; i < Rows.Count && i < RaceSettings.MaxDrivers; i++) {
 							RaceResultRow row = Rows[i];
 							w.Write(row.Id);
-							w.Write(Clip(row.Name));
+							w.Write(Clip(BattleMessage.PlainName(row.Name)));
 							w.Write((byte)row.Position);
 							w.Write((byte)row.State);
 							w.Write(row.Time);
@@ -454,6 +469,19 @@ namespace TRC.TuneLoader {
 									Position = new Vector3(r.ReadSingle(), r.ReadSingle(), r.ReadSingle()),
 									Forward = new Vector3(r.ReadSingle(), 0f, r.ReadSingle()),
 								});
+							}
+							if (r.BaseStream.Position < r.BaseStream.Length) {
+								int traps = r.ReadByte();
+								for (int i = 0; i < traps && i < MaxTraps; i++) {
+									var gate = new CourseGate {
+										Center = new Vector3(r.ReadSingle(), r.ReadSingle(), r.ReadSingle()),
+										Forward = CourseGeometry.Level(new Vector3(r.ReadSingle(), 0f, r.ReadSingle())),
+										Width = r.ReadSingle(),
+									};
+									if (gate.Forward != Vector3.zero && gate.Width > 0.5f && gate.Width < 100f) {
+										course.Traps.Add(gate);
+									}
+								}
 							}
 							m.Course = course;
 							break;

@@ -19,6 +19,7 @@ namespace TRC.TuneLoader.CodeCheck {
 			HighwayBattle();
 			RoomGames();
 			PenaltiesAndTrapScoring();
+			Fixes015Tests();
 		}
 
 		private static void SpeedTrapsCatchSpeed() {
@@ -121,13 +122,25 @@ namespace TRC.TuneLoader.CodeCheck {
 			for (int i = 0; i < 10 && hit == null; i++) {
 				hit = watcher.Tick(2 + i * Frame, Vector3.zero, i < 5 ? 120f : 95f, new[] { other });
 			}
-			Expect(hit == "possible contact with Rival", $"a sudden stop next to another car is possible contact ({hit})");
+			Expect(hit == "light contact with Rival", $"losing 25 km/h next to another car is light contact, no points ({hit})");
+			var close = new ContactWatcher();
+			string hardHit = null;
+			for (int i = 0; i < 10 && hardHit == null; i++) {
+				hardHit = close.Tick(i * Frame, Vector3.zero, i < 5 ? 120f : 80f, new[] { other });
+			}
+			Expect(hardHit == "contact with Rival", $"losing 40 km/h at once next to another car is contact ({hardHit})");
 			var alone = new ContactWatcher();
 			string wall = null;
 			for (int i = 0; i < 10 && wall == null; i++) {
-				wall = alone.Tick(i * Frame, Vector3.zero, i < 5 ? 120f : 90f, new NearbyCar[0]);
+				wall = alone.Tick(i * Frame, Vector3.zero, i < 5 ? 120f : 80f, new NearbyCar[0]);
 			}
-			Expect(wall == "hit something", "with nobody near, it's hit something");
+			Expect(wall == "hit something", "with nobody near, a hard stop is hit something");
+			var drift = new ContactWatcher();
+			string slide = null;
+			for (int i = 0; i < 10 && slide == null; i++) {
+				slide = drift.Tick(i * Frame, Vector3.zero, i < 5 ? 120f : 95f, new NearbyCar[0]);
+			}
+			Expect(slide == null, "losing 25 km/h alone (a big drift) isn't anything");
 		}
 
 		private static void CutUpScoresPasses() {
@@ -176,7 +189,10 @@ namespace TRC.TuneLoader.CodeCheck {
 				clean.Drive(10, 0, "run", DateTime.Now);
 			}
 			Expect(clean.Safety > 3.0 && clean.License == License.D, $"clean driving raises the Safety Rating and earns the D license ({clean.Badge})");
-			var messy = new RatingBook { License = License.C, Safety = 1.2 };
+			var close = new RatingBook();
+			double hard = close.Drive(3, 40, "race with lots of contact", DateTime.Now);
+			Expect(Math.Abs(hard + RatingBook.MaxDropPerEvent) < 0.001, $"one event takes at most {RatingBook.MaxDropPerEvent:0.00} away ({hard:0.00})");
+			var messy = new RatingBook { License = License.C, Safety = 1.05 };
 			messy.Drive(2, RatingBook.ContactPoints, "race", DateTime.Now);
 			Expect(messy.License == License.D && Math.Abs(messy.Safety - RatingBook.StartSafety) < 0.01, $"dropping below 1.00 loses a license step ({messy.Badge})");
 			string folder = Path.Combine(Path.GetTempPath(), "trc_rating_" + Guid.NewGuid().ToString("N"));
@@ -237,6 +253,64 @@ namespace TRC.TuneLoader.CodeCheck {
 			Expect(host.Session.State == BattleSession.Phase.Finished && host.Session.Winner == HostId && guest.Session.Winner == HostId && guest.Session.MySp <= 0f,
 				$"the car that pulls away gaps the other: both agree ({host.Session.Message} / {guest.Session?.Message})");
 			Expect(host.Session.MySp > 99f, "the leader's SP doesn't drain");
+			HighwayCountdownLost(dropAll: false);
+			HighwayCountdownLost(dropAll: true);
+		}
+
+		/// <summary>
+		/// Oct 29: the guest never got the countdown, the host raced alone and lost Elo for a battle the guest never
+		/// drove. Now the countdown is sent again until the guest has it; when it never arrives, nobody wins.
+		/// </summary>
+		private static void HighwayCountdownLost(bool dropAll) {
+			var host = new Player { Name = "Host", Id = HostId, ClockOrigin = 100 };
+			var guest = new Player { Name = "Guest", Id = GuestId, ClockOrigin = 5000 };
+			Course free = Course.FreeRoam("test:1");
+			host.Session = BattleSession.Challenge(31, HostId, "Host", GuestId, "Guest", free, BattleFormat.Highway, true, () => host.Car, host.Clock(0));
+			var wires = new List<Wire>();
+			float hostZ = 0f, guestZ = 0f;
+			int countdowns = 0;
+			bool backToGrid = false;
+			for (double t = 0; t < 90; t += Frame) {
+				foreach (Wire wire in wires.Where(w => w.DeliverAt <= t).ToList()) {
+					wires.Remove(wire);
+					BattleMessage m = BattleMessage.Decode(wire.Data);
+					if (m.Kind == BattleKind.Challenge && wire.To.Session == null) {
+						wire.To.Session = BattleSession.FromChallenge(m, wire.To.Id, wire.To.Name, free, () => wire.To.Car, wire.To.Clock(t));
+						wire.To.Session.Accept(wire.To.Clock(t));
+					} else {
+						wire.To.Session?.Receive(m, wire.To.Clock(t));
+					}
+				}
+				bool running = host.Session.State == BattleSession.Phase.Running && (guest.Session?.State == BattleSession.Phase.Running);
+				float hostKmh = running ? 140f : 100f;
+				hostZ += hostKmh / 3.6f * (float)Frame;
+				guestZ += 100f / 3.6f * (float)Frame;
+				foreach (Player p in new[] { host, guest }) {
+					if (p.Session == null) {
+						continue;
+					}
+					bool isHost = p == host;
+					p.Session.Tick(p.Clock(t), new Vector3(isHost ? -2f : 2f, 0, isHost ? hostZ : guestZ), Vector3.forward, isHost ? hostKmh : 100f, 1f, null);
+					foreach (BattleMessage m in p.Session.TakeOutbox()) {
+						// The first countdown is lost (or every one of them).
+						if (m.Kind == BattleKind.Countdown && (dropAll || countdowns++ == 0)) {
+							continue;
+						}
+						wires.Add(new Wire { DeliverAt = t + 0.07, Data = m.Encode(), To = isHost ? guest : host });
+					}
+				}
+				backToGrid |= host.Session.Message.Contains("didn't reach both");
+				if (guest.Session != null && !host.Session.Active && !guest.Session.Active) {
+					break;
+				}
+			}
+			if (dropAll) {
+				Expect(host.Session.Winner == 0 && host.Session.State != BattleSession.Phase.Finished && backToGrid,
+					$"a highway start that never reaches the other driver is called off, and nobody wins ({host.Session.Message})");
+			} else {
+				Expect(host.Session.State == BattleSession.Phase.Finished && host.Session.Winner == HostId && guest.Session.Winner == HostId,
+					$"a lost highway countdown is sent again, and the battle is decided the same on both sides ({host.Session.Message} / {guest.Session?.Message})");
+			}
 		}
 
 		private static void RoomGames() {

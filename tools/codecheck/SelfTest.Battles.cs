@@ -164,7 +164,7 @@ namespace TRC.TuneLoader.CodeCheck {
 			Tick(t + 3.1);
 			Expect(Challenges() == 1, "it goes again every few seconds while the other mod hasn't confirmed it");
 			Tick(t + 7);
-			Expect(host.Message.Contains("hasn't confirmed"), $"after a few seconds without a Seen, the challenger is told ({host.Message})");
+			Expect(host.Message.Contains("Still sending your course"), $"after a few seconds without a Seen, the challenger is told, and that a course takes longer ({host.Message})");
 			host.TakeOutbox();
 
 			host.Receive(new BattleMessage { Kind = BattleKind.Seen, BattleId = 21, From = GuestId, To = HostId, Accept = true }, t + 7.2);
@@ -175,11 +175,19 @@ namespace TRC.TuneLoader.CodeCheck {
 			host.Receive(new BattleMessage { Kind = BattleKind.Seen, BattleId = 21, From = GuestId, To = HostId, Reason = "you're not on the course's map" }, t + 15);
 			Expect(host.Message.Contains("can't accept it: you're not on the course's map"), $"the challenger sees why the other driver can't accept ({host.Message})");
 			Tick(t + 46);
+			Expect(host.Active, "a challenge carrying its course gets more than 45 s to be answered");
+			Tick(t + 91);
 			Expect(host.State == BattleSession.Phase.Ended && host.Message.Contains("didn't answer"), $"a challenge that got there but wasn't answered runs out ({host.Message})");
 
 			var lost = BattleSession.Challenge(22, HostId, "Host", GuestId, "Guest", course, BattleFormat.Race, true, () => new BattleCar(), t);
-			lost.Tick(t + 46, Vector3.zero, Vector3.forward, 0f, 1f, null);
+			lost.Tick(t + 91, Vector3.zero, Vector3.forward, 0f, 1f, null);
 			Expect(lost.State == BattleSession.Phase.Ended && lost.Message.Contains("never got to"), $"a challenge that never got there says so ({lost.Message})");
+			Expect(BattleMessage.PlainName("<color=#00FF00>C</color><color=#11FF11>r</color><color=#2") == "Cr", "a gradient name cut off in the middle of a tag comes out plain");
+			Expect(BattleMessage.PlainName("<#00FF00>Crazy Frog") == "Crazy Frog", "short colour tags go too");
+			Expect(BattleMessage.PlainName("[00D928]Crazy Frog") == "Crazy Frog" && BattleMessage.PlainName("[FF0000]C[-][00FF00]r[-][00FF") == "Cr",
+				"KINO's [RRGGBB] name colours go, cut off or not");
+			Expect(BattleMessage.PlainName("[TRC] Apok") == "[TRC] Apok", "a clan tag in brackets stays");
+			Expect(RoomBoard.IsNewer("0.15.1", "0.15.0") && !RoomBoard.IsNewer("0.14.2", "0.15.0") && !RoomBoard.IsNewer("", "0.15.0"), "a newer version in the room is noticed");
 		}
 
 		private static void CrossedChallengesBecomeOneBattle() {

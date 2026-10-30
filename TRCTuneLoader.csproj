@@ -19,7 +19,7 @@
     <LangVersion>9</LangVersion>
     <AssemblyName>TRCTuneLoader</AssemblyName>
     <RootNamespace>TRC.TuneLoader</RootNamespace>
-    <Version>0.14.2</Version>
+    <Version>0.15.0</Version>
     <Configurations>Debug;Release;Release_Encrypted</Configurations>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <Nullable>disable</Nullable>
@@ -50,6 +50,11 @@
       <HintPath>$(CarXManaged)\UnityEngine.TextRenderingModule.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <!-- Loading a speed trap sign picture the player puts in the mod's folder (speed_trap_sign.png) -->
+    <Reference Include="UnityEngine.ImageConversionModule">
+      <HintPath>$(CarXManaged)\UnityEngine.ImageConversionModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
     <!-- Raycasts for the time attack road check and for laying the start/finish lines on the road -->
     <Reference Include="UnityEngine.PhysicsModule">
       <HintPath>$(CarXManaged)\UnityEngine.PhysicsModule.dll</HintPath>
@@ -73,6 +78,7 @@
     <Compile Remove="tools\**" />
     <EmbeddedResource Include="Resources\icon.png" />
     <EmbeddedResource Include="Resources\trc_logo.png" />
+    <EmbeddedResource Include="Resources\speed_trap_sign.png" />
     <!--
       The official TRC tunes (KINO .knd files) are built into the mod, so players can't see or edit them.
       They live in official_tunes/<set>/, which Git ignores: copy them from KINO's tunes folder.

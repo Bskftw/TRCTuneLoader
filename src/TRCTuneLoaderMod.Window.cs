@@ -13,10 +13,12 @@ namespace TRC.TuneLoader {
 	/// </summary>
 	public partial class TRCTuneLoaderMod {
 		private const int WindowId = 0x7C1A11;
-		private const float WindowWidth = 780f;
-		private const float WindowHeight = 640f;
+		/// <summary>The window grows a little with a bigger text size, so lines still fit.</summary>
+		private static float WindowWidth => Mathf.Round(780f * (1f + (Theme.TextScale - 1f) * 0.6f));
+		private static float WindowHeight => Mathf.Round(640f * (1f + (Theme.TextScale - 1f) * 0.4f));
 		private const float StatusRefreshSeconds = 2.0f;
-		private static readonly string[] TabNames = { "Home", "My car", "Tune sets", "Players", "Mod check", "Backups", "Time attack", "Options", "About" };
+		/// <summary>The main tabs. Since 0.15.0 Backups is part of My car, and Battles has its own tab (it was inside Time attack).</summary>
+		private static readonly string[] TabNames = { "Home", "My car", "Tune sets", "Players", "Mod check", "Time attack", "Battles", "Options", "About" };
 
 		// UGUI's EventSystem lives in UnityEngine.UI; found by name so the mod doesn't need that DLL.
 		private static readonly PropertyInfo CurrentEventSystem =
@@ -27,7 +29,6 @@ namespace TRC.TuneLoader {
 		private const int TuneSetsTab = 2;
 		private const int PlayersTab = 3;
 		private const int ModCheckTab = 4;
-		private const int BackupsTab = 5;
 
 		private bool windowOpen_;
 		private Rect windowRect_;
@@ -86,8 +87,8 @@ namespace TRC.TuneLoader {
 			RefreshCar();
 			// A challenge is waiting: open right where it's answered.
 			if (invites_.Count > 0 && tourSeen_) {
-				tab_ = CoursesTab;
-				coursesView_ = 1;
+				tab_ = BattlesTab;
+				battleViewMode_ = 0;
 			}
 			OnTabOpened(tab_);
 			if (!tourSeen_ && tourStep_ < 0) {
@@ -110,6 +111,9 @@ namespace TRC.TuneLoader {
 			RestoreEventSystem();
 			Cursor.visible = savedCursorVisible_;
 			Cursor.lockState = savedCursorLock_;
+			// Nothing of the window keeps the keyboard or a held click (a text field could keep taking keys).
+			GUIUtility.keyboardControl = 0;
+			GUIUtility.hotControl = 0;
 		}
 
 		/// <summary>Called from Update: keeps the cursor usable and stops clicks reaching CarX's menus under the window.</summary>
@@ -150,7 +154,8 @@ namespace TRC.TuneLoader {
 			}
 			bool hud = !windowOpen_ && OnTrack && (showBadge_ || autoCheck_);
 			bool courseHud = CourseHudVisible || NoticeVisible;
-			if (!windowOpen_ && !hud && !courseHud) {
+			bool signs = TrapSignsVisible;
+			if (!windowOpen_ && !hud && !courseHud && !signs) {
 				return;
 			}
 
@@ -166,6 +171,9 @@ namespace TRC.TuneLoader {
 				float screenWidth = Screen.width / scale;
 				float screenHeight = Screen.height / scale;
 
+				if (signs) {
+					DrawTrapSigns(scale);
+				}
 				if (courseHud) {
 					DrawCourseHud(screenWidth, screenHeight, scale);
 				}
@@ -200,6 +208,7 @@ namespace TRC.TuneLoader {
 			DrawTabs();
 
 			GUILayout.BeginVertical(ContentArea, GUILayout.ExpandHeight(true));
+			DrawInviteBanner();
 			bool showTab = tourStep_ < 0 || DrawTourCard();
 			if (!showTab) {
 				GUILayout.FlexibleSpace();
@@ -210,8 +219,8 @@ namespace TRC.TuneLoader {
 					case TuneSetsTab: DrawTuneSetsTab(); break;
 					case PlayersTab: DrawPlayersTab(); break;
 					case ModCheckTab: DrawModCheckTab(); break;
-					case BackupsTab: DrawBackupsTab(); break;
 					case CoursesTab: DrawCoursesTab(); break;
+					case BattlesTab: DrawBattlesTab(); break;
 					case OptionsTab: DrawOptionsTab(); break;
 					default: DrawAboutTab(); break;
 				}
@@ -246,7 +255,7 @@ namespace TRC.TuneLoader {
 			GUILayout.BeginHorizontal(TabArea);
 			for (int i = 0; i < TabNames.Length; i++) {
 				string label = i == PlayersTab && players_.Count > 0 ? $"Players ({players_.Count})"
-					: i == CoursesTab && invites_.Count > 0 ? $"{TabNames[i]} ({invites_.Count})"
+					: i == BattlesTab && invites_.Count > 0 ? $"{TabNames[i]} ({invites_.Count})"
 					: i == HomeTab && whatsNewPending_ ? "Home (new)"
 					: TabNames[i];
 				if (GUILayout.Button(label, i == tab_ ? Theme.TabActive : Theme.Tab)) {
@@ -266,23 +275,34 @@ namespace TRC.TuneLoader {
 		private void OnTabOpened(int tab) {
 			switch (tab) {
 				case HomeTab: nextStatusRefresh_ = 0; nextPlayersRefresh_ = 0; break;
-				case MyCarTab: nextStatusRefresh_ = 0; break;
+				case MyCarTab: nextStatusRefresh_ = 0; backupResult_ = ""; RefreshBackups(); break;
 				case PlayersTab: nextPlayersRefresh_ = 0; nextReportRequest_ = 0; break;
 				case ModCheckTab: modCheck_.Refresh(); break;
-				case BackupsTab: backupResult_ = ""; RefreshBackups(); break;
 				case CoursesTab: deletePending_ = null; break;
 			}
 		}
 
 		// ---- My car ----
 
+		/// <summary>My car: the car, its TRC tune sets and checks on the left, its backups in a column beside them (since 0.15.0; Backups was its own tab).</summary>
 		private void DrawMyCarTab() {
 			RefreshCarIfDue();
 			if (car_ == null) {
 				GUILayout.Label(carError_, Theme.PillNeutral);
 				return;
 			}
+			GUILayout.BeginHorizontal(GUILayout.ExpandHeight(true));
+			GUILayout.BeginVertical(GUILayout.ExpandHeight(true));
+			DrawMyCarMain();
+			GUILayout.EndVertical();
+			GUILayout.Space(10);
+			GUILayout.BeginVertical(Theme.Card, GUILayout.Width(245), GUILayout.ExpandHeight(true));
+			DrawBackupsColumn();
+			GUILayout.EndVertical();
+			GUILayout.EndHorizontal();
+		}
 
+		private void DrawMyCarMain() {
 			GUILayout.Label(car_.CarName, Theme.Heading);
 			string where = car_.InDyno ? "in CarX's tuning screen" : car_.InGarage ? "in the garage" : "on track";
 			GUILayout.Label($"{car_.SlotName} setup · {where}", Theme.Small);
@@ -618,38 +638,51 @@ namespace TRC.TuneLoader {
 			}
 		}
 
-		// ---- Backups ----
+		// ---- Backups (in My car) ----
 
-		private void DrawBackupsTab() {
-			if (car_ == null) {
-				GUILayout.Label(carError_, Theme.PillNeutral);
-				return;
-			}
-
-			GUILayout.Label($"Backups for {car_.Describe()}: {backups_.Count}. Restoring one backs up your current tune first.", Theme.Small);
+		private void DrawBackupsColumn() {
+			GUILayout.Label($"Backups ({backups_.Count})", Theme.Group);
+			GUILayout.Label("Your own tunes for this car and setup, kept whenever a TRC tune replaced one. Restoring backs up your current tune first.", Theme.Small);
 			if (!string.IsNullOrEmpty(backupResult_)) {
 				GUILayout.Label(backupResult_, Theme.Body);
 			}
-
-			GUILayout.BeginVertical(Theme.Card, GUILayout.ExpandHeight(true));
 			backupScroll_ = GUILayout.BeginScrollView(backupScroll_);
 			if (backups_.Count == 0) {
-				GUILayout.Label("No backups yet. One is saved each time a TRC tune replaces your own tune.", Theme.Small);
+				GUILayout.Label("No backups yet.", Theme.Small);
 			}
 			foreach (TuneFile backup in backups_) {
+				GUILayout.Label($"<b>{backup.Name}</b>\n<color={Theme.MutedHex}>{backup.Notes}</color>", Theme.Small);
 				GUILayout.BeginHorizontal();
-				GUILayout.Label($"<b>{backup.Name}</b>\n<color={Theme.MutedHex}>{backup.Notes}</color>", Theme.Body);
-				GUILayout.FlexibleSpace();
-				if (GUILayout.Button("Restore", Theme.Button, GUILayout.Width(90))) {
+				if (GUILayout.Button("Restore", Theme.Button)) {
 					RestoreBackup(backup);
 				}
+				GUILayout.FlexibleSpace();
 				GUILayout.EndHorizontal();
+				DividerLine();
 			}
 			GUILayout.EndScrollView();
-			GUILayout.EndVertical();
 		}
 
 		// ---- Shared pieces ----
+
+		private const float SideNavWidth = 158f;
+
+		/// <summary>
+		/// A tab's sections in a column down the left, like the car list in Tune sets: tab, section, content, never
+		/// tabs inside tabs. <paramref name="notes"/> are small counts after each name ("" for none).
+		/// </summary>
+		private static int SideNav(string[] names, int picked, string[] notes = null) {
+			GUILayout.BeginVertical(Theme.Card, GUILayout.Width(SideNavWidth), GUILayout.ExpandHeight(true));
+			for (int i = 0; i < names.Length; i++) {
+				string note = notes != null && i < notes.Length && notes[i].Length > 0 ? $"  <color={Theme.MutedHex}>{notes[i]}</color>" : "";
+				if (GUILayout.Button($"{names[i]}{note}", i == picked ? Theme.RowSelected : Theme.Row)) {
+					picked = i;
+				}
+			}
+			GUILayout.FlexibleSpace();
+			GUILayout.EndVertical();
+			return picked;
+		}
 
 		/// <summary>A scrolling card of text lines; lines starting with "---" become small pink headings.</summary>
 		private static void DrawLines(ref Vector2 scroll, List<string> lines) {

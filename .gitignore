@@ -15,3 +15,4 @@ official_tunes/
 Resources/*
 !Resources/icon.png
 !Resources/trc_logo.png
+!Resources/speed_trap_sign.png

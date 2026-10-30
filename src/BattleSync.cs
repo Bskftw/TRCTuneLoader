@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using KSL.API;
 
 namespace TRC.TuneLoader {
@@ -52,9 +53,16 @@ namespace TRC.TuneLoader {
 		private readonly Queue<T> inbox_ = new Queue<T>();
 		private readonly BattleChunks chunks_ = new BattleChunks();
 
-		/// <summary>Pieces of big messages waiting to go, and how fast they go.</summary>
-		private readonly Queue<IPacket> outgoing_ = new Queue<IPacket>();
-		private const double PiecesPerSecond = 25;
+		/// <summary>
+		/// Pieces of big messages waiting to go (with their message's ID), and how fast they go. Tested Oct 29: a
+		/// 35-piece challenge sent at 25 pieces a second almost never got there whole, so they go slower, in a new
+		/// random order each time the message is sent again (so the same pieces aren't lost every time), and a
+		/// message still on its way isn't queued a second time.
+		/// </summary>
+		private readonly Queue<(uint Id, IPacket Packet)> outgoing_ = new Queue<(uint, IPacket)>();
+		private readonly Dictionary<uint, int> queuedPieces_ = new Dictionary<uint, int>();
+		private readonly System.Random order_ = new System.Random();
+		private const double PiecesPerSecond = 10;
 		private const int MaxQueued = 400;
 		private double pieceBudget_;
 		private double lastPump_ = -1;
@@ -103,13 +111,19 @@ namespace TRC.TuneLoader {
 				if (pieces.Count == 1) {
 					return SendNow(Packet(from, pieces[0])) ? 1 : 0;
 				}
+				uint id = pieces[0].MessageId;
+				if (queuedPieces_.ContainsKey(id)) {
+					// The last copy is still going out: its pieces are as good as this one's.
+					return pieces.Count;
+				}
 				if (outgoing_.Count + pieces.Count > MaxQueued) {
 					TrcLog.Warning($"Too many {one_} packets waiting ({outgoing_.Count}): a {pieces.Count}-packet message wasn't sent.");
 					return 0;
 				}
-				foreach (BattleChunks.Piece piece in pieces) {
-					outgoing_.Enqueue(Packet(from, piece));
+				foreach (BattleChunks.Piece piece in pieces.OrderBy(_ => order_.Next())) {
+					outgoing_.Enqueue((id, Packet(from, piece)));
 				}
+				queuedPieces_[id] = pieces.Count;
 				return pieces.Count;
 			} catch (Exception e) {
 				TrcLog.Warning($"Couldn't send a {one_} message: {e.Message}");
@@ -129,7 +143,15 @@ namespace TRC.TuneLoader {
 			while (pieceBudget_ >= 1 && outgoing_.Count > 0) {
 				pieceBudget_--;
 				try {
-					SendNow(outgoing_.Dequeue());
+					var (id, packet) = outgoing_.Dequeue();
+					if (queuedPieces_.TryGetValue(id, out int left)) {
+						if (left <= 1) {
+							queuedPieces_.Remove(id);
+						} else {
+							queuedPieces_[id] = left - 1;
+						}
+					}
+					SendNow(packet);
 				} catch (Exception e) {
 					TrcLog.Warning($"Couldn't send a {one_} packet: {e.Message}");
 				}

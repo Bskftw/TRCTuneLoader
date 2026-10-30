@@ -19,8 +19,13 @@ namespace TRC.TuneLoader {
 	/// like iRacing, everyone near a contact gets one. A few seconds go by before the next counts.
 	/// </summary>
 	public sealed class ContactWatcher {
-		/// <summary>Losing this much speed (km/h) within <see cref="WindowSeconds"/> is a hit: a hard stop on grip tyres loses ~4 in that time.</summary>
+		/// <summary>
+		/// Losing this much speed (km/h) within <see cref="WindowSeconds"/> next to another car is a light touch (no
+		/// points: close racing), and <see cref="HardDropKmh"/> is hard contact, or with nobody near, a hard hit. A hard
+		/// stop on grip tyres loses ~4 in that time; a big drift a lot more, so a light drop alone isn't anything.
+		/// </summary>
 		public const float DropKmh = 15f;
+		public const float HardDropKmh = 30f;
 		private const double WindowSeconds = 0.3;
 		private const float NearMetres = 6f;
 		private const double AgainSeconds = 3;
@@ -39,15 +44,19 @@ namespace TRC.TuneLoader {
 			while (recent_.Count > 0 && now - recent_.Peek().At > WindowSeconds) {
 				recent_.Dequeue();
 			}
-			float highest = recent_.Max(r => r.Kmh);
-			if (highest - kmh < DropKmh || now - lastIncident_ < AgainSeconds) {
+			float drop = recent_.Max(r => r.Kmh) - kmh;
+			if (drop < DropKmh || now - lastIncident_ < AgainSeconds) {
+				return null;
+			}
+			NearbyCar? near = others?.Where(o => Vector3.Distance(o.Position, position) <= NearMetres)
+				.OrderBy(o => Vector3.Distance(o.Position, position)).Cast<NearbyCar?>().FirstOrDefault();
+			bool hard = drop >= HardDropKmh;
+			if (!hard && !near.HasValue) {
 				return null;
 			}
 			lastIncident_ = now;
 			recent_.Clear();
-			NearbyCar? near = others?.Where(o => Vector3.Distance(o.Position, position) <= NearMetres)
-				.OrderBy(o => Vector3.Distance(o.Position, position)).Cast<NearbyCar?>().FirstOrDefault();
-			return near.HasValue ? $"possible contact with {near.Value.Name}" : "hit something";
+			return !near.HasValue ? "hit something" : hard ? $"contact with {near.Value.Name}" : $"light contact with {near.Value.Name}";
 		}
 	}
 

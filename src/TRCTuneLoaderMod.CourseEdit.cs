@@ -5,7 +5,7 @@ using UnityEngine;
 
 namespace TRC.TuneLoader {
 	/// <summary>
-	/// Editing the player's own courses (Courses here, Edit): rename, change the line width, flip the direction,
+	/// Editing the player's own courses (Time attack, Tracks, Edit): rename, change the line width, flip the direction,
 	/// record the path again, or delete. Anything but the name gives the course a new code, so its old times stay
 	/// under the old one. Also saving a course someone challenged you on, to practise it.
 	/// </summary>
@@ -138,7 +138,7 @@ namespace TRC.TuneLoader {
 				Course copy = Copy(course, c => c.Author = from);
 				string path = CourseLibrary.SaveCustom(CoursesFolder, copy);
 				courses_.LoadCustom(CoursesFolder);
-				battleResult_ = $"Saved {copy.Name} to your courses (Courses here), to practise on.";
+				battleResult_ = $"Saved {copy.Name} to your courses (Time attack, Tracks), to practise on.";
 				TrcLog.Info($"Saved the battle course {copy.Name} ({copy.Code}) from {from}: {path}");
 			} catch (Exception e) {
 				battleResult_ = $"Couldn't save the course: {e.Message}";

@@ -233,6 +233,13 @@ namespace TRC.TuneLoader {
 		/// The same road the other way: the finish becomes the start and the start the finish, both crossed the
 		/// other way, and the path runs backwards. Used for uphill courses made from downhill ones.
 		/// </summary>
+		/// <summary>The same course (same code, road and signs) with other speed traps: for a speed trap race, without touching the library's copy.</summary>
+		public Course WithTraps(IEnumerable<CourseGate> traps) {
+			var copy = (Course)MemberwiseClone();
+			copy.Traps = new List<CourseGate>(traps);
+			return copy;
+		}
+
 		public Course ReversedAs(string name) {
 			var reversed = new Course {
 				Name = name,

@@ -52,7 +52,7 @@ namespace TRC.TuneLoader {
 			using (var writer = new BinaryWriter(stream, Encoding.UTF8)) {
 				writer.Write((byte)Kind);
 				writer.Write(From);
-				writer.Write(Clip(Name));
+				writer.Write(Clip(BattleMessage.PlainName(Name)));
 				switch (Kind) {
 					case RoomKind.Status:
 						writer.Write(Clip(Version));
@@ -204,6 +204,13 @@ namespace TRC.TuneLoader {
 		}
 
 		/// <summary>Players heard from in the last <see cref="StaleSeconds"/>, by name.</summary>
+		/// <summary>
+		/// Whether <paramref name="theirs"/> is a newer version than <paramref name="mine"/> ("0.15.1" over "0.15.0").
+		/// Oct 29: a player's KSL had treated an update as optional and never installed it.
+		/// </summary>
+		public static bool IsNewer(string theirs, string mine) =>
+			System.Version.TryParse(theirs ?? "", out System.Version a) && System.Version.TryParse(mine ?? "", out System.Version b) && a > b;
+
 		public List<RoomMessage> Fresh(double now) =>
 			statuses_.Values.Where(e => now - e.At <= StaleSeconds).Select(e => e.Status)
 				.OrderBy(s => BattleMessage.PlainName(s.Name), StringComparer.OrdinalIgnoreCase).ToList();

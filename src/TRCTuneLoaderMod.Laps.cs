@@ -126,10 +126,12 @@ namespace TRC.TuneLoader {
 				referenceLoaded_ = true;
 				TimeKind kind = CompareKind(run_);
 				string key = TimeAttackTraces.Key(run_.Course.Code, runStart_.CarId, runStart_.Set, kind);
-				run_.Reference = TimeAttackTraces.Load(TimesFolder, key)?.Trace;
+				var saved = TimeAttackTraces.Load(TimesFolder, key);
+				run_.Reference = saved?.Trace;
 				var line = TimeAttackTraces.LoadLine(TimesFolder, key);
 				bestLine_ = line?.Line;
 				bestLineKmh_ = line?.Kmh;
+				run_.SetReferenceLine(line?.Line, line?.Kmh, (saved?.TimeMs ?? 0) / 1000.0);
 				int sectors = run_.Course.SectorEnds.Length;
 				sectorBestAll_ = TimeAttackLog.BestSectorsMs(times_, r => r.CourseCode == run_.Course.Code && kind.Matches(r), sectors);
 				int car = runStart_.CarId;
@@ -216,6 +218,7 @@ namespace TRC.TuneLoader {
 				string key = TimeAttackTraces.Key(run_.Course.Code, start.CarId, start.Set, LapKind);
 				if (TimeAttackTraces.SaveIfFaster(TimesFolder, key, lap.Trace, ms)) {
 					run_.Reference = lap.Trace;
+					run_.SetReferenceLine(lap.Line, lap.LineKmh, lap.Time);
 					TimeAttackTraces.SaveLine(TimesFolder, key, lap.Line, lap.LineKmh, ms);
 					bestLine_ = lap.Line;
 					bestLineKmh_ = lap.LineKmh;

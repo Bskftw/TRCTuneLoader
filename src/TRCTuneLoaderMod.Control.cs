@@ -6,7 +6,7 @@ using UnityEngine;
 
 namespace TRC.TuneLoader {
 	/// <summary>
-	/// Race control and ratings in game: incidents this car has (hits and possible contact) in runs, battles and
+	/// Race control and ratings in game: incidents this car has (hits and contact) in runs, battles and
 	/// races; highway cut-up points; the kilometres driven; and the player's Elo, Safety Rating and license
 	/// (kept on this PC, see RatingBook) moved after every run, battle and race.
 	/// </summary>
@@ -97,8 +97,13 @@ namespace TRC.TuneLoader {
 			if (!watching) {
 				contact_.Reset();
 			}
+			if (incident != null && incident.StartsWith("light contact", StringComparison.Ordinal)) {
+				// Close racing: noted, nothing more.
+				TrcLog.Info($"Incident: {incident} (no points).");
+				incident = null;
+			}
 			if (incident != null) {
-				int points = incident.StartsWith("possible contact", StringComparison.Ordinal) ? RatingBook.ContactPoints : RatingBook.HitPoints;
+				int points = incident.StartsWith("contact", StringComparison.Ordinal) ? RatingBook.ContactPoints : RatingBook.HitPoints;
 				if (RaceRunning && race_.MyDriver.State == RacerState.Racing) {
 					race_.AddIncident(incident);
 					racePoints_ += points;
@@ -133,37 +138,32 @@ namespace TRC.TuneLoader {
 
 		// ---- Ratings ----
 
-		/// <summary>A time attack ended (finished or stopped): its kilometres and incidents count for the Safety Rating.</summary>
+		/// <summary>
+		/// A time attack ended. It doesn't move the Safety Rating any more (0.15.0): it's the player alone on the road,
+		/// often just messing about, so resets and jumping off the road there shouldn't count.
+		/// </summary>
 		private void RateRun(TimeAttackRun run) {
-			if (ratings_ == null) {
-				return;
-			}
-			int points = runPoints_ + run.Resets * RatingBook.ResetPoints + run.JumpStarts * RatingBook.JumpPoints;
-			if (run.State == TimeAttackRun.Phase.Cancelled && (run.Message.Contains("left the") || run.Message.Contains("Shortcut") || run.Message.Contains("reset"))) {
-				points += RatingBook.OffRoadPoints;
-			}
-			if (runKm_ > 0.2 || points > 0) {
-				ratings_.Drive(runKm_, points, $"Time attack on {run.Course.Name}", DateTime.Now);
-				SaveRatings();
-			}
 			runPoints_ = 0;
 			runKm_ = 0;
 		}
 
-		/// <summary>A battle ended: Elo when it counted (TRC spec), and the Safety Rating either way.</summary>
+		/// <summary>A battle ended: Elo when it counted (TRC spec), and the Safety Rating when it was a TRC spec battle that was really driven.</summary>
 		private void RateBattle(BattleSession b) {
 			if (ratings_ == null || !b.Started || ratedBattle_ == b.Id) {
 				return;
 			}
 			ratedBattle_ = b.Id;
 			CourseKind kind = b.IsHighway ? CourseKind.Highway : b.Course.Kind;
-			if (b.Counted && !b.Open && b.State == BattleSession.Phase.Finished) {
+			bool driven = !b.Open && b.State == BattleSession.Phase.Finished && b.Runs.Count > 0;
+			if (b.Counted && driven) {
 				double opponent = sync_?.ReportFrom(b.Peer) is TrcSync.Report r && r.HasRatings ? r.EloFor(kind) : RatingBook.StartElo;
 				double score = b.Winner == b.Me ? 1 : b.Winner == 0 ? 0.5 : 0;
 				ratings_.Battle(kind, opponent, score, b.PeerName, DateTime.Now);
 			}
-			int points = battlePoints_ + (b.Run?.Resets ?? 0) * RatingBook.ResetPoints;
-			ratings_.Drive(battleKm_, points, $"Battle vs {b.PeerName}", DateTime.Now);
+			if (driven) {
+				int points = battlePoints_ + (b.Run?.Resets ?? 0) * RatingBook.ResetPoints;
+				ratings_.Drive(battleKm_, points, $"Battle vs {b.PeerName}", DateTime.Now);
+			}
 			SaveRatings();
 			battlePoints_ = 0;
 			battleKm_ = 0;
@@ -185,9 +185,10 @@ namespace TRC.TuneLoader {
 					.Select(r => (sync_?.ReportFrom(r.Id) is TrcSync.Report rep && rep.HasRatings ? (double)rep.EloFor(kind) : RatingBook.StartElo, r.Position)).ToList();
 				ratings_.Race(kind, mine.Position, others, DateTime.Now);
 			}
-			int points = racePoints_ + (race_.Run?.Resets ?? 0) * RatingBook.ResetPoints + (mine.Penalty > 0 ? RatingBook.JumpPoints : 0) +
-				(mine.State == RacerState.Disqualified ? RatingBook.ContactPoints : 0);
-			ratings_.Drive(raceKm_, points, $"Race on {race_.Course.Name}", DateTime.Now);
+			if (!race_.Settings.Open) {
+				int points = racePoints_ + (race_.Run?.Resets ?? 0) * RatingBook.ResetPoints;
+				ratings_.Drive(raceKm_, points, $"Race on {race_.Course.Name}", DateTime.Now);
+			}
 			SaveRatings();
 			racePoints_ = 0;
 			raceKm_ = 0;
@@ -197,6 +198,7 @@ namespace TRC.TuneLoader {
 
 		private void DrawRatings() {
 			RatingBook r = ratings_ ?? new RatingBook();
+			GUILayout.Label(RatingBook.TestingNote, Theme.PillWarn);
 			GUILayout.Label("Kept on this PC until the TRC server is up: then they'll be checked and shared. Other TRC Tune Loader players see your license and Safety Rating.", Theme.Small);
 			GUILayout.BeginVertical(Theme.Guide);
 			GUILayout.Label($"<b>{RatingBook.LicenseName(r.License)} license</b> · Safety Rating {r.Safety:0.00} · {r.Events} event(s)", Theme.Heading);
@@ -207,8 +209,9 @@ namespace TRC.TuneLoader {
 			for (int i = 0; i < 3; i++) {
 				GUILayout.Label($"<b>{Course.KindNames[i]}</b>  Elo {r.Elo[i]:0}", Theme.Body);
 			}
-			GUILayout.Label("Elo moves only in TRC spec battles and races. The Safety Rating goes up with clean kilometres (time attack, battles, races) " +
-				"and down with incidents: resets, hits, possible contact, leaving the road, jump starts. No blame: like iRacing, both cars in a contact get it.", Theme.Small);
+			GUILayout.Label("Elo moves only in TRC spec battles and races. The Safety Rating moves only in TRC spec battles and races too: up with clean kilometres, " +
+				$"down with hard contact, hard hits and resets (at most {RatingBook.MaxDropPerEvent:0.00} an event). Light touches in close racing, time attack, " +
+				"leaving the road and jump starts don't count. No blame: like iRacing, both cars in a contact get it.", Theme.Small);
 			GUILayout.EndVertical();
 			GUILayout.Label("Recent", Theme.SectionLabel);
 			GUILayout.BeginVertical(Theme.Card);

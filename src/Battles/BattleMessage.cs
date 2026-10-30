@@ -119,7 +119,7 @@ namespace TRC.TuneLoader {
 				writer.Write(To);
 				switch (Kind) {
 					case BattleKind.Challenge:
-						writer.Write(Clip(FromName));
+						writer.Write(Clip(PlainName(FromName)));
 						writer.Write((byte)Format);
 						writer.Write(Open);
 						writer.Write((byte)Math.Max(1, Math.Min(255, Laps)));
@@ -266,14 +266,21 @@ namespace TRC.TuneLoader {
 		}
 
 		private static readonly Regex RichText = new Regex(
-			@"</?(color|b|i|u|s|size|material|quad|font|mark|sup|sub|alpha|cspace|mspace|voffset|link|style|noparse)(=[^<>]*)?>",
+			@"</?(color|b|i|u|s|size|material|quad|font|mark|sup|sub|alpha|cspace|mspace|voffset|link|style|noparse|gradient|lowercase|uppercase|smallcaps|nobr|rotate|width|pos|indent|margin|align|line-height)(=[^<>]*)?>|<#[0-9a-fA-F]{3,8}>|</>|\[[0-9a-fA-F]{6}([0-9a-fA-F]{2})?\]|\[-\]",
 			RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
 		/// <summary>
 		/// A player name without its colour and style tags (CarX names can colour every letter, which makes them
 		/// too long to send whole and breaks when cut).
 		/// </summary>
-		public static string PlainName(string name) => RichText.Replace(name ?? "", "").Trim();
+		/// <remarks>
+		/// Oct 29: a name showed cut off, with its codes. KINO colours names as "[00D928]Crazy Frog" (seen in its
+		/// log), and gradient names colour every letter, so this also takes [RRGGBB] and [-] codes, "&lt;#00FF00&gt;"
+		/// tags, and a tag or code left unfinished at the end.
+		/// </remarks>
+		public static string PlainName(string name) => UnfinishedTag.Replace(RichText.Replace(name ?? "", ""), "").Trim();
+
+		private static readonly Regex UnfinishedTag = new Regex(@"</?[#a-zA-Z][^<>]*$|\[[0-9a-fA-F]{0,7}$", RegexOptions.Compiled);
 
 		/// <summary>
 		/// The course as it is after Build (rounded to file precision), so the guest rebuilds exactly the same

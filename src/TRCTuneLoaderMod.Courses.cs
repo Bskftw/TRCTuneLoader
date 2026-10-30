@@ -13,7 +13,7 @@ namespace TRC.TuneLoader {
 	/// The course logic itself (lines, paths, the run, the recorder, the run log) is in src/Courses/.
 	/// </summary>
 	public partial class TRCTuneLoaderMod {
-		private const int CoursesTab = 6;
+		private const int CoursesTab = 5;
 		private const string CoursesFolderName = "Courses";
 		private const string TimesFolderName = "TimeAttack";
 		private const float MapCheckSeconds = 1f;
@@ -40,7 +40,8 @@ namespace TRC.TuneLoader {
 		private const float SetLineKmh = 3f;
 
 		private static readonly float[] LineWidths = { 8f, 12f, 16f, 20f, 30f };
-		private static readonly string[] CourseViews = { "Courses here", "Battle", "My times", "Course builder" };
+		/// <summary>The Time attack tab's sections, down the left (since 0.15.0: Battles is its own tab, speed traps have their own section).</summary>
+		private static readonly string[] CourseViews = { "Tracks", "Speed traps", "My times", "Course builder" };
 		private static readonly string[] CourseKinds = { "Touge", "Highway" };
 		private static readonly string[] CourseShapes = { "Point to point", "Circuit" };
 
@@ -104,6 +105,9 @@ namespace TRC.TuneLoader {
 		private string newCourseName_ = "";
 		private int newCourseKind_;
 		private int newCourseShape_;
+
+		/// <summary>Saving a course also makes its reverse (driven the other way), when picked.</summary>
+		private bool newCourseReverse_ = true;
 		private float newCourseWidth_ = CourseGeometry.DefaultWidth;
 
 		private string CoursesFolder => Path.Combine(modFolder_, CoursesFolderName);
@@ -641,16 +645,37 @@ namespace TRC.TuneLoader {
 			try {
 				Course course = recorder_.Build(name, (CourseKind)newCourseKind_, map_.Key, map_.Name, $"steam:{Kino.Info.SteamId.ToString(CultureInfo.InvariantCulture)}");
 				string path = CourseLibrary.SaveCustom(CoursesFolder, course);
+				TrcLog.Info($"Course saved: {path} ({course.Length:0} m, {course.Code}).");
+				string also = "";
+				if (newCourseReverse_) {
+					Course reverse = course.ReversedAs(ReverseName(name));
+					reverse.FilePath = "";
+					reverse.Reversed = false;
+					reverse.Build(resample: false);
+					string reversePath = CourseLibrary.SaveCustom(CoursesFolder, reverse);
+					also = $" Also saved {reverse.Name} (the other way).";
+					TrcLog.Info($"Course saved: {reversePath} ({reverse.Length:0} m, {reverse.Code}), the reverse of {course.Name}.");
+				}
 				courses_.LoadCustom(CoursesFolder);
 				recorder_.Clear();
 				newCourseName_ = "";
 				coursesView_ = 0;
-				courseResult_ = $"Saved {course.Name}: {TimeAttackRun.Distance(course.Length)}, code {course.Code}. It's on the list below.";
-				TrcLog.Info($"Course saved: {path} ({course.Length:0} m, {course.Code}).");
+				courseResult_ = $"Saved {course.Name}: {TimeAttackRun.Distance(course.Length)}, code {course.Code}.{also} It's in Tracks.";
 			} catch (Exception e) {
 				courseResult_ = $"Couldn't save the course: {e.Message}";
 				TrcLog.Error(e);
 			}
+		}
+
+		/// <summary>The reverse course's name: "Akina Downhill" becomes "Akina Uphill" (and back), anything else gets "Reverse".</summary>
+		private static string ReverseName(string name) {
+			if (name.EndsWith(" Downhill", StringComparison.OrdinalIgnoreCase)) {
+				return name.Substring(0, name.Length - " Downhill".Length) + " Uphill";
+			}
+			if (name.EndsWith(" Uphill", StringComparison.OrdinalIgnoreCase)) {
+				return name.Substring(0, name.Length - " Uphill".Length) + " Downhill";
+			}
+			return name.EndsWith(" Reverse", StringComparison.OrdinalIgnoreCase) ? name.Substring(0, name.Length - " Reverse".Length) : name + " Reverse";
 		}
 
 		private void DeleteCourse(Course course) {
@@ -668,27 +693,39 @@ namespace TRC.TuneLoader {
 
 		private void DrawCoursesTab() {
 			GUILayout.Label(map_ == null
-				? "Drive onto a map to see its courses and start a time attack. Your times are here too."
+				? "Drive onto a map to see its tracks and start a time attack. Your times are here too."
 				: $"Map: <b>{map_.Name}</b> <color={Theme.MutedHex}>({map_.Key}{(map_.UploadKey.Length > 0 ? $", upload {map_.UploadKey}" : "")})</color>", Theme.Body);
-			int view = Choice(CourseViews, coursesView_);
+			GUILayout.BeginHorizontal(GUILayout.ExpandHeight(true));
+			int tracks = map_ == null ? 0 : courses_.ForMap(map_.Key).Count;
+			string building = recorder_.State != CourseRecorder.Phase.Idle ? "recording" : "";
+			int view = SideNav(CourseViews, coursesView_, new[] {
+				tracks > 0 ? tracks.ToString(CultureInfo.InvariantCulture) : "",
+				mapTraps_.Count > 0 ? mapTraps_.Count.ToString(CultureInfo.InvariantCulture) : "",
+				"", building,
+			});
 			if (view != coursesView_) {
 				coursesView_ = view;
 				courseResult_ = "";
 				deletePending_ = null;
+				placingTrap_ = false;
+				trapEditing_ = null;
 			}
+			GUILayout.Space(10);
+			GUILayout.BeginVertical(GUILayout.ExpandHeight(true));
 			if (!string.IsNullOrEmpty(courseResult_)) {
 				GUILayout.Label(courseResult_, Theme.Body);
 			}
-
 			switch (coursesView_) {
-				case 0: DrawCoursesHere(); break;
-				case 1: DrawBattleOrRaces(); break;
+				case 0: DrawTracks(); break;
+				case 1: DrawSpeedTraps(); break;
 				case 2: DrawMyTimes(); break;
 				default: DrawCourseBuilder(); break;
 			}
+			GUILayout.EndVertical();
+			GUILayout.EndHorizontal();
 		}
 
-		private void DrawCoursesHere() {
+		private void DrawTracks() {
 			if (run_ != null) {
 				GUILayout.BeginVertical(Theme.Guide);
 				GUILayout.Label($"Time attack: {run_.Course.Name}", Theme.Heading);
@@ -756,22 +793,18 @@ namespace TRC.TuneLoader {
 			if (!string.IsNullOrEmpty(scanSummary_)) {
 				GUILayout.Label(scanSummary_, Theme.Small);
 			}
-			GUILayout.Space(6);
-			DrawSpeedTraps();
 		}
 
+		/// <summary>A track: its name and details, then its buttons on a line of their own (the list is narrower beside the sections).</summary>
 		private void DrawCourseRow(Course course) {
-			GUILayout.BeginHorizontal();
-			GUILayout.BeginVertical();
 			string length = course.Usable ? TimeAttackRun.Distance(course.Length) : "can't be used yet";
 			GUILayout.Label($"<b>{course.Name}</b>  <color={Theme.MutedHex}>{course.KindName} · {length} · {course.SourceName}</color>", Theme.Body);
 			GUILayout.Label($"Course code {course.Code}{BestText(course)}{(course.Usable ? $" · {course.SectorEnds.Length} sectors" : "")}", Theme.Small);
 			foreach (string problem in course.Problems) {
 				GUILayout.Label($"<color={Theme.WarnHex}>{problem}</color>", Theme.Small);
 			}
-			GUILayout.EndVertical();
-			GUILayout.FlexibleSpace();
 
+			GUILayout.BeginHorizontal();
 			bool enabled = GUI.enabled;
 			GUI.enabled = enabled && course.Usable && hasPose_;
 			if (GUILayout.Button("Time attack", Theme.ButtonPrimary, GUILayout.Width(110))) {
@@ -796,6 +829,7 @@ namespace TRC.TuneLoader {
 			if (course.Source == CourseSource.Custom && GUILayout.Button(editing_ == course ? "Done" : "Edit", Theme.Button)) {
 				StartEditing(editing_ == course ? null : course);
 			}
+			GUILayout.FlexibleSpace();
 			GUILayout.EndHorizontal();
 			if (editing_ == course) {
 				DrawCourseEditor(course);
@@ -835,7 +869,7 @@ namespace TRC.TuneLoader {
 				return;
 			}
 			if (run_ != null || InBattle) {
-				GUILayout.Label(run_ != null ? "Stop the time attack first (in Courses here)." : "Finish or leave your battle first.", Theme.PillNeutral);
+				GUILayout.Label(run_ != null ? "Stop the time attack first (in Tracks)." : "Finish or leave your battle first.", Theme.PillNeutral);
 				return;
 			}
 
@@ -908,6 +942,9 @@ namespace TRC.TuneLoader {
 						GUILayout.Label("Kind", Theme.SectionLabel);
 						newCourseKind_ = Choice(CourseKinds, newCourseKind_);
 					}
+					GUILayout.Label("The other way", Theme.SectionLabel);
+					string typed = TuneRules.Trim(newCourseName_ ?? "");
+					newCourseReverse_ = Choice(new[] { $"Also make {(typed.Length > 0 ? ReverseName(typed) : "the reverse")}", "Just this one" }, newCourseReverse_ ? 0 : 1) == 0;
 					GUILayout.Space(4);
 					BuilderButtons("Save course", SaveCourse, startOver: true);
 					break;

@@ -375,7 +375,7 @@ namespace TRC.TuneLoader {
 					}
 
 					var info = new RoomPlayer {
-						Name = string.IsNullOrEmpty(player.FilteredNickName) ? shared.Name ?? "" : player.FilteredNickName,
+						Name = BattleMessage.PlainName(string.IsNullOrEmpty(player.FilteredNickName) ? shared.Name ?? "" : player.FilteredNickName),
 						SteamId = SteamIdOf(shared.PlayerID),
 						IsLocal = player.IsLocal,
 						CarId = shared.CarId,

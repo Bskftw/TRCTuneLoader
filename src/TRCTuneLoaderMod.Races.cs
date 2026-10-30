@@ -13,7 +13,10 @@ namespace TRC.TuneLoader {
 	/// it, and what's drawn over the track. The race and tournament logic is in src/Races/; messages go through RaceSync.
 	/// </summary>
 	public partial class TRCTuneLoaderMod {
-		private static readonly string[] BattleModesView = { "1v1 battles", "Races & tournaments" };
+		/// <summary>The Battles tab (its own tab since 0.15.0) and its sections down the left.</summary>
+		private const int BattlesTab = 6;
+		private static readonly string[] BattleSections = { "1v1 battles", "Races & tournaments", "Fun games", "My ratings" };
+		private Vector2 ratingsScroll_;
 		private static readonly int[] RaceLapChoices = { 1, 2, 3, 5, 10 };
 		private static readonly string[] GridOrders = { "Order joined", "Random", "Best time", "Qualifying" };
 		private static readonly string[] PoleSides = { "Pole on the left", "Pole on the right" };
@@ -155,6 +158,15 @@ namespace TRC.TuneLoader {
 			}
 			if (run_ != null) {
 				StopTimeAttack();
+			}
+			if (course != null && hostTrapScoring_ && course.Traps.Count == 0) {
+				// A speed trap race on a course without traps of its own: the map's free-roam traps along it.
+				List<CourseGate> along = TrapsAlong(course);
+				if (along.Count == 0) {
+					raceResult_ = "That course has no speed traps on it: place some along it in Time attack > Speed traps, or add them in the course's Edit.";
+					return;
+				}
+				course = course.WithTraps(along);
 			}
 			var settings = new RaceSettings {
 				Name = $"{BattleMessage.PlainName(MyName())}'s race",
@@ -481,17 +493,39 @@ namespace TRC.TuneLoader {
 
 		// ---- The window ----
 
-		/// <summary>The Battle view: 1v1 battles, or races and tournaments.</summary>
-		private void DrawBattleOrRaces() {
-			battleViewMode_ = Choice(BattleModesView, battleViewMode_);
-			if (battleViewMode_ == 0) {
-				DrawBattleView();
-			} else {
-				DrawRacesView();
+		/// <summary>The Battles tab: 1v1 battles, races and tournaments, fun games (room games), and the player's ratings.</summary>
+		private void DrawBattlesTab() {
+			GUILayout.BeginHorizontal(GUILayout.ExpandHeight(true));
+			int openRaces = openRaces_.Values.Count(v => v.Lobby.Settings.Mode == RoomMode.Race);
+			int openGames = openRaces_.Count - openRaces;
+			int view = SideNav(BattleSections, battleViewMode_, new[] {
+				invites_.Count > 0 ? $"{invites_.Count} waiting" : battle_ != null && battle_.Active ? "on" : "",
+				race_ != null && !race_.IsGame ? "in one" : openRaces > 0 ? $"{openRaces} open" : "",
+				race_ != null && race_.IsGame ? "in one" : openGames > 0 ? $"{openGames} open" : "",
+				"testing",
+			});
+			if (view != battleViewMode_) {
+				battleViewMode_ = view;
+				raceResult_ = "";
 			}
+			GUILayout.Space(10);
+			GUILayout.BeginVertical(GUILayout.ExpandHeight(true));
+			switch (battleViewMode_) {
+				case 0: DrawBattleView(); break;
+				case 1: DrawRacesView(games: false); break;
+				case 2: DrawRacesView(games: true); break;
+				default:
+					ratingsScroll_ = GUILayout.BeginScrollView(ratingsScroll_);
+					DrawRatings();
+					GUILayout.EndScrollView();
+					break;
+			}
+			GUILayout.EndVertical();
+			GUILayout.EndHorizontal();
 		}
 
-		private void DrawRacesView() {
+		/// <summary>Races & tournaments, or (<paramref name="games"/>) the fun games: cops and runners, tag and the rest.</summary>
+		private void DrawRacesView(bool games) {
 			if (!raceSync_.IsAvailable) {
 				GUILayout.Label(raceSync_.Status, Theme.PillNeutral);
 				return;
@@ -500,22 +534,31 @@ namespace TRC.TuneLoader {
 			if (!string.IsNullOrEmpty(raceResult_)) {
 				GUILayout.Label(raceResult_, Theme.Body);
 			}
-			if (race_ != null) {
+			if (race_ != null && race_.IsGame == games) {
 				DrawRaceLobby();
+			} else if (race_ != null) {
+				GUILayout.BeginVertical(Theme.Guide);
+				GUILayout.Label(race_.IsGame ? "You're in a fun game." : "You're in a race.", Theme.Body);
+				if (GUILayout.Button(race_.IsGame ? "Go to Fun games" : "Go to Races & tournaments", Theme.Button)) {
+					battleViewMode_ = race_.IsGame ? 2 : 1;
+				}
+				GUILayout.EndVertical();
 			} else {
-				DrawOpenRaces();
-				DrawHostRaceForm();
+				DrawOpenRaces(games);
+				DrawHostRaceForm(games);
 			}
 			GUILayout.EndScrollView();
 		}
 
-		private void DrawOpenRaces() {
-			GUILayout.Label("Open races in this room", Theme.SectionLabel);
+		private void DrawOpenRaces(bool games) {
+			GUILayout.Label(games ? "Games in this room" : "Open races in this room", Theme.SectionLabel);
 			GUILayout.BeginVertical(Theme.Card);
-			if (openRaces_.Count == 0) {
-				GUILayout.Label("No open races right now. Host one below, and everyone in the room with TRC Tune Loader sees it.", Theme.Small);
+			List<(RaceMessage Lobby, float SeenAt, float FirstSeen)> listed = openRaces_.Values.Where(v => (v.Lobby.Settings.Mode != RoomMode.Race) == games).ToList();
+			if (listed.Count == 0) {
+				GUILayout.Label(games ? "No games right now. Host one below: everyone in the room with TRC Tune Loader sees it."
+					: "No open races right now. Host one below, and everyone in the room with TRC Tune Loader sees it.", Theme.Small);
 			}
-			foreach (var (lobby, _, _) in openRaces_.Values.ToList()) {
+			foreach (var (lobby, _, _) in listed) {
 				Course course = courses_.ByCode(lobby.CourseCode);
 				string where = lobby.Settings.Mode != RoomMode.Race ? RoomModeNames[(int)lobby.Settings.Mode] : course?.Name ?? lobby.CourseCode;
 				bool full = lobby.Entries.Count >= lobby.Settings.MaxPlayers;
@@ -535,21 +578,28 @@ namespace TRC.TuneLoader {
 			GUILayout.EndVertical();
 		}
 
-		private void DrawHostRaceForm() {
-			GUILayout.Label("Host a race", Theme.SectionLabel);
+		private void DrawHostRaceForm(bool games) {
+			GUILayout.Label(games ? "Host a game" : "Host a race", Theme.SectionLabel);
 			GUILayout.BeginVertical(Theme.Card);
 			if (!hasPose_ || map_ == null) {
 				GUILayout.Label("Join a room and drive onto the map first.", Theme.Small);
 				GUILayout.EndVertical();
 				return;
 			}
-			GUILayout.Label("What to play", Theme.SectionLabel);
-			hostGame_ = Choice(RoomModeNames, hostGame_);
-			if (hostGame_ != 0) {
+			if (games) {
+				GUILayout.Label("What to play", Theme.SectionLabel);
+				hostGame_ = Math.Max(1, hostGame_);
+				hostGame_ = Choice(RoomModeNames.Skip(1).ToArray(), hostGame_ - 1) + 1;
 				DrawGameForm();
 				GUILayout.EndVertical();
 				return;
 			}
+			hostGame_ = 0;
+			GUILayout.Label("Race for", Theme.SectionLabel);
+			hostTrapScoring_ = Choice(new[] { "Fastest time", "Speed traps" }, hostTrapScoring_ ? 1 : 0) == 1;
+			GUILayout.Label(hostTrapScoring_
+				? "Like Need for Speed Most Wanted: the highest total of every speed trap on the course wins (on a circuit, every lap's). You have to finish for yours to count. The course's own traps count, or the free-roam traps along it."
+				: "The fastest to the finish wins.", Theme.Small);
 			List<Course> courses = courses_.ForMap(map_.Key).Where(c => c.Usable).ToList();
 			if (courses.Count == 0) {
 				GUILayout.Label("No courses on this map yet: make one with the Course builder.", Theme.Small);
@@ -559,16 +609,17 @@ namespace TRC.TuneLoader {
 			GUILayout.Label("Course", Theme.SectionLabel);
 			foreach (Course course in courses) {
 				string grid = course.GridObjects.Count > 0 ? "map grid" : course.GridPath.Count >= 2 ? "laid-out grid" : "grid straight back";
-				string text = $"<b>{course.Name}</b>  <color={Theme.MutedHex}>{course.KindName} · {TimeAttackRun.Distance(course.Length)} · {grid}</color>";
+				string traps = "";
+				if (hostTrapScoring_) {
+					int count = RaceTrapsFor(course).Count;
+					traps = count == 0 ? $" · <color={Theme.WarnHex}>no speed traps on it</color>" : $" · {count} speed trap(s)";
+				}
+				string text = $"<b>{course.Name}</b>  <color={Theme.MutedHex}>{course.KindName} · {TimeAttackRun.Distance(course.Length)} · {grid}</color>{traps}";
 				if (GUILayout.Button(text, hostCourse_ == course.Code ? Theme.RowSelected : Theme.Row)) {
 					hostCourse_ = course.Code;
 				}
 			}
 			Course picked = courses.FirstOrDefault(c => c.Code == hostCourse_);
-			if (picked?.Traps.Count > 0) {
-				GUILayout.Label("Scoring", Theme.SectionLabel);
-				hostTrapScoring_ = Choice(new[] { "Fastest time", $"Speed traps (highest total of {picked.Traps.Count})" }, hostTrapScoring_ ? 1 : 0) == 1;
-			}
 			if (picked?.IsCircuit == true) {
 				GUILayout.Label("Laps", Theme.SectionLabel);
 				hostLaps_ = Choice(RaceLapChoices.Select(l => l.ToString(CultureInfo.InvariantCulture)).ToArray(), hostLaps_);

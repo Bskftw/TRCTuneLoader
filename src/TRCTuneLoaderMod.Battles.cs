@@ -411,6 +411,25 @@ namespace TRC.TuneLoader {
 			GUILayout.EndScrollView();
 		}
 
+		/// <summary>
+		/// A challenge waiting, at the top of every other tab: one came in while the window was open on something
+		/// else (Oct 29: one went by unseen while the player was in the course builder).
+		/// </summary>
+		private void DrawInviteBanner() {
+			if (invites_.Count == 0 || (tab_ == BattlesTab && battleViewMode_ == 0) || tourStep_ >= 0) {
+				return;
+			}
+			BattleMessage challenge = invites_[invites_.Count - 1].Challenge;
+			GUILayout.BeginHorizontal(Theme.Guide);
+			GUILayout.Label($"<b>{BattleMessage.PlainName(challenge.FromName)} challenges you</b>  <color={Theme.MutedHex}>{BattleFormats[(int)challenge.Format]}" +
+				$"{(invites_.Count > 1 ? $" · {invites_.Count} challenges waiting" : "")}</color>", Theme.Body);
+			GUILayout.FlexibleSpace();
+			if (GUILayout.Button("Answer", Theme.ButtonPrimary)) {
+				GoToBattle(0);
+			}
+			GUILayout.EndHorizontal();
+		}
+
 		private void DrawInvite(BattleMessage challenge) {
 			Course course = CourseForChallenge(challenge, out string problem);
 			GUILayout.BeginVertical(Theme.Guide);

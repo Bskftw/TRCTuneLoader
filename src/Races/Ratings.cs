@@ -14,10 +14,15 @@ namespace TRC.TuneLoader {
 	///   Elo, one each for touge, highway and circuits: 1500 to start, moved by TRC spec battles (win, draw or loss
 	///   against the other driver's rating) and races (every other finisher counts as a little battle).
 	///
-	///   Safety Rating, 0 to 4.99, 2.50 to start, like iRacing's: no blame, it's what happened to this car. Clean
-	///   kilometres raise it; incidents (a reset, a hit, possible contact, leaving the road, a jump start) take it down.
+	///   Safety Rating, 0 to 4.99, 2.50 to start, like iRacing's: no blame, it's what happened to this car. Only
+	///   battles and races count (time attack is the player alone, often just messing about). Clean kilometres raise
+	///   it; hard contact, a hard hit and a reset take it down. Light touches in close racing don't count, and one
+	///   event can move it only so far either way.
 	///
 	///   License, Rookie to A: up a step at SR 3.00 or more once enough events are driven; down a step below 1.00.
+	///
+	/// All of it is still being tested (Oct 29): it isn't official, and it will be reset before it counts.
+	/// Version 2 (0.15.0) reset the Safety Rating and license once, for the new rules; Elo was kept.
 	/// </summary>
 	public sealed class RatingBook {
 		public const double StartElo = 1500;
@@ -26,22 +31,31 @@ namespace TRC.TuneLoader {
 		private const double BattleK = 32;
 		private const double RaceK = 32;
 
-		/// <summary>Safety Rating per clean kilometre (up to 10 km an event), and per incident point.</summary>
+		/// <summary>Safety Rating per clean kilometre (up to 10 km an event), per incident point, and the most one event can take away.</summary>
 		private const double SafetyPerKm = 0.04;
 		private const double MaxKmPerEvent = 10;
-		private const double SafetyPerPoint = 0.12;
+		private const double SafetyPerPoint = 0.08;
+		public const double MaxDropPerEvent = 0.3;
+
+		/// <summary>The rating rules' version, saved in the file: an older file gets the Safety Rating and license reset once.</summary>
+		public const int Version = 2;
+
+		/// <summary>Said wherever the ratings show.</summary>
+		public const string TestingNote = "Ratings are being tested: they're not official yet, and Elo and Safety Rating will be reset before they count.";
 
 		/// <summary>Promotion: SR at least this, and this many events driven, for D, C, B and A. Below the other, down a step.</summary>
 		public const double PromoteSafety = 3.0;
 		public const double DemoteSafety = 1.0;
 		private static readonly int[] EventsFor = { 0, 3, 8, 15, 25 };
 
-		/// <summary>Incident points, as iRacing counts them in spirit: a light touch is little, contact is a lot.</summary>
-		public const int ResetPoints = 2;
+		/// <summary>
+		/// Incident points. A light touch costs nothing (close racing, Oct 29: a clean, close battle took a player to
+		/// 0.16); hard contact with another car, a hard hit and a reset do. Leaving the road and jump starts don't:
+		/// the run or race already deals with those.
+		/// </summary>
+		public const int ResetPoints = 1;
 		public const int HitPoints = 1;
-		public const int ContactPoints = 4;
-		public const int OffRoadPoints = 2;
-		public const int JumpPoints = 1;
+		public const int ContactPoints = 2;
 
 		public double[] Elo = { StartElo, StartElo, StartElo };
 		public double Safety = StartSafety;
@@ -82,7 +96,8 @@ namespace TRC.TuneLoader {
 		/// <summary>An event driven (a run, a battle or a race): clean kilometres up, incidents down, then the license. Returns the SR change.</summary>
 		public double Drive(double km, int incidentPoints, string what, DateTime when) {
 			double before = Safety;
-			Safety += SafetyPerKm * Math.Min(Math.Max(0, km), MaxKmPerEvent) - SafetyPerPoint * Math.Max(0, incidentPoints);
+			double change = SafetyPerKm * Math.Min(Math.Max(0, km), MaxKmPerEvent) - SafetyPerPoint * Math.Max(0, incidentPoints);
+			Safety += Math.Max(-MaxDropPerEvent, change);
 			Safety = Math.Max(0, Math.Min(MaxSafety, Safety));
 			Events++;
 			License was = License;
@@ -120,6 +135,7 @@ namespace TRC.TuneLoader {
 		public void Save(string folder) {
 			Directory.CreateDirectory(folder);
 			var text = new StringBuilder("# TRC ratings, kept by the TRC Tune Loader on this PC.\n");
+			text.Append("version = ").Append(Version.ToString(CultureInfo.InvariantCulture)).Append('\n');
 			text.Append("elo_touge = ").Append(Elo[0].ToString("0.##", CultureInfo.InvariantCulture)).Append('\n');
 			text.Append("elo_highway = ").Append(Elo[1].ToString("0.##", CultureInfo.InvariantCulture)).Append('\n');
 			text.Append("elo_circuit = ").Append(Elo[2].ToString("0.##", CultureInfo.InvariantCulture)).Append('\n');
@@ -138,6 +154,7 @@ namespace TRC.TuneLoader {
 			if (!File.Exists(path)) {
 				return book;
 			}
+			int version = 1;
 			foreach (string raw in File.ReadAllLines(path, Encoding.UTF8)) {
 				int eq = raw.IndexOf('=');
 				if (raw.StartsWith("#", StringComparison.Ordinal) || eq <= 0) {
@@ -154,7 +171,15 @@ namespace TRC.TuneLoader {
 					case "license": Enum.TryParse(value, out book.License); break;
 					case "events": book.Events = (int)number; break;
 					case "history": book.History.Add(value); break;
+					case "version": version = (int)number; break;
 				}
+			}
+			if (version < Version) {
+				// New rules (0.15.0): the old Safety Rating counted every light touch and every time attack.
+				book.Safety = StartSafety;
+				book.License = License.Rookie;
+				book.Events = 0;
+				book.Note(DateTime.Now, "Safety Rating and license reset for the new rules (Elo kept)");
 			}
 			return book;
 		}

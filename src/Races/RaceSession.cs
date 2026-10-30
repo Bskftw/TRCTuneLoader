@@ -518,6 +518,9 @@ namespace TRC.TuneLoader {
 				case RaceKind.Course:
 					if (!IsHost && Course == null && m.From == HostId && m.Course != null && m.Course.Code == CourseCode) {
 						Course = m.Course;
+					} else if (!IsHost && Course != null && Settings.SpeedTrapScoring && m.From == HostId && m.Course?.Code == CourseCode && m.Course.Traps.Count > 0) {
+						// A speed trap race counts the host's traps, even on a course this driver has with other traps (or none).
+						Course = Course.WithTraps(m.Course.Traps);
 					}
 					break;
 
@@ -1004,7 +1007,8 @@ namespace TRC.TuneLoader {
 			if (lobbyDirty_ || now - lastLobby_ >= LobbySeconds) {
 				SendLobby(now);
 			}
-			if (Course != null && !Course.Official && Drivers.Any(d => d.Id != Me && !d.HasCourse) && now - lastCourseSent_ >= CourseResendSeconds) {
+			bool trapsToSend = Settings.SpeedTrapScoring && Phase == RacePhase.Lobby && Drivers.Any(d => d.Id != Me);
+			if (Course != null && ((!Course.Official && Drivers.Any(d => d.Id != Me && !d.HasCourse)) || trapsToSend) && now - lastCourseSent_ >= CourseResendSeconds) {
 				lastCourseSent_ = now;
 				var course = New(RaceKind.Course);
 				course.Course = Course;

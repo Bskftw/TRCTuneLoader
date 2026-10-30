@@ -37,6 +37,9 @@ namespace TRC.TuneLoader {
 		private const double HeartbeatSeconds = 0.2;
 		public const double TimeoutSeconds = 10;
 		private const double InviteSeconds = 45;
+
+		/// <summary>A challenge that carries its course (dozens of packets for a long one) gets longer to arrive.</summary>
+		private const double InviteWithCourseSeconds = 90;
 		private const double ChallengeResendSeconds = 3;
 
 		/// <summary>After this long without a Seen, the challenger is told it hasn't got there yet.</summary>
@@ -53,6 +56,9 @@ namespace TRC.TuneLoader {
 
 		/// <summary>If GO passed this long ago and the other side never started, the countdown is called off (a lost message).</summary>
 		private const double MissedGoSeconds = 3;
+
+		/// <summary>The host sends the countdown again this often until the other side's heartbeat shows it arrived.</summary>
+		private const double CountdownResendSeconds = 0.3;
 
 		/// <summary>How long to wait for the other driver's result once one is in.</summary>
 		private const double ResultWaitSeconds = 180;
@@ -231,6 +237,10 @@ namespace TRC.TuneLoader {
 		/// <summary>When the other driver measured <see cref="PeerProgress"/>, on their clock.</summary>
 		private double peerProgressAt_ = -1;
 		private double peerSpeed_;
+		private double lastCountdownSent_ = -1;
+
+		/// <summary>Highway battles: the other driver's heartbeats showed them running this run too (a result only counts then).</summary>
+		private bool peerRan_;
 
 		private BattleSession(uint id, bool host, ulong me, string myName, ulong peer, string peerName, Course course,
 			BattleFormat format, bool open, int laps, Func<BattleCar> checkMyCar, double now) {
@@ -402,7 +412,7 @@ namespace TRC.TuneLoader {
 		public void Tick(double now, Vector3 position, Vector3 forward, float speedKmh, float timeScale, bool? onRoad) {
 			switch (State) {
 				case Phase.Inviting:
-					if (now - createdAt_ > InviteSeconds) {
+					if (now - createdAt_ > InviteLimit) {
 						End(Phase.Ended, PeerSeen ? $"{PeerName} didn't answer" : $"The challenge never got to {PeerName}", now);
 					} else if (!PeerSeen) {
 						// Sent again until their mod says it's there; the pieces of each copy fill in the last one's gaps.
@@ -410,7 +420,9 @@ namespace TRC.TuneLoader {
 							SendChallenge(now);
 						}
 						if (now - createdAt_ > NotSeenSeconds) {
-							Message = $"Still sending: {PeerName}'s TRC Tune Loader hasn't confirmed the challenge yet";
+							Message = SendsCourse
+								? $"Still sending your course to {PeerName}: a long one can take up to a minute to get there"
+								: $"Still sending: {PeerName}'s TRC Tune Loader hasn't confirmed the challenge yet";
 						}
 					}
 					return;
@@ -439,6 +451,7 @@ namespace TRC.TuneLoader {
 			myPosition_ = position;
 			myForward_ = CourseGeometry.Level(forward);
 			myKmh_ = Mathf.Abs(speedKmh);
+			ResendCountdown(now);
 			if (IsHighway) {
 				TickHighway(now);
 				Heartbeat(now);
@@ -525,6 +538,15 @@ namespace TRC.TuneLoader {
 					}
 					break;
 				case Phase.Running: {
+					// The other side never started (the countdown got lost): call it off and line up again, like a course battle.
+					if (!peerRan_ && peerRunIndex_ == RunIndex && peerPhase_ == Phase.Gridding && now - goTime_ > MissedGoSeconds) {
+						BattleMessage abort = New(BattleKind.Abort);
+						abort.CountdownId = countdownId_;
+						abort.Reason = "the start didn't reach both of you";
+						outbox_.Add(abort);
+						BackToGrid("The start didn't reach both of you. Line up again");
+						return;
+					}
 					if (HighwayGap < -DrainFromMetres) {
 						float behind = -HighwayGap - DrainFromMetres;
 						MySp = Math.Max(0f, MySp - Mathf.Min(MaxDrainPerSecond, behind / DrainMetresPerSp) * (float)dt);
@@ -533,6 +555,12 @@ namespace TRC.TuneLoader {
 						MySp = 0f;
 					}
 					bool timeUp = now - goTime_ > HighwayMaxSeconds;
+					if ((MySp <= 0f || PeerSp <= 0f || timeUp) && !peerRan_) {
+						// Only this side was running: nobody wins, nothing counts.
+						Counted = false;
+						End(Phase.Ended, $"{PeerName} never started this run, so it doesn't count", now);
+						break;
+					}
 					if (MySp <= 0f || PeerSp <= 0f || timeUp) {
 						bool iWin = MySp > 0f && (PeerSp <= 0f || (timeUp && MySp > PeerSp));
 						bool draw = timeUp && Math.Abs(MySp - PeerSp) < 0.5f;
@@ -564,6 +592,11 @@ namespace TRC.TuneLoader {
 			float side = Mathf.Max(MinRaceSpotSide, start.Width / 4f - RaceSpotsCloser);
 			return start.Center - start.Forward * FrontSpot + start.Right * side * (IsHost ? -1f : 1f);
 		}
+
+		/// <summary>The course goes with the challenge (not official, so the other driver may not have it).</summary>
+		private bool SendsCourse => !IsHighway && Course != null && !Course.Official;
+
+		private double InviteLimit => SendsCourse ? InviteWithCourseSeconds : InviteSeconds;
 
 		private void SendChallenge(double now) {
 			lastChallengeSent_ = now;
@@ -612,13 +645,40 @@ namespace TRC.TuneLoader {
 			PeerOut = "";
 			peerProgressAt_ = -1;
 			peerSpeed_ = 0;
+			peerRan_ = false;
 		}
 
 		private void BackToGrid(string message) {
-			Run.Restart();
+			Run?.Restart();
+			if (IsHighway) {
+				MySp = FullSp;
+				PeerSp = FullSp;
+				MyCar = null;
+				MyReady = false;
+				peerRan_ = false;
+			}
 			State = Phase.Gridding;
 			bothReadySince_ = -1;
 			Message = message;
+		}
+
+		/// <summary>
+		/// The host's countdown goes again (same countdown, same GO) until the other side's heartbeat shows it got
+		/// it: one lost packet shouldn't leave one driver racing alone.
+		/// </summary>
+		private void ResendCountdown(double now) {
+			if (!IsHost || State != Phase.Countdown || countdownId_ == 0 || now >= goTime_ - 0.2 || now - lastCountdownSent_ < CountdownResendSeconds) {
+				return;
+			}
+			if (peerRunIndex_ == RunIndex && peerPhase_ != Phase.Gridding) {
+				return;
+			}
+			lastCountdownSent_ = now;
+			BattleMessage countdown = New(BattleKind.Countdown);
+			countdown.CountdownId = countdownId_;
+			countdown.RunIndex = RunIndex;
+			countdown.GoHostTime = goTime_;
+			outbox_.Add(countdown);
 		}
 
 		private void UpdateGrid(double now) {
@@ -668,6 +728,7 @@ namespace TRC.TuneLoader {
 			countdown.RunIndex = RunIndex;
 			countdown.GoHostTime = goTime_;
 			outbox_.Add(countdown);
+			lastCountdownSent_ = now;
 			Run?.StartCountdown(goTime_);
 			State = Phase.Countdown;
 			bothReadySince_ = -1;
@@ -765,8 +826,13 @@ namespace TRC.TuneLoader {
 			PeerPosition = message.Position;
 			PeerHeading = message.Heading;
 			PeerKmh = message.Kmh;
-			if (IsHighway && State == Phase.Running) {
-				PeerSp = message.Sp;
+			if (IsHighway && State == Phase.Running && message.RunIndex == RunIndex) {
+				if (peerPhase_ == Phase.Running || peerPhase_ == Phase.Finished) {
+					peerRan_ = true;
+				}
+				if (peerRan_) {
+					PeerSp = message.Sp;
+				}
 			}
 			if (sameRun) {
 				double at = message.SentAt;

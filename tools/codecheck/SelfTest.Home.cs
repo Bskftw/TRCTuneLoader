@@ -22,9 +22,9 @@ namespace TRC.TuneLoader.CodeCheck {
 				Activity = RoomActivity.RaceLobby, Detail = "Apok's race", UpForBattle = true, OpenRaceId = 1234567u, MapKey = "project-dream", Car = "Toyota AE86",
 			};
 			RoomMessage back = RoomMessage.Decode(status.Encode());
-			Expect(back != null && back.Kind == RoomKind.Status && back.From == status.From && back.Name == status.Name && back.Version == "0.14.0" &&
+			Expect(back != null && back.Kind == RoomKind.Status && back.From == status.From && back.Name == "Apok" && back.Version == "0.14.0" &&
 				back.Activity == RoomActivity.RaceLobby && back.Detail == "Apok's race" && back.UpForBattle && back.OpenRaceId == 1234567u &&
-				back.MapKey == "project-dream" && back.Car == "Toyota AE86", "a room status comes back the same after encoding");
+				back.MapKey == "project-dream" && back.Car == "Toyota AE86", "a room status comes back the same after encoding (the name without its colours)");
 			Expect(RoomBoard.ActivityText(back) == "Waiting in Apok's race" && !RoomBoard.Free(back), "a race lobby reads as waiting, not free to battle");
 			Expect(RoomBoard.Free(new RoomMessage { Activity = RoomActivity.FreeRoam }) && !RoomBoard.Free(new RoomMessage { Activity = RoomActivity.Battle }), "free roam is free, a battle isn't");
 

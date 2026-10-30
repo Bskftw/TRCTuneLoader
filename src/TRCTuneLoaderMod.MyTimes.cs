@@ -7,16 +7,21 @@ namespace TRC.TuneLoader {
 	/// <summary>
 	/// My times: the player's times by map and course, each course opening to one row per car and TRC tune set
 	/// (best standing and flying runs, best lap on a circuit, and the theoretical best from the best sectors),
-	/// the best laps of every circuit, or the latest runs. "TRC spec only" hides times that don't count.
+	/// the best laps of every circuit, or the latest runs. "TRC spec only" hides times that don't count. Times can be
+	/// deleted (a run, a car's times on a course, or a whole course), with a second click to be sure.
 	/// </summary>
 	public partial class TRCTuneLoaderMod {
-		private static readonly string[] TimesViews = { "Best times", "Best laps", "Recent", "Ratings" };
+		private static readonly string[] TimesViews = { "Best times", "Best laps", "Recent" };
 		private static readonly string[] TimesFilters = { "All times", "TRC spec only" };
 		private const int RecentCount = 40;
 
 		private int timesView_;
 		private int timesFilter_;
 		private readonly HashSet<string> timesOpen_ = new HashSet<string>(StringComparer.Ordinal);
+
+		/// <summary>What the next click on a Delete button deletes (a key for the button), and what it said last.</summary>
+		private string timesDeletePending_ = "";
+		private string timesResult_ = "";
 
 		private void DrawMyTimes() {
 			GUILayout.Label("Saved on this PC. Each car and TRC tune set has its own times, and flying starts are kept apart from standing ones. " +
@@ -28,12 +33,13 @@ namespace TRC.TuneLoader {
 			GUILayout.EndHorizontal();
 
 			List<TimeAttackRecord> shown = timesFilter_ == 1 ? times_.Where(r => r.IsSpec).ToList() : times_;
+			if (timesResult_.Length > 0) {
+				GUILayout.Label(timesResult_, Theme.Body);
+			}
 			GUILayout.BeginVertical(Theme.Card, GUILayout.ExpandHeight(true));
 			timesScroll_ = GUILayout.BeginScrollView(timesScroll_);
-			if (timesView_ == 3) {
-				DrawRatings();
-			} else if (shown.Count == 0) {
-				GUILayout.Label(times_.Count == 0 ? "No times yet. Pick a course in Courses here and press Time attack." : "No TRC spec times yet.", Theme.Small);
+			if (shown.Count == 0) {
+				GUILayout.Label(times_.Count == 0 ? "No times yet. Pick a track in Tracks and press Time attack." : "No TRC spec times yet.", Theme.Small);
 			} else if (timesView_ == 2) {
 				DrawRecentTimes(shown);
 			} else {
@@ -59,7 +65,7 @@ namespace TRC.TuneLoader {
 				}
 			}
 			if (!any) {
-				GUILayout.Label("No circuit laps yet. Drive a circuit (Courses here) to see your best laps here.", Theme.Small);
+				GUILayout.Label("No circuit laps yet. Drive a circuit (Tracks) to see your best laps here.", Theme.Small);
 			}
 		}
 
@@ -104,7 +110,15 @@ namespace TRC.TuneLoader {
 				GUILayout.BeginHorizontal();
 				GUILayout.Space(14);
 				GUILayout.BeginVertical();
+				GUILayout.BeginHorizontal();
 				GUILayout.Label($"<b>{any.Car}</b> · {set}  <color={Theme.MutedHex}>{carSet.Count()} time(s), last {carSet.Max(r => r.When):MMM d}</color>", Theme.Body);
+				GUILayout.FlexibleSpace();
+				int carId = any.CarId;
+				string tuneSet = any.TuneSet;
+				string code = course.Key;
+				DeleteTimesButton($"car {code} {carId} {tuneSet}", "Delete these", $"{any.Car}'s times on {last.CourseName}",
+					r => r.CourseCode == code && r.CarId == carId && r.TuneSet == tuneSet);
+				GUILayout.EndHorizontal();
 				GUILayout.Label(string.Join("   ", parts), Theme.Small);
 				// The sectors of this car's best time (a circuit's best lap), coloured against every time on the course.
 				TimeAttackRecord bestTime = carSet.Where(r => r.SectorMs.Length > 1 && (circuit ? r.IsLap : r.Laps == 1 && !r.Flying))
@@ -115,7 +129,12 @@ namespace TRC.TuneLoader {
 				GUILayout.EndVertical();
 				GUILayout.EndHorizontal();
 			}
+			GUILayout.BeginHorizontal();
 			GUILayout.Label($"<color={Theme.MutedHex}>Course code {course.Key} · last time {last.When:MMM d, HH:mm}</color>", Theme.Small);
+			GUILayout.FlexibleSpace();
+			string courseCode = course.Key;
+			DeleteTimesButton($"course {courseCode}", "Delete all on this course", $"every time on {last.CourseName}", r => r.CourseCode == courseCode);
+			GUILayout.EndHorizontal();
 			GUILayout.Space(6);
 		}
 
@@ -167,13 +186,61 @@ namespace TRC.TuneLoader {
 			foreach (TimeAttackRecord r in records.OrderByDescending(r => r.When).Take(RecentCount)) {
 				string what = r.IsLap ? $"lap {r.LapNumber}" : r.Laps == 0 ? "laps" : r.Laps > 1 ? $"{r.Laps} laps {(r.Flying ? "flying" : "standing")}" : r.Flying ? "flying" : "standing";
 				string spec = r.IsSpec ? $"<color={Theme.GoodHex}>{r.TuneSet} spec</color>" : $"<color={Theme.MutedHex}>{DoesntCount(r)}</color>";
+				GUILayout.BeginHorizontal();
 				GUILayout.Label($"<color={Theme.MutedHex}>{r.When:MMM d HH:mm}</color>  <b>{TimeAttackRun.FormatTime(r.Seconds)}</b>  {r.CourseName} · {what} · {r.Car} · {spec}", Theme.Body);
+				GUILayout.FlexibleSpace();
+				TimeAttackRecord one = r;
+				DeleteTimesButton($"run {r.When.Ticks} {r.CourseCode} {r.TimeMs} {r.LapNumber}", "Delete", $"the {TimeAttackRun.FormatTime(r.Seconds)} on {r.CourseName}", x => TimeAttackLog.Same(x, one));
+				GUILayout.EndHorizontal();
 				if (showSectors_ && r.SectorMs.Length > 1) {
 					GUILayout.Label($"      {SavedSectors(r, times_)}", Theme.Small);
 				}
 				if (r.TrapKmh.Length > 0) {
 					GUILayout.Label($"      <color={Theme.WarnHex}>Speed traps {string.Join(" · ", r.TrapKmh.Select(k => $"{k:0}"))} km/h, total {r.TrapTotal:0}</color>", Theme.Small);
 				}
+			}
+		}
+
+		/// <summary>A Delete button: the first click asks, the second deletes.</summary>
+		private void DeleteTimesButton(string key, string label, string what, Func<TimeAttackRecord, bool> which) {
+			if (timesDeletePending_ != key) {
+				if (GUILayout.Button(label, Theme.Button)) {
+					timesDeletePending_ = key;
+					timesResult_ = "";
+				}
+				return;
+			}
+			if (GUILayout.Button($"Delete {what}?", Theme.ButtonPrimary)) {
+				DeleteTimes(which, what);
+			}
+			if (GUILayout.Button("Keep", Theme.Button)) {
+				timesDeletePending_ = "";
+			}
+		}
+
+		/// <summary>
+		/// Deletes times from runs.csv. When one was a best whose trace the live delta and the best line use, that
+		/// trace goes too, so the next run compares with what's left.
+		/// </summary>
+		private void DeleteTimes(Func<TimeAttackRecord, bool> which, string what) {
+			timesDeletePending_ = "";
+			try {
+				List<TimeAttackRecord> going = times_.Where(which).ToList();
+				int removed = TimeAttackLog.Delete(TimesFolder, which);
+				foreach (TimeAttackRecord r in going) {
+					TimeKind kind = r.IsLap ? LapKind : TimeKind.Of(r);
+					string key = TimeAttackTraces.Key(r.CourseCode, r.CarId, r.TuneSet, kind);
+					var trace = TimeAttackTraces.Load(TimesFolder, key);
+					if (trace != null && trace.Value.TimeMs == r.TimeMs) {
+						TimeAttackTraces.Delete(TimesFolder, key);
+					}
+				}
+				times_ = TimeAttackLog.Load(TimesFolder);
+				timesResult_ = $"Deleted {what} ({removed} time(s)). The file from before is kept as TimeAttack/runs-before-delete.csv.";
+				TrcLog.Info($"My times: deleted {what} ({removed} time(s)).");
+			} catch (Exception e) {
+				timesResult_ = $"Couldn't delete: {e.Message}";
+				TrcLog.Error(e);
 			}
 		}
 	}

@@ -94,6 +94,7 @@ namespace TRC.TuneLoader {
 				showSectors_ = Kino.Prefs.Get(SectorsPref, true);
 				bestLineMode_ = Mathf.Clamp(Kino.Prefs.Get(BestLinePref, 0), 0, 2);
 				shareValues_ = Kino.Prefs.Get(ShareValuesPref, false);
+				LoadLook();
 				Vector2 timer = Kino.Prefs.Get(HudPositionPref, DefaultHudPosition);
 				hudPosition_ = new Vector2(Mathf.Clamp01(timer.x), Mathf.Clamp01(timer.y));
 			} catch (Exception e) {
@@ -299,6 +300,12 @@ namespace TRC.TuneLoader {
 				windowScale_ = WindowScales[pickedScale];
 				SavePref(WindowScalePref, windowScale_);
 			}
+			GUILayout.EndVertical();
+
+			GUILayout.Space(10);
+			GUILayout.Label("Look", Theme.SectionLabel);
+			GUILayout.BeginVertical(Theme.Card);
+			DrawLookOptions();
 			GUILayout.EndVertical();
 
 			GUILayout.Space(10);
@@ -509,40 +516,40 @@ namespace TRC.TuneLoader {
 				Tab = MyCarTab,
 			},
 			new TourStep {
-				Title = "Tune sets, Players, Mod check, Backups",
+				Title = "Tune sets, Players, Mod check",
 				Text = "Tune sets lists every official set built into the mod. Players checks every car in an online room. " +
-					"Mod check lists the mods KSL has loaded. Backups keeps your own tune whenever a TRC tune replaces it.",
+					"Mod check lists the mods KSL has loaded. Your own tunes are kept in Backups, beside the tune sets in My car, whenever a TRC tune replaces one.",
 				Tab = PlayersTab,
 			},
 			new TourStep {
 				Title = "Time attack",
-				Text = "Courses here lists the courses on the map you're driving: touge, highway and circuits. Press Time attack and stop behind the start line for 3-2-1-GO " +
+				Text = "Tracks lists the courses on the map you're driving: touge, highway and circuits. Press Time attack and stop behind the start line for 3-2-1-GO " +
 					"(or pick a flying start, and laps on a circuit). Your sectors stay on the timer in purple, green or amber, the live delta shows how far ahead or behind your best you are, " +
 					$"and your best line is drawn on the road. {restartShortcut_} sends you back to the start.",
 				Tab = CoursesTab,
 			},
 			new TourStep {
 				Title = "Speed traps",
-				Text = "Drive through a speed trap and your speed flashes up: purple for a new best, green close to it, amber slower. " +
-					"Courses here lists the map's traps with your bests, and Add speed trap here places your own. A course's Edit can add traps along it, and share the course with the room.",
+				Text = "Drive through a speed trap and your speed flashes up: purple for a new best, green close to it, amber slower, and its SPEED CHECK sign shows your last speed. " +
+					"Speed traps (in Time attack) lists the map's traps grouped by track; New speed trap places your own, with a name and a width. A course's Edit can add traps along it.",
 				Tab = CoursesTab,
 			},
 			new TourStep {
-				Title = "Battles, races and room games",
-				Text = "Battle has 1v1 battles (side by side, cat and mouse, or a Tokyo Xtreme Racer style highway battle on SP) and Races & tournaments for up to 16 drivers: " +
-					"qualifying, grids, points series, knockouts, heats. Pick What to play for room games: cops and runners, tag, infected, king of the hill, keep-up, convoy and highway cut-up. " +
+				Title = "Battles, races and fun games",
+				Text = "The Battles tab has 1v1 battles (side by side, cat and mouse, or a Tokyo Xtreme Racer style highway battle on SP), Races & tournaments for up to 16 drivers " +
+					"(qualifying, grids, points series, knockouts, heats, and speed trap races), and Fun games: cops and runners, tag, infected, king of the hill, keep-up, convoy and highway cut-up. " +
 					"When it's over, Run it back plays it again.",
-				Tab = CoursesTab,
+				Tab = BattlesTab,
 			},
 			new TourStep {
 				Title = "My times and ratings",
-				Text = "My times keeps your best times and laps for each car and tune set, and Ratings shows your Elo for touge, highway and circuit, your Safety Rating and your license (Rookie to A). " +
-					"Clean driving raises the Safety Rating; resets, hits and contact lower it. The Course builder makes your own courses.",
+				Text = "My times (in Time attack) keeps your best times and laps for each car and tune set; you can delete times there. My ratings (in Battles) shows your Elo for touge, highway and circuit, " +
+					"your Safety Rating and your license. Ratings are still being tested and will be reset before they count. The Course builder makes your own courses.",
 				Tab = CoursesTab,
 			},
 			new TourStep {
 				Title = "Options",
-				Text = "Change the shortcut, the restart key, wheel or controller buttons, the window size, the badge and track check, sectors and best line, " +
+				Text = "Change the shortcut, the restart key, wheel or controller buttons, the window size, the colours and text size (Look), the badge and track check, sectors and best line, " +
 					"and how many backups to keep, or take this tour again. Report a bug is here too. See you on the touge!",
 				Tab = OptionsTab,
 			},

@@ -2,6 +2,38 @@
 
 All versions of TRC Tune Loader, newest first. "Not tested in game yet" means the version builds and its automatic tests pass, but nobody has tried it in CarX yet.
 
+## 0.15.0 (Oct 29 2026)
+
+Not tested in game yet. Built from a night of testing with a second player: tidier tabs, much better speed traps, and fixes for what went wrong. Works with 0.13 and 0.14 players, but update together for the fixes to battles and speed trap races.
+
+**Turn on automatic updates for TRC Tune Loader in KSL.** If they're off, KSL only says an update is available and keeps the old version: a tester stayed on 0.14.1 that way. From this version, the mod tells you when someone in your room has a newer version.
+
+**New**
+- **Tidier window.** Time attack lists its sections down the left: **Tracks** (was "Courses here"), **Speed traps**, **My times** and **Course builder**. **Battles** is now its own tab, with **1v1 battles**, **Races & tournaments**, **Fun games** (the room games) and **My ratings**. **Backups** moved into **My car**, in a column beside the tune sets. Course rows have their buttons on a line of their own.
+- **Speed traps, reworked.** They have their own section. Name each trap and pick how wide it is (4 to 30 m). Traps named like "Tsubaki Speed Trap 1, 2, 3" fold under **Tsubaki**. Edit renames a trap, changes its width or moves it.
+- **SPEED CHECK signs.** Every trap has a floating neon sign over the road with your last speed through it. The line across the road only shows while you place or edit a trap, so you can see how wide it is.
+- **Free-roam traps work all the time** when they're on, during time attacks, battles and races too.
+- **Speed trap races**, like Most Wanted: **Race for: Speed traps** when hosting. The highest total of every trap on the course wins (every lap on a circuit), and you have to finish. A course without traps of its own uses the free-roam traps along its road, and everyone in the race now scores the same traps.
+- **Your own colours and text size** (Options, Look): ready looks (TRC, Darker, Midnight, Grey, High contrast, Light) or your own background, accent and text colours, and text from 90% to 150%.
+- **Delete times** in My times: one run, a car's times on a course, or a whole course (asks twice; the old file is kept).
+- **Reverse on save:** the Course builder can also save your course the other way ("Akina Downhill" gives "Akina Uphill").
+- **A guide for map makers** ([MAP_MAKERS.md](https://github.com/Bskftw/TRCTuneLoader/blob/main/MAP_MAKERS.md)): every object name the mod looks for, and how to model the road's path so no one has to drive it first.
+- A challenge that arrives while the window is open shows at the top of every tab, with **Answer**.
+- **Newer version in the room:** when another player runs a newer TRC Tune Loader, a notice and a card on Home tell you to turn on automatic updates in KSL and restart CarX.
+
+**Fixed**
+- **Highway battles where only one driver started.** When the countdown didn't reach the other driver, one side raced alone and the result counted for one driver only. The countdown is now sent again until it gets there. If it never does, the run is called off, and a run the other driver never started counts for nobody.
+- **Challenges on long courses that never arrived.** A course is sent in pieces, and on long ones the same pieces kept getting lost. They now go out slower and in a new order each time, and the challenge waits up to 90 s, saying it's still sending.
+- **The live delta jumping to +50 s** in hairpins on map courses without a recorded path. It now follows your best run's own line.
+- **Names with colour codes** (KINO's "[00D928]" colours and gradient names) showed cut off with the codes in them. They now show plain.
+- Closing the window lets go of the keyboard and any held click.
+
+**Changed**
+- **Ratings are being tested**, and the window says so: they're not official, and Elo and Safety Rating will be reset before they count.
+- The **Safety Rating** has new rules. It moves only in TRC spec battles and races that were really driven, no longer in time attacks.
+  - Light touches in close racing don't count. Only hard contact, hard hits and resets do, and one event can take at most 0.30.
+  - Your Safety Rating and license were reset once for the new rules; Elo was kept.
+
 ## 0.14.2 (Oct 27 2026)
 
 Not tested in game yet. Tidier files, thanks to a player's report.

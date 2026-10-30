@@ -20,17 +20,16 @@ namespace TRC.TuneLoader {
 		private const string WheelWindowPref = "wheel_window";
 
 		/// <summary>Raise with each version that has news worth a pop-up.</summary>
-		private const string WhatsNewVersion = "0.14.0";
+		private const string WhatsNewVersion = "0.15.0";
 
 		private static readonly string[] WhatsNewLines = {
-			"<b>Home</b> (this tab): quick buttons to every part of the mod, and what's waiting for you.",
-			"<b>Room board</b>: see what every TRC Tune Loader player in the room is doing, who's up for a battle, and challenge or join them in one click.",
-			"<b>Share a course</b>: send one of your courses to the whole room (Time attack, Courses here, Edit).",
-			"<b>Wheel and controller buttons</b> (Options): one button accepts a challenge, joins a race, runs it back or restarts your time attack; another opens this window.",
-			"<b>Run it back</b>: the same battle or race again, in one click.",
-			"<b>Report a bug</b> (below, and in Options): one zip on your Desktop with everything needed to fix it.",
-			"<b>New tour</b> (Options, Take the tour) covering everything since 0.10.",
-			"In 0.13: speed traps, ratings and licenses, your best line on the road, race control, room games and highway battles.",
+			"<b>Tidier tabs</b>: Time attack has Tracks, Speed traps, My times and Course builder down the left; <b>Battles</b> is its own tab with 1v1 battles, Races & tournaments, Fun games and My ratings. Backups are in My car.",
+			"<b>Speed traps</b>: name them, pick how wide they are, and they're grouped by track (\"Tsubaki Speed Trap 1, 2...\"). A floating SPEED CHECK sign shows your last speed; the line on the road only shows while you place one. They work during time attacks, battles and races too.",
+			"<b>Speed trap races</b> (Races & tournaments, Race for: Speed traps): the highest total of every trap on the course wins, like Most Wanted.",
+			"<b>Your own colours and text size</b> (Options, Look).",
+			"<b>Delete times</b> in My times, and the <b>Course builder</b> can make the reverse of your course as you save it.",
+			"<b>Fixes</b>: highway battles where only one driver started, challenges on long courses that never arrived, the delta jumping in hairpins, and colour codes in names.",
+			"<b>Ratings are being tested</b>: the Safety Rating no longer counts light touches or time attacks, and was reset once. Elo and Safety Rating will be reset again before they count.",
 		};
 
 		private readonly RoomSync roomSync_ = new RoomSync();
@@ -71,11 +70,22 @@ namespace TRC.TuneLoader {
 
 		private EventLedger Ledger => ledger_ ??= new EventLedger(TimesFolder);
 
+		/// <summary>The newest version another player in the room runs, when it's newer than this one ("" otherwise).</summary>
+		private string newerVersion_ = "";
+
 		/// <summary>Called from Update every frame.</summary>
 		private void UpdateHome() {
 			double now = BattleNow;
 			roomSync_.Pump(now);
 			foreach (RoomMessage m in roomSync_.Drain()) {
+				if (m.Kind == RoomKind.Status && m.From != MySteamId && RoomBoard.IsNewer(m.Version, newerVersion_.Length > 0 ? newerVersion_ : Version)) {
+					bool first = newerVersion_.Length == 0;
+					newerVersion_ = m.Version;
+					TrcLog.Info($"{BattleMessage.PlainName(m.Name)} runs TRC Tune Loader {m.Version}, newer than this one ({Version}).");
+					if (first) {
+						ShowNotice($"<b>TRC Tune Loader {m.Version} is out</b> (you have {Version})\n<color={Theme.MutedHex}>Turn on automatic updates for it in KSL, then restart CarX</color>", 15f);
+					}
+				}
 				RoomBoard.Shared shared = roomBoard_.Receive(m, now);
 				if (shared != null) {
 					ShowNotice($"<b>{shared.FromName} shared a course</b>\n<color={Theme.MutedHex}>{shared.Course.Name} · open the window (Home) to save it</color>");
@@ -120,6 +130,18 @@ namespace TRC.TuneLoader {
 				GUILayout.Label($"• {copy}", Theme.Body);
 			}
 			GUILayout.Label("An old version's update put the mod in a second place. Your times, courses and backups are safe: they're in kino\\mods\\TRCTuneLoader.", Theme.Small);
+			GUILayout.EndVertical();
+		}
+
+		/// <summary>Someone in the room runs a newer version: this one didn't update (KSL can treat an update as optional).</summary>
+		private void DrawNewerVersion() {
+			if (newerVersion_.Length == 0 || !RoomBoard.IsNewer(newerVersion_, Version)) {
+				return;
+			}
+			GUILayout.BeginVertical(Theme.Guide);
+			GUILayout.Label($"TRC Tune Loader {newerVersion_} is out (you have {Version})", Theme.Heading);
+			GUILayout.Label("Someone in this room already has it. Turn on automatic updates for TRC Tune Loader in KSL, then restart CarX: KSL installs it as the game starts. " +
+				"Battles, races and the room board work best when everyone's on the same version.", Theme.Body);
 			GUILayout.EndVertical();
 		}
 
@@ -258,14 +280,14 @@ namespace TRC.TuneLoader {
 				if (s.OpenRaceId != 0 && openRaces_.TryGetValue(s.OpenRaceId, out var open) && race_ == null) {
 					if (GUILayout.Button("Join", Theme.ButtonPrimary)) {
 						JoinRace(open.Lobby);
-						GoToBattle(races: true);
+						GoToBattle(open.Lobby.Settings.Mode == RoomMode.Race ? 1 : 2);
 					}
 				}
 				bool canBattle = RoomBoard.Free(s) && System.Version.TryParse(s.Version, out System.Version theirs) && theirs >= BattleVersion;
 				GUI.enabled = enabled && canBattle && (battle_ == null || !battle_.Active) && !InRace;
 				if (GUILayout.Button("Challenge", Theme.Button)) {
 					pickedOpponent_ = s.From;
-					GoToBattle(races: false);
+					GoToBattle(0);
 				}
 				GUI.enabled = enabled;
 				GUILayout.EndHorizontal();
@@ -279,11 +301,11 @@ namespace TRC.TuneLoader {
 			coursesView_ = view;
 		}
 
-		private void GoToBattle(bool races) {
-			tab_ = CoursesTab;
-			OnTabOpened(CoursesTab);
-			coursesView_ = 1;
-			battleViewMode_ = races ? 1 : 0;
+		/// <summary>The Battles tab at a section: 0 1v1 battles, 1 races, 2 fun games, 3 ratings.</summary>
+		private void GoToBattle(int section) {
+			tab_ = BattlesTab;
+			OnTabOpened(BattlesTab);
+			battleViewMode_ = section;
 		}
 
 		// ---- Shared courses ----
@@ -333,7 +355,7 @@ namespace TRC.TuneLoader {
 				string path = CourseLibrary.SaveCustom(CoursesFolder, copy);
 				courses_.LoadCustom(CoursesFolder);
 				RefreshTraps();
-				homeResult_ = $"Saved {copy.Name} to your courses: it's in Time attack, Courses here, when you're on {(copy.MapName.Length > 0 ? copy.MapName : "its map")}.";
+				homeResult_ = $"Saved {copy.Name} to your courses: it's in Time attack, Tracks, when you're on {(copy.MapName.Length > 0 ? copy.MapName : "its map")}.";
 				TrcLog.Info($"Saved the shared course {copy.Name} ({copy.Code}) from {shared.FromName}: {path}");
 			} catch (Exception e) {
 				homeResult_ = $"Couldn't save the course: {e.Message}";
@@ -601,6 +623,7 @@ namespace TRC.TuneLoader {
 			RefreshPlayersIfDue();
 			homeScroll_ = GUILayout.BeginScrollView(homeScroll_);
 			DrawOtherCopies();
+			DrawNewerVersion();
 			if (whatsNewPending_) {
 				GUILayout.BeginVertical(Theme.Guide);
 				GUILayout.Label($"What's new in {WhatsNewVersion}", Theme.Heading);
@@ -649,7 +672,7 @@ namespace TRC.TuneLoader {
 						}
 						break;
 					case 1:
-						if (GUILayout.Button("Practice a course", Theme.Button)) {
+						if (GUILayout.Button("Tracks", Theme.Button)) {
 							GoToTimeAttack(0);
 						}
 						if (GUILayout.Button("Make a course", Theme.Button)) {
@@ -662,19 +685,21 @@ namespace TRC.TuneLoader {
 						break;
 					case 2:
 						if (GUILayout.Button("Challenge someone", Theme.Button)) {
-							GoToBattle(races: false);
+							GoToBattle(0);
 						}
-						if (GUILayout.Button("Races and room games", Theme.Button)) {
-							GoToBattle(races: true);
+						if (GUILayout.Button("Races", Theme.Button)) {
+							GoToBattle(1);
+						}
+						if (GUILayout.Button("Fun games", Theme.Button)) {
+							GoToBattle(2);
 						}
 						break;
 					default:
 						if (GUILayout.Button("Speed traps", Theme.Button)) {
-							GoToTimeAttack(0);
+							GoToTimeAttack(1);
 						}
 						if (GUILayout.Button("My ratings", Theme.Button)) {
-							timesView_ = 3;
-							GoToTimeAttack(2);
+							GoToBattle(3);
 						}
 						break;
 				}
@@ -693,7 +718,7 @@ namespace TRC.TuneLoader {
 					GUILayout.Label($"<b>{BattleMessage.PlainName(challenge.FromName)} challenges you</b>  <color={Theme.MutedHex}>{BattleFormats[(int)challenge.Format]}</color>", Theme.Body);
 					GUILayout.FlexibleSpace();
 					if (GUILayout.Button("Answer", Theme.ButtonPrimary)) {
-						GoToBattle(races: false);
+						GoToBattle(0);
 					}
 					GUILayout.EndHorizontal();
 				}
@@ -707,7 +732,7 @@ namespace TRC.TuneLoader {
 					GUI.enabled = enabled && lobby.Entries.Count < lobby.Settings.MaxPlayers;
 					if (GUILayout.Button("Join", Theme.ButtonPrimary)) {
 						JoinRace(lobby);
-						GoToBattle(races: true);
+						GoToBattle(lobby.Settings.Mode == RoomMode.Race ? 1 : 2);
 					}
 					GUI.enabled = enabled;
 					GUILayout.EndHorizontal();

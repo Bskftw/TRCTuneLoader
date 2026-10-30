@@ -96,6 +96,16 @@ namespace TRC.TuneLoader {
 			}
 		}
 
+		/// <summary>Deletes a trace and its line (its time was deleted from My times).</summary>
+		public static void Delete(string timesFolder, string key) {
+			foreach (string extension in new[] { Extension, LineExtension }) {
+				string path = Path.Combine(timesFolder, FolderName, key + extension);
+				if (File.Exists(path)) {
+					File.Delete(path);
+				}
+			}
+		}
+
 		/// <summary>Keeps <paramref name="trace"/> when it's faster than the saved one (or there's none). True when it was saved.</summary>
 		public static bool SaveIfFaster(string timesFolder, string key, float[] trace, long timeMs) {
 			if (trace == null || trace.Length < 2) {
