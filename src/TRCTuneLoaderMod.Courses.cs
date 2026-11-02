@@ -291,6 +291,13 @@ namespace TRC.TuneLoader {
 
 				if ((map?.Key ?? "") != (map_?.Key ?? "")) {
 					mapSince_ = Time.unscaledTime;
+					// The ghost's look comes from the materials loaded, and a new map brings its own: made again next time.
+					if (ghostBody_ != null) {
+						UnityEngine.Object.Destroy(ghostBody_);
+						ghostBody_ = null;
+					}
+					ghostBodyFailed_ = false;
+					CourseMarkers.ForgetGhostMaterial();
 					// Look through the new map's objects even when it shares its key with the last one (another upload of it).
 					scannedMapKey_ = "";
 					if (run_ != null) {
@@ -363,7 +370,8 @@ namespace TRC.TuneLoader {
 			courseResult_ = "";
 			string laps = course.IsCircuit ? (run_.Laps == 0 ? ", unlimited laps" : $", {run_.Laps} lap(s)") : "";
 			TrcLog.Info($"Time attack ready on {course.Name} ({course.Code}, {course.SourceName}, {(run_.Flying ? "flying" : "standing")} start{laps}, {course.SectorEnds.Length} sectors).");
-			CloseWindow();
+			// The window stays open (bskftw: it closed, then had to be opened again to teleport): Teleport to start closes it.
+			courseResult_ = $"Time attack ready on {course.Name}: drive to the start, or Teleport to start.";
 		}
 
 		private void StopTimeAttack() {
@@ -386,7 +394,6 @@ namespace TRC.TuneLoader {
 			pathRecorder_ = new PathRecorder(course);
 			courseResult_ = "";
 			TrcLog.Info($"Record path started on {course.Name}.");
-			CloseWindow();
 		}
 
 		private void TickPathRecorder() {
@@ -501,6 +508,7 @@ namespace TRC.TuneLoader {
 			record.Flying = run_.Flying;
 			record.Laps = run_.Laps;
 			record.TrapKmh = run_.TrapSpeeds.ToArray();
+			record.Ghost = GhostShowingFor(course);
 			LapTime only = !course.IsCircuit && run_.LapTimes.Count == 1 ? run_.LapTimes[0] : null;
 			if (only != null) {
 				record.SectorMs = only.Sectors.Select(s => (long)Math.Round(s * 1000.0, MidpointRounding.AwayFromZero)).ToArray();
@@ -528,6 +536,7 @@ namespace TRC.TuneLoader {
 			if (record.TrapKmh.Length > 0) {
 				sectors += $"\n<color={Theme.WarnHex}>Speed traps: {string.Join(" · ", record.TrapKmh.Select(k => $"{k:0}"))} km/h (total {record.TrapTotal:0})</color>";
 			}
+			sectors += GhostResultText(run_.Result, only?.Sectors);
 			runResultText_ = $"<b>{TimeAttackRun.FormatTime(record.Seconds)}</b>\n{compare} · {status}{(laps.Length > 0 ? $"\n<color={Theme.MutedHex}>{laps}</color>" : "")}{sectors}";
 			runResultUntil_ = Time.unscaledTime + ResultSeconds;
 			TrcLog.Info($"Time attack on {course.Name} ({course.Code}): {TimeAttackRun.FormatTime(record.Seconds)} in {record.Car}, " +
@@ -777,9 +786,29 @@ namespace TRC.TuneLoader {
 					? "No courses on this map yet. Make your own with the Course builder."
 					: "Looking for courses...", Theme.Small);
 			}
-			foreach (Course course in here) {
+			if (here.Count > 6) {
+				// bskftw, Nov 1: maps with ~50 tracks. Each folds to one line, and the list narrows as you type.
+				GUILayout.BeginHorizontal();
+				GUILayout.Label("Find a track", Theme.Small, GUILayout.Width(90));
+				trackFilter_ = GUILayout.TextField(trackFilter_ ?? "", 40, Theme.Field, GUILayout.Width(220));
+				if (trackFilter_.Length > 0 && GUILayout.Button("Clear", Theme.Button)) {
+					trackFilter_ = "";
+				}
+				GUILayout.FlexibleSpace();
+				if (tracksOpen_.Count > 0 && GUILayout.Button("Close all", Theme.Button)) {
+					tracksOpen_.Clear();
+				}
+				GUILayout.EndHorizontal();
+			}
+			string filter = (trackFilter_ ?? "").Trim();
+			List<Course> shown = filter.Length == 0 ? here : here.Where(c => c.Name.IndexOf(filter, StringComparison.OrdinalIgnoreCase) >= 0).ToList();
+			if (shown.Count == 0 && here.Count > 0) {
+				GUILayout.Label($"No track here has \"{filter}\" in its name.", Theme.Small);
+			}
+			foreach (Course course in shown) {
 				DrawCourseRow(course);
 			}
+			DrawSharedRunsElsewhere();
 			GUILayout.EndScrollView();
 			GUILayout.EndVertical();
 
@@ -795,10 +824,32 @@ namespace TRC.TuneLoader {
 			}
 		}
 
-		/// <summary>A track: its name and details, then its buttons on a line of their own (the list is narrower beside the sections).</summary>
+		/// <summary>The tracks opened in the list (by course code), and the name filter.</summary>
+		private readonly HashSet<string> tracksOpen_ = new HashSet<string>(StringComparer.Ordinal);
+		private string trackFilter_ = "";
+
+		/// <summary>
+		/// A track: one line with its name, kind, length and your best, like My times; click it to open its buttons,
+		/// details, ghosts and editor. The one being driven, recorded or edited stays open.
+		/// </summary>
 		private void DrawCourseRow(Course course) {
 			string length = course.Usable ? TimeAttackRun.Distance(course.Length) : "can't be used yet";
-			GUILayout.Label($"<b>{course.Name}</b>  <color={Theme.MutedHex}>{course.KindName} · {length} · {course.SourceName}</color>", Theme.Body);
+			bool busy = run_?.Course == course || pathRecorder_?.Course == course || gridRecorder_?.Course == course || editing_ == course;
+			bool open = busy || tracksOpen_.Contains(course.Code);
+			TimeAttackRecord best = TimeAttackLog.BestSpec(times_, course.Code) ?? TimeAttackLog.Best(times_, course.Code);
+			string bestText = best != null ? $"  {TimeAttackRun.FormatTime(best.Seconds)}" : "";
+			string flags = (course.Problems.Count > 0 ? $"  <color={Theme.WarnHex}>{course.Problems.Count} note(s)</color>" : "") +
+				(racingGhost_ != null && racingGhost_.CourseCode == course.Code ? $"  <color=#8FB8FF>ghost</color>" : "") +
+				(run_?.Course == course ? $"  <color={Theme.GoodHex}>driving</color>" : "");
+			string header = $"{(open ? "▾" : "▸")} <b>{course.Name}</b>  <color={Theme.MutedHex}>{course.KindName} · {length} · {course.SourceName}</color><b>{bestText}</b>{flags}";
+			if (GUILayout.Button(header, open ? Theme.RowSelected : Theme.Row) && !busy) {
+				if (!tracksOpen_.Remove(course.Code)) {
+					tracksOpen_.Add(course.Code);
+				}
+			}
+			if (!open) {
+				return;
+			}
 			GUILayout.Label($"Course code {course.Code}{BestText(course)}{(course.Usable ? $" · {course.SectorEnds.Length} sectors" : "")}", Theme.Small);
 			foreach (string problem in course.Problems) {
 				GUILayout.Label($"<color={Theme.WarnHex}>{problem}</color>", Theme.Small);
@@ -807,7 +858,15 @@ namespace TRC.TuneLoader {
 			GUILayout.BeginHorizontal();
 			bool enabled = GUI.enabled;
 			GUI.enabled = enabled && course.Usable && hasPose_;
-			if (GUILayout.Button("Time attack", Theme.ButtonPrimary, GUILayout.Width(110))) {
+			if (run_?.Course == course || pathRecorder_?.Course == course) {
+				// Running here: teleport (which closes the window) or stop, right on the track's row.
+				if (GUILayout.Button("Teleport to start", Theme.ButtonPrimary)) {
+					TeleportToStart();
+				}
+				if (run_?.Course == course && GUILayout.Button("Stop", Theme.Button)) {
+					StopTimeAttack();
+				}
+			} else if (GUILayout.Button("Time attack", Theme.ButtonPrimary, GUILayout.Width(110))) {
 				StartTimeAttack(course);
 			}
 			// A map course gets its path from driving it once (or a new one, replacing the player's own).
@@ -819,6 +878,8 @@ namespace TRC.TuneLoader {
 			if (GUILayout.Button(pathShownFor_ == course ? "Hide path" : "Show path", Theme.Button)) {
 				pathShownFor_ = pathShownFor_ == course ? null : course;
 			}
+			GUI.enabled = enabled;
+			DrawGhostsButton(course);
 			// Race grids: drive the road up to the start line (official courses and maps with grid spots have their own).
 			GUI.enabled = enabled && hasPose_ && course.Source != CourseSource.Official && course.GridObjects.Count == 0 && run_ == null && !InBattle && !InRace;
 			if (GUILayout.Button(gridRecorder_?.Course == course ? "Stop grid" : "Lay out grid", Theme.Button)) {
@@ -831,6 +892,7 @@ namespace TRC.TuneLoader {
 			}
 			GUILayout.FlexibleSpace();
 			GUILayout.EndHorizontal();
+			DrawGhostList(course);
 			if (editing_ == course) {
 				DrawCourseEditor(course);
 			}

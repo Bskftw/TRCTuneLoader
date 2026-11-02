@@ -19,7 +19,7 @@
     <LangVersion>9</LangVersion>
     <AssemblyName>TRCTuneLoader</AssemblyName>
     <RootNamespace>TRC.TuneLoader</RootNamespace>
-    <Version>0.15.1</Version>
+    <Version>0.16.0</Version>
     <Configurations>Debug;Release;Release_Encrypted</Configurations>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <Nullable>disable</Nullable>
@@ -91,11 +91,17 @@
       so only courses shipped by bskftw count. Resource names look like "TRC.TuneLoader.Courses/workshop_123\Akina Downhill.trccourse".
     -->
     <EmbeddedResource Include="official_courses\**\*.trccourse" LogicalName="TRC.TuneLoader.Courses/%(RecursiveDir)%(Filename)%(Extension)" />
+    <!--
+      The ratings file's private key (src/Races/RatingSeal.cs), git-ignored like the build key. Only the player
+      build must have it: without it the mod uses a development key.
+    -->
+    <EmbeddedResource Include="ratings.key" LogicalName="TRC.TuneLoader.RatingsKey" Condition="Exists('ratings.key')" />
   </ItemGroup>
 
   <Target Name="CheckOfficialTunes" BeforeTargets="Build" Condition="'$(Configuration)' == 'Release_Encrypted'">
     <Error Condition="'@(OfficialTune)' == ''" Text="No official tunes in official_tunes\&lt;set&gt;\*.knd. Copy the TRC KINO tunes there before building the player version." />
     <Message Importance="high" Text="Building in @(OfficialTune->Count()) official tune(s)." />
+    <Error Condition="!Exists('$(MSBuildProjectDirectory)\ratings.key')" Text="Missing ratings.key (the ratings file's private key). Restore it from your backup next to TRCTuneLoader.csproj: a new key would reset every player's ratings." />
   </Target>
 
   <!--

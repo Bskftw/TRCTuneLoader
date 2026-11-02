@@ -8,6 +8,9 @@ dist/
 # KSL build key: private, never commit or share
 *.kmc
 
+# The ratings file's private key (RatingSeal): built into the player version, never commit or share
+ratings.key
+
 # Official TRC tunes: built into the encrypted mod, never published in the repo
 official_tunes/
 

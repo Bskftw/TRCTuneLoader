@@ -13,15 +13,20 @@ namespace TRC.TuneLoader {
 	///   TRC Start Akina Downhill    the start line: the middle of the road on the line, its blue (Z) arrow
 	///                               pointing the way you drive, its X scale the road width in metres
 	///   TRC Finish Akina Downhill   the finish line, set up the same way
-	///   TRC Path Akina Downhill     optional: a thin strip (under 1 m wide) modelled down the middle of the road
-	///                               from start to finish, with Read/Write enabled on its model and its renderer
-	///                               off, or child objects in driving order. Without one, the course gets its
-	///                               path from driving it once with Record path (a .trccourse file).
+	///   TRC Path Akina              optional: a strip of faces one face across down the middle of the road (flat,
+	///                               or a line extruded up or down), with Read/Write enabled on its model and its renderer
+	///                               off, or child objects in order. Without one, the course gets its path from
+	///                               driving it once with Record path (a .trccourse file). Named without the
+	///                               direction, it's every "Akina ..." course's path, read from that course's
+	///                               start line; "TRC Path Akina Downhill" is that course's own.
 	///   TRC Mainroad Akina          the road's mesh (with its collider); split roads are numbered like
 	///   TRC Mainroad Akina.001      "TRC Mainroad Akina.001". Every course whose name starts with "Akina" runs
 	///                               on it, and driving off it stops a time attack.
-	///   TRC Akina Downhill Sector 1 optional: where sector 1 ends (sector 2 at "... Sector 2", and so on; the
-	///                               last sector ends at the finish). Without them the course is split evenly.
+	///   TRC Akina Sector 1          optional: where a sector ends (the last one ends at the finish). They're put
+	///                               in order along each course's path, so the numbers only have to differ, and
+	///                               without the direction they're shared by both directions, like the path.
+	///                               "TRC Akina Downhill Sector 1" is that course's own. Without any, the course
+	///                               is split evenly.
 	///   TRC Start Tsukuba Circuit   a circuit: a loop whose start line is also its finish line, so it has no
 	///                               finish object. Its path comes from Record path (once round).
 	///   TRC Akina Downhill Grid 1   optional: race grid spots, 1 (pole) to 16, each in the middle of where a car
@@ -58,7 +63,12 @@ namespace TRC.TuneLoader {
 			public string Name = "";
 			public Transform Start;
 			public Transform Finish;
-			public Transform Path;
+			public int StartCopy;
+			public int FinishCopy;
+			/// <summary>The path's pieces with their copy numbers ("TRC Path Akina.001" is 1): all of them are read.</summary>
+			public List<KeyValuePair<int, Transform>> PathPieces = new List<KeyValuePair<int, Transform>>();
+			/// <summary>The copy number of each numbered object kept (sectors, grid spots, traps).</summary>
+			public Dictionary<Transform, int> Copies = new Dictionary<Transform, int>();
 			public SortedDictionary<int, Transform> Sectors = new SortedDictionary<int, Transform>();
 			public SortedDictionary<int, Transform> Grid = new SortedDictionary<int, Transform>();
 			public SortedDictionary<int, Transform> Traps = new SortedDictionary<int, Transform>();
@@ -83,13 +93,16 @@ namespace TRC.TuneLoader {
 					continue;
 				}
 
-				string[] words = Words(name);
+				// "TRC Mainroad Akina.001" or "TRC Path Akina (1)": a copy, from Blender or Unity. The name without the number is
+				// the same object; the unnumbered one comes first (bskftw, Oct 30).
+				string bare = WithoutCopyNumber(name, out int copy);
+				string[] words = Words(bare);
 				// "TRC Speed Trap Akina Bridge": a free-roam speed trap.
 				int trcAt = Array.IndexOf(words, "trc");
 				if (trcAt >= 0 && trcAt + 3 < words.Length && words[trcAt + 1] == "speed" && words[trcAt + 2] == TrapWord) {
 					float trapWidth = Mathf.Abs(transform.lossyScale.x);
 					if (CourseGate.TryMake(transform.position, transform.forward, trapWidth > 2f ? trapWidth : CourseGeometry.DefaultWidth, out CourseGate gate)) {
-						SpeedTraps.Add(new SpeedTrap { Name = DisplayName(name, trcAt + 3), Gate = gate, MapKey = mapKey, Source = CourseSource.Map });
+						SpeedTraps.Add(new SpeedTrap { Name = DisplayName(bare, trcAt + 3) + (copy > 0 ? " " + (copy + 1) : ""), Gate = gate, MapKey = mapKey, Source = CourseSource.Map });
 					}
 					continue;
 				}
@@ -101,10 +114,16 @@ namespace TRC.TuneLoader {
 						found[ownerKey] = owner = new Parts { Name = ownerKey };
 					}
 					SortedDictionary<int, Transform> list = numbered == SectorWord ? owner.Sectors : numbered == GridWord ? owner.Grid : owner.Traps;
-					if (list.ContainsKey(number)) {
-						owner.Duplicates.Add($"Two objects are named '{name}': the first one found is used.");
-					} else {
+					if (!list.TryGetValue(number, out Transform kept)) {
 						list[number] = transform;
+						owner.Copies[transform] = copy;
+					} else {
+						bool replace = copy < owner.Copies[kept];
+						owner.Duplicates.Add($"'{(replace ? kept.name : name)}' is a second '{bare}': '{(replace ? name : kept.name)}' is used.");
+						if (replace) {
+							list[number] = transform;
+							owner.Copies[transform] = copy;
+						}
 					}
 					name = null;
 					break;
@@ -132,15 +151,16 @@ namespace TRC.TuneLoader {
 
 				string key = string.Join(" ", words.Skip(rest));
 				if (!found.TryGetValue(key, out Parts parts)) {
-					found[key] = parts = new Parts { Name = DisplayName(name, rest) };
+					found[key] = parts = new Parts { Name = DisplayName(bare, rest) };
 				}
 				if (role == StartWord) {
-					Keep(ref parts.Start, transform, parts);
-					parts.Name = DisplayName(name, rest);
+					Keep(ref parts.Start, ref parts.StartCopy, transform, copy, bare, parts);
+					parts.Name = DisplayName(bare, rest);
 				} else if (role == FinishWord) {
-					Keep(ref parts.Finish, transform, parts);
+					Keep(ref parts.Finish, ref parts.FinishCopy, transform, copy, bare, parts);
 				} else {
-					Keep(ref parts.Path, transform, parts);
+					// Every piece of the path is read: a long road can be split into "TRC Path Akina", "TRC Path Akina.001", ...
+					parts.PathPieces.Add(new KeyValuePair<int, Transform>(copy, transform));
 				}
 			}
 
@@ -152,6 +172,8 @@ namespace TRC.TuneLoader {
 			if (unmatched.Count > 0) {
 				Lines.Add($"{unmatched.Count} other object(s) with TRC in the name, not understood: {string.Join(", ", unmatched.Distinct().Take(40).Select(n => $"'{n}'"))}");
 			}
+
+			ShareUndirected(found);
 
 			var courses = new List<Course>();
 			foreach (var pair in found.OrderBy(p => p.Value.Name, StringComparer.OrdinalIgnoreCase)) {
@@ -181,6 +203,48 @@ namespace TRC.TuneLoader {
 				: $"{courses.Count} course(s) and {roads.Count} TRC road(s) from TRC objects in this map ({objects} objects looked at in {timer.ElapsedMilliseconds} ms).{others}";
 			return courses;
 		}
+
+		/// <summary>
+		/// bskftw, Oct 30: only the start and finish should need "Downhill" or "Uphill"; the path and the sectors are the
+		/// same road either way. A path or sectors named without a direction ("TRC Path Akina", "TRC Akina Sector 1")
+		/// go to every course whose name starts with that name ("Akina Downhill", "Akina Uphill") and has none of its
+		/// own; then they're not listed as a course of their own. The path is read from each course's start line,
+		/// and sectors are put in order along each course's path, so both directions get them the right way round.
+		/// </summary>
+		private static void ShareUndirected(Dictionary<string, Parts> found) {
+			List<string> undirected = found.Where(p => p.Value.Start == null && p.Value.Finish == null && p.Value.Grid.Count == 0 && p.Value.Traps.Count == 0 &&
+				(p.Value.PathPieces.Count > 0 || p.Value.Sectors.Count > 0)).Select(p => p.Key).ToList();
+			var used = new HashSet<string>(StringComparer.Ordinal);
+			foreach (var pair in found.Where(p => p.Value.Start != null || p.Value.Finish != null)) {
+				string key = SharedFor(pair.Key, undirected);
+				if (key == null) {
+					continue;
+				}
+				Parts shared = found[key];
+				if (pair.Value.PathPieces.Count == 0 && shared.PathPieces.Count > 0) {
+					pair.Value.PathPieces.AddRange(shared.PathPieces);
+					used.Add(key);
+				}
+				if (pair.Value.Sectors.Count == 0 && shared.Sectors.Count > 0) {
+					foreach (var sector in shared.Sectors) {
+						pair.Value.Sectors[sector.Key] = sector.Value;
+					}
+					used.Add(key);
+				}
+			}
+			foreach (string key in used) {
+				found.Remove(key);
+			}
+		}
+
+		/// <summary>
+		/// The undirected name whose pieces a course uses: the longest of <paramref name="keys"/> that the course's
+		/// name starts with ("akina lake" before "akina" for "akina lake downhill"), or null.
+		/// </summary>
+		public static string SharedFor(string courseKey, IEnumerable<string> keys) =>
+			keys.Where(k => k != courseKey && courseKey.StartsWith(k + " ", StringComparison.Ordinal))
+				.OrderByDescending(k => k.Length)
+				.FirstOrDefault();
 
 		/// <summary>The map's free-roam speed traps ("TRC Speed Trap &lt;name&gt;") from the last scan.</summary>
 		public static List<SpeedTrap> SpeedTraps { get; } = new List<SpeedTrap>();
@@ -320,12 +384,21 @@ namespace TRC.TuneLoader {
 			}
 
 			if (startOk && finishOk) {
-				if (parts.Path == null) {
+				if (parts.PathPieces.Count == 0) {
 					course.Problems.Add(course.IsCircuit
 						? $"{Course.NoPathProblem}: drive it once round with Record path, so the mod knows the loop. A circuit can't be used until then."
 						: $"{Course.NoPathProblem}: drive it once with Record path, so the mod knows the road and can catch shortcuts. Until then it's practice only.");
 				} else {
-					List<Vector3> path = ReadPath(parts.Path, parts.Name, course);
+					List<Vector3> path = ReadPath(parts.PathPieces.OrderBy(p => p.Key).Select(p => p.Value).ToList(), parts.Name, course);
+					if (!course.IsCircuit && path.Count >= 2) {
+						// A path that runs on past the start line is where the race grid lines up (no grid objects needed),
+						// and past the finish line, where the reverse twin's grid lines up.
+						path = CourseGeometry.SplitAtLines(path, course.Start, course.Finish, out List<Vector3> runUp, out List<Vector3> runOut);
+						if (course.GridObjects.Count == 0) {
+							course.GridPath = runUp;
+						}
+						course.RunOut = runOut;
+					}
 					course.HasPath = path.Count >= 2;
 					course.Path = path;
 				}
@@ -349,22 +422,30 @@ namespace TRC.TuneLoader {
 			return true;
 		}
 
-		/// <summary>The path's points in driving order: a LineRenderer's positions, a strip's vertices, or child objects in order.</summary>
-		private static List<Vector3> ReadPath(Transform path, string name, Course course) {
+		/// <summary>
+		/// The path's points in driving order: a LineRenderer's positions, a strip's middle, or child objects in order.
+		/// <paramref name="pieces"/> are "TRC Path Akina", "TRC Path Akina.001" and so on, the unnumbered one first.
+		/// </summary>
+		private static List<Vector3> ReadPath(IList<Transform> pieces, string name, Course course) {
 			Vector3 start = course.Start.Center;
 			Vector3 finish = course.Finish.Center;
 
-			LineRenderer line = path.GetComponent<LineRenderer>();
-			if (line != null && line.positionCount >= 2) {
-				var positions = new Vector3[line.positionCount];
-				line.GetPositions(positions);
-				List<Vector3> points = positions.Select(p => line.useWorldSpace ? p : path.TransformPoint(p)).ToList();
-				return InDrivingOrder(points, start, finish);
+			var linePoints = new List<Vector3>();
+			foreach (Transform piece in pieces) {
+				LineRenderer line = piece.GetComponent<LineRenderer>();
+				if (line != null && line.positionCount >= 2) {
+					var positions = new Vector3[line.positionCount];
+					line.GetPositions(positions);
+					linePoints.AddRange(positions.Select(p => line.useWorldSpace ? p : piece.TransformPoint(p)));
+				}
+			}
+			if (linePoints.Count >= 2) {
+				return InDrivingOrder(linePoints, start, finish);
 			}
 
 			var vertices = new List<Vector3>();
 			var unreadable = new List<string>();
-			foreach (MeshFilter filter in path.GetComponentsInChildren<MeshFilter>(true)) {
+			foreach (MeshFilter filter in pieces.SelectMany(p => p.GetComponentsInChildren<MeshFilter>(true))) {
 				Mesh mesh = filter.sharedMesh;
 				if (mesh == null) {
 					continue;
@@ -374,29 +455,42 @@ namespace TRC.TuneLoader {
 					continue;
 				}
 				Transform owner = filter.transform;
-				vertices.AddRange(mesh.vertices.Select(v => owner.TransformPoint(v)));
+				List<Vector3> world = mesh.vertices.Select(v => owner.TransformPoint(v)).ToList();
+				// The middle of the strip, whether it lies flat (the road's centre faces) or stands up (a line extruded up
+				// or down); a mesh with no faces joined up falls back to its vertices, merged by distance.
+				List<Vector3> centre = CourseGeometry.StripCentre(world, mesh.triangles);
+				vertices.AddRange(centre.Count >= 2 ? centre : world);
 			}
 			if (unreadable.Count > 0) {
 				course.Problems.Add($"Can't read the path: turn on Read/Write in the import settings of its model ({string.Join(", ", unreadable)}).");
 			}
 
 			if (vertices.Count >= 2) {
-				List<Vector3> ordered = CourseGeometry.OrderPoints(vertices, start, course.Start.Forward, MergeDistance, MaxPathGap, out int unused);
+				List<Vector3> ordered = CourseGeometry.OrderPoints(vertices, start, course.Start.Forward, MergeDistance, MaxPathGap, out int unused, out List<Vector3> behind);
+				if (behind.Count >= 2) {
+					// The strip runs on behind the start line: put that part in front, so it's cut off as the grid run-up.
+					List<Vector3> before = CourseGeometry.Smooth(behind);
+					before.Reverse();
+					before.RemoveAt(before.Count - 1);
+					ordered.InsertRange(0, before);
+				}
 				if (unused > ordered.Count / 10 + 2) {
 					course.Problems.Add($"{unused} of the path's points weren't used: check the strip has no gaps over {MaxPathGap:0} m and nothing else in 'TRC Path {name}'.");
 				}
-				if (ordered.Count >= 2 && Vector3.Distance(ordered[ordered.Count - 1], finish) > MaxPathGap) {
+				if (ordered.Count >= 2 && !ordered.Any(p => Vector3.Distance(p, finish) <= MaxPathGap)) {
 					course.Problems.Add($"The path stops {Vector3.Distance(ordered[ordered.Count - 1], finish):0} m before the finish: it may have a gap over {MaxPathGap:0} m.");
 				}
 				return ordered;
 			}
 
-			if (path.childCount >= 2) {
-				var points = new List<Vector3>();
-				for (int i = 0; i < path.childCount; i++) {
-					points.Add(path.GetChild(i).position);
+			var children = new List<Vector3>();
+			foreach (Transform piece in pieces) {
+				for (int i = 0; i < piece.childCount; i++) {
+					children.Add(piece.GetChild(i).position);
 				}
-				return InDrivingOrder(points, start, finish);
+			}
+			if (children.Count >= 2) {
+				return InDrivingOrder(children, start, finish);
 			}
 
 			if (unreadable.Count == 0) {
@@ -415,12 +509,43 @@ namespace TRC.TuneLoader {
 			return points;
 		}
 
-		private static void Keep(ref Transform slot, Transform transform, Parts parts) {
+		/// <summary>Keeps one start or finish: the unnumbered one before ".001", ".001" before ".002".</summary>
+		private static void Keep(ref Transform slot, ref int slotCopy, Transform transform, int copy, string bare, Parts parts) {
 			if (slot == null) {
 				slot = transform;
-			} else {
-				parts.Duplicates.Add($"Two objects are named '{transform.name}': the first one found is used.");
+				slotCopy = copy;
+				return;
 			}
+			bool replace = copy < slotCopy;
+			parts.Duplicates.Add($"'{(replace ? slot.name : transform.name)}' is a second '{bare}': '{(replace ? transform.name : slot.name)}' is used.");
+			if (replace) {
+				slot = transform;
+				slotCopy = copy;
+			}
+		}
+
+		/// <summary>
+		/// "TRC Path Akina.001" → "TRC Path Akina", copy 1 (Blender's numbering when you duplicate or split); "TRC Path
+		/// Akina (2)" → copy 2 (Unity's). A name without either is copy 0, the first.
+		/// </summary>
+		public static string WithoutCopyNumber(string name, out int copy) {
+			copy = 0;
+			string trimmed = name.TrimEnd();
+			int dot = trimmed.LastIndexOf('.');
+			if (dot > 0 && dot < trimmed.Length - 1 && trimmed.Substring(dot + 1).All(c => c >= '0' && c <= '9') &&
+				int.TryParse(trimmed.Substring(dot + 1), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out copy)) {
+				return trimmed.Substring(0, dot).TrimEnd();
+			}
+			copy = 0;
+			if (trimmed.EndsWith(")", StringComparison.Ordinal)) {
+				int open = trimmed.LastIndexOf('(');
+				if (open > 0 && trimmed[open - 1] == ' ' && open < trimmed.Length - 2 &&
+					int.TryParse(trimmed.Substring(open + 1, trimmed.Length - open - 2), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out copy)) {
+					return trimmed.Substring(0, open).TrimEnd();
+				}
+			}
+			copy = 0;
+			return name;
 		}
 
 		/// <summary>The name in lowercase words: spaces, underscores and dashes all split words.</summary>

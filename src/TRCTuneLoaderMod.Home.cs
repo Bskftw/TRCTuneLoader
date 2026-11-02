@@ -20,16 +20,16 @@ namespace TRC.TuneLoader {
 		private const string WheelWindowPref = "wheel_window";
 
 		/// <summary>Raise with each version that has news worth a pop-up.</summary>
-		private const string WhatsNewVersion = "0.15.0";
+		private const string WhatsNewVersion = "0.16.0";
 
 		private static readonly string[] WhatsNewLines = {
-			"<b>Tidier tabs</b>: Time attack has Tracks, Speed traps, My times and Course builder down the left; <b>Battles</b> is its own tab with 1v1 battles, Races & tournaments, Fun games and My ratings. Backups are in My car.",
-			"<b>Speed traps</b>: name them, pick how wide they are, and they're grouped by track (\"Tsubaki Speed Trap 1, 2...\"). A floating SPEED CHECK sign shows your last speed; the line on the road only shows while you place one. They work during time attacks, battles and races too.",
-			"<b>Speed trap races</b> (Races & tournaments, Race for: Speed traps): the highest total of every trap on the course wins, like Most Wanted.",
-			"<b>Your own colours and text size</b> (Options, Look).",
-			"<b>Delete times</b> in My times, and the <b>Course builder</b> can make the reverse of your course as you save it.",
-			"<b>Fixes</b>: highway battles where only one driver started, challenges on long courses that never arrived, the delta jumping in hairpins, and colour codes in names.",
-			"<b>Ratings are being tested</b>: the Safety Rating no longer counts light touches or time attacks, and was reset once. Elo and Safety Rating will be reset again before they count.",
+			"<b>Regulations</b> (new tab): for communities that tune their own cars to rules, like a most power, tyre widths, no swaps or one setup. Make one, check your car, share it, and run 1v1 battles, races and tournaments to it. Each regulation has its own Elo.",
+			"<b>Just for fun</b>: any battle, race or tournament can be set to change nobody's ratings, TRC spec ones too.",
+			"<b>Console players</b>: a PC host can add PlayStation, Xbox and Switch players to a race or a 1v1. The host's mod times them, and the host's headlights show them the start. The host can also run a race without driving in it.",
+			"<b>Races and Tournaments</b> are separate sections now. Jump starts can recall the start (everyone lines up again) or go unpunished, and tournaments can have no penalties.",
+			"<b>Bigger lobbies</b>: no 16-driver limit any more, for custom servers with bigger rooms.",
+			"<b>Suspension</b> (new tab): data logging like a real race team, with a live overlay of your car from above: each tyre's compression, load and damper speed, packing down over bumps, tyres leaving the road, bottoming, and notes on what to change. Off unless you turn it on.",
+			"<b>Ghosts and shared runs</b>: your best time attacks are kept as ghosts. Race a ghost (yours or one someone shared) with the live delta and sectors against it. Ghosts have no physics: no pushing, towing or slipstream.",
 		};
 
 		private readonly RoomSync roomSync_ = new RoomSync();
@@ -85,6 +85,20 @@ namespace TRC.TuneLoader {
 					if (first) {
 						ShowNotice($"<b>TRC Tune Loader {m.Version} is out</b> (you have {Version})\n<color={Theme.MutedHex}>Turn on automatic updates for it in KSL, then restart CarX</color>", 15f);
 					}
+				}
+				RoomBoard.SharedTraps traps = roomBoard_.ReceiveTraps(m, now, MySteamId);
+				if (traps != null) {
+					ShowNotice($"<b>{traps.FromName} shared {traps.Traps.Count} speed trap(s){(traps.JustForMe ? " with you" : "")}</b>\n" +
+						$"<color={Theme.MutedHex}>{traps.Label} on {traps.MapName} · open the window (Time attack, Speed traps) to add them</color>");
+					TrcLog.Info($"{traps.FromName} shared {traps.Traps.Count} speed trap(s) ({traps.Label}) on {traps.MapKey}{(traps.JustForMe ? " with you" : " with the room")}.");
+				}
+				RoomBoard.SharedItem item = roomBoard_.ReceiveItem(m, now, MySteamId);
+				if (item?.Regulation != null) {
+					ShowNotice($"<b>{item.FromName} shared a regulation{(item.JustForMe ? " with you" : "")}</b>\n<color={Theme.MutedHex}>{item.Regulation.Name} · open the window (Regulations) to save it</color>");
+					TrcLog.Info($"{item.FromName} shared the regulation {item.Regulation.Name} ({item.Regulation.Code}).");
+				} else if (item?.Ghost != null) {
+					ShowNotice($"<b>{item.FromName} shared a run{(item.JustForMe ? " with you" : "")}</b>\n<color={Theme.MutedHex}>{TimeAttackRun.FormatTime(item.Ghost.Time)} on {item.Ghost.CourseName} · open the window (Time attack, Tracks) to race it</color>");
+					TrcLog.Info($"{item.FromName} shared a run: {TimeAttackRun.FormatTime(item.Ghost.Time)} on {item.Ghost.CourseName} ({item.Ghost.CourseCode}), {item.Ghost.Samples.Count} ghost points.");
 				}
 				RoomBoard.Shared shared = roomBoard_.Receive(m, now);
 				if (shared != null) {
@@ -160,7 +174,7 @@ namespace TRC.TuneLoader {
 			var content = new GUIContent(notice_);
 			float width = Mathf.Min(360f, screenWidth - 2 * HudMargin);
 			float height = Theme.HudPill.CalcHeight(content, width);
-			GUI.Label(new Rect((screenWidth - width) / 2f, screenHeight - height - 90f, width, height), content, Theme.HudPill);
+			GUI.Label(NoticeRect(width, height, screenWidth, screenHeight), content, Theme.HudPill);
 		}
 
 		/// <summary>The window opens by itself once on the garage screen after an update, on Home with What's new.</summary>
@@ -280,7 +294,7 @@ namespace TRC.TuneLoader {
 				if (s.OpenRaceId != 0 && openRaces_.TryGetValue(s.OpenRaceId, out var open) && race_ == null) {
 					if (GUILayout.Button("Join", Theme.ButtonPrimary)) {
 						JoinRace(open.Lobby);
-						GoToBattle(open.Lobby.Settings.Mode == RoomMode.Race ? 1 : 2);
+						GoToBattle(SectionFor(open.Lobby));
 					}
 				}
 				bool canBattle = RoomBoard.Free(s) && System.Version.TryParse(s.Version, out System.Version theirs) && theirs >= BattleVersion;
@@ -454,7 +468,9 @@ namespace TRC.TuneLoader {
 				return;
 			}
 			pickedFormat_ = (int)b.Format;
-			pickedMode_ = b.Open ? 1 : 0;
+			pickedMode_ = b.Regulation != null ? 1 : b.Open ? 2 : 0;
+			pickedRule_ = b.Regulation?.Code ?? pickedRule_;
+			pickedFun_ = b.Fun;
 			pickedBattleLaps_ = Math.Max(0, Array.IndexOf(BattleLapChoices, b.Laps));
 			ChallengePlayer(peer, b.IsHighway ? Course.FreeRoam(map_?.Key ?? b.Course.MapKey) : b.Course);
 		}
@@ -688,10 +704,13 @@ namespace TRC.TuneLoader {
 							GoToBattle(0);
 						}
 						if (GUILayout.Button("Races", Theme.Button)) {
-							GoToBattle(1);
+							GoToBattle(RacesSection);
+						}
+						if (GUILayout.Button("Tournaments", Theme.Button)) {
+							GoToBattle(TournamentsSection);
 						}
 						if (GUILayout.Button("Fun games", Theme.Button)) {
-							GoToBattle(2);
+							GoToBattle(GamesSection);
 						}
 						break;
 					default:
@@ -699,7 +718,7 @@ namespace TRC.TuneLoader {
 							GoToTimeAttack(1);
 						}
 						if (GUILayout.Button("My ratings", Theme.Button)) {
-							GoToBattle(3);
+							GoToBattle(RatingsSection);
 						}
 						break;
 				}
@@ -732,7 +751,7 @@ namespace TRC.TuneLoader {
 					GUI.enabled = enabled && lobby.Entries.Count < lobby.Settings.MaxPlayers;
 					if (GUILayout.Button("Join", Theme.ButtonPrimary)) {
 						JoinRace(lobby);
-						GoToBattle(lobby.Settings.Mode == RoomMode.Race ? 1 : 2);
+						GoToBattle(SectionFor(lobby));
 					}
 					GUI.enabled = enabled;
 					GUILayout.EndHorizontal();

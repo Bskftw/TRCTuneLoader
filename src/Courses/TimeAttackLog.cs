@@ -44,6 +44,9 @@ namespace TRC.TuneLoader {
 
 		/// <summary>The speeds caught at the course's speed traps, in km/h, in the order driven (empty without traps).</summary>
 		public float[] TrapKmh = new float[0];
+
+		/// <summary>0.16: the ghost that was showing during the run ("" for none). Ghosts have no physics, so the time counts; it's noted for TRC.</summary>
+		public string Ghost = "";
 		public float TrapTotal => TrapKmh.Sum();
 
 		public bool IsSpec => Spec == TimeAttackLog.SpecWord && FlaggedMods == 0;
@@ -76,7 +79,7 @@ namespace TRC.TuneLoader {
 		private static readonly string[] Columns = {
 			"date", "course_code", "course", "map", "map_name", "official_course", "car_id", "car", "setup",
 			"tune_code", "tune_set", "spec", "flagged_mods", "time_ms", "loader_version",
-			"start", "laps", "lap", "sectors_ms", "traps_kmh",
+			"start", "laps", "lap", "sectors_ms", "traps_kmh", "ghost",
 		};
 
 		/// <summary>The first columns, which every line has (lines from before 0.11 have only these).</summary>
@@ -103,6 +106,7 @@ namespace TRC.TuneLoader {
 				record.LapNumber.ToString(CultureInfo.InvariantCulture),
 				string.Join("|", record.SectorMs.Select(ms => ms.ToString(CultureInfo.InvariantCulture))),
 				string.Join("|", record.TrapKmh.Select(k => k.ToString("0.0", CultureInfo.InvariantCulture))),
+				record.Ghost ?? "",
 			};
 			text.Append(string.Join(",", fields.Select(Quote))).Append('\n');
 			File.AppendAllText(path, text.ToString(), new UTF8Encoding(false));
@@ -207,6 +211,9 @@ namespace TRC.TuneLoader {
 					if (record.TrapKmh.Any(v => v < 0)) {
 						record.TrapKmh = new float[0];
 					}
+				}
+				if (f.Count >= 21) {
+					record.Ghost = f[20];
 				}
 				return record;
 			}

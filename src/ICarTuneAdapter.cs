@@ -9,6 +9,19 @@ namespace TRC.TuneLoader {
 		public Vector3 Forward;
 		public float SpeedKmh;
 		public int CarId;
+
+		/// <summary>The car's rotation (for ghosts).</summary>
+		public Quaternion Rotation;
+	}
+
+	/// <summary>Where another player's car is, as CarX shows it here (for console players the host times).</summary>
+	public struct RoomCarPose {
+		/// <summary>What CarX calls the player ("&lt;account id&gt;|&lt;platform&gt;").</summary>
+		public string Key;
+		public string Name;
+		public string Platform;
+		public bool IsConsole;
+		public CarPose Pose;
 	}
 
 	/// <summary>The map the player is on.</summary>
@@ -57,6 +70,11 @@ namespace TRC.TuneLoader {
 		public int SlotId;
 		public string SlotName = "";
 		public int EngineId;
+
+		/// <summary>0.16: what CarX calls them ("&lt;account id&gt;|&lt;platform&gt;"), their platform ("Steam", "PS4", "Xbox"...), and whether that's a console.</summary>
+		public string Key = "";
+		public string Platform = "";
+		public bool IsConsole;
 
 		/// <summary>The setup CarX sends to the other players: slider positions by setting name.</summary>
 		public Dictionary<string, float> SharedTune = new Dictionary<string, float>();
@@ -130,6 +148,10 @@ namespace TRC.TuneLoader {
 
 		/// <summary>The physics engine's own values next to the car's description, for the log.</summary>
 		public List<string> PhysicsLines = new List<string>();
+
+		/// <summary>0.16: the car's peak power (hp) and weight (kg) as built, from CarX's physics; 0 when unknown.</summary>
+		public float Hp;
+		public float Mass;
 
 		/// <summary>False when the values couldn't be compared (see <see cref="Note"/>).</summary>
 		public bool Compared;
@@ -253,6 +275,42 @@ namespace TRC.TuneLoader {
 		/// (instance IDs), on the road or in the air over it. False when not driving. Called every frame.
 		/// </summary>
 		bool TryCheckOverRoad(ICollection<int> roadColliders, out bool overRoad);
+
+		/// <summary>
+		/// 0.16: the numbers CarX's tuning screen shows for these slider positions (mm, Nm, degrees...), as numbers, and how
+		/// many decimals it shows each with (a tyre stretch of 10.3 shows as "10": 0 decimals).
+		/// </summary>
+		bool TryGetTuneNumbers(int slotId, IDictionary<string, float> values, out Dictionary<string, float> numbers, out Dictionary<string, int> decimals, out string error);
+
+		/// <summary>0.16: where every other player's car is, as CarX shows it here. Called every frame while timing console players.</summary>
+		bool TryGetRoomCarPoses(List<RoomCarPose> poses);
+
+		/// <summary>
+		/// 0.16: turns the player's own headlights on or off the way the light key does, so CarX shares it with the room
+		/// (console players see the host's lights count the start down). Only the player's own car.
+		/// </summary>
+		bool TrySetHeadlights(bool on, out string error);
+
+		/// <summary>The player's own headlights are on now (false when not driving).</summary>
+		bool HeadlightsOn { get; }
+
+		/// <summary>
+		/// 0.16: a copy of the player's car body for a ghost: only meshes drawn with <paramref name="material"/>, with no
+		/// collider, rigidbody or script, so it can't touch anything. Placed like the car's body; null when not driving.
+		/// </summary>
+		GameObject BuildGhostBody(Material material);
+
+		/// <summary>
+		/// 0.16: the player's own four wheels right now (compression, tyre load, contact, slip), for suspension logging;
+		/// false when not driving. Called every frame while logging is on, so it never logs.
+		/// </summary>
+		bool TryGetSuspension(SuspensionFrame frame);
+
+		/// <summary>0.16: the player's own name as CarX knows it (their Steam nickname), "" when unknown.</summary>
+		string PlayerName { get; }
+
+		/// <summary>0.16: the player's own car's suspension setup per corner (travel, spring, dampers and their limits, corner weight).</summary>
+		bool TryGetSuspensionSetup(out CornerSetup[] corners);
 	}
 
 	/// <summary>
@@ -370,6 +428,33 @@ namespace TRC.TuneLoader {
 
 		public bool TryMoveCarTo(Vector3 position, Vector3 forward, out string error) {
 			error = message_;
+			return false;
+		}
+
+		public bool TryGetTuneNumbers(int slotId, IDictionary<string, float> values, out Dictionary<string, float> numbers, out Dictionary<string, int> decimals, out string error) {
+			numbers = new Dictionary<string, float>();
+			decimals = new Dictionary<string, int>();
+			error = Status;
+			return false;
+		}
+
+		public bool TryGetRoomCarPoses(List<RoomCarPose> poses) => false;
+
+		public bool TrySetHeadlights(bool on, out string error) {
+			error = Status;
+			return false;
+		}
+
+		public bool HeadlightsOn => false;
+
+		public GameObject BuildGhostBody(Material material) => null;
+
+		public bool TryGetSuspension(SuspensionFrame frame) => false;
+
+		public string PlayerName => "";
+
+		public bool TryGetSuspensionSetup(out CornerSetup[] corners) {
+			corners = null;
 			return false;
 		}
 

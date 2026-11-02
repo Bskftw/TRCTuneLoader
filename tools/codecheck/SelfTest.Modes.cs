@@ -21,6 +21,13 @@ namespace TRC.TuneLoader.CodeCheck {
 			PenaltiesAndTrapScoring();
 			Fixes015Tests();
 			Fixes0151Tests();
+			RatingSealTests();
+			TrapSharingTests();
+			UndirectedPiecesMatch();
+			PathRunsPastTheLines();
+			PathFromFacesAndCopies();
+			Version016Tests();
+			SuspensionTests();
 		}
 
 		private static void SpeedTrapsCatchSpeed() {
@@ -198,8 +205,8 @@ namespace TRC.TuneLoader.CodeCheck {
 			Expect(messy.License == License.D && Math.Abs(messy.Safety - RatingBook.StartSafety) < 0.01, $"dropping below 1.00 loses a license step ({messy.Badge})");
 			string folder = Path.Combine(Path.GetTempPath(), "trc_rating_" + Guid.NewGuid().ToString("N"));
 			try {
-				clean.Save(folder);
-				RatingBook back = RatingBook.Load(folder);
+				clean.Save(folder, 76561198000000001);
+				RatingBook back = RatingBook.Load(folder, 76561198000000001);
 				Expect(back.License == clean.License && Math.Abs(back.Safety - clean.Safety) < 0.001 && back.Events == 3 && back.History.Count == clean.History.Count, "ratings save and load");
 			} finally {
 				try {

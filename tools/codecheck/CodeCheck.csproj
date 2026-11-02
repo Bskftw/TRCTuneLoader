@@ -41,6 +41,11 @@
     <Compile Include="..\..\src\Races\Tournament.cs" Link="src\Races\Tournament.cs" />
     <Compile Include="..\..\src\Races\RaceControl.cs" Link="src\Races\RaceControl.cs" />
     <Compile Include="..\..\src\Races\Ratings.cs" Link="src\Races\Ratings.cs" />
+    <Compile Include="..\..\src\Races\RatingSeal.cs" Link="src\Races\RatingSeal.cs" />
+    <Compile Include="..\..\src\Regulations\Regulation.cs" Link="src\Regulations\Regulation.cs" />
+    <Compile Include="..\..\src\Courses\Ghost.cs" Link="src\Courses\Ghost.cs" />
+    <Compile Include="..\..\src\Suspension\SuspensionLog.cs" Link="src\Suspension\SuspensionLog.cs" />
+    <Compile Include="..\..\src\Courses\CourseScanner.cs" Link="src\Courses\CourseScanner.cs" />
     <Compile Include="..\..\src\Courses\SpeedTrap.cs" Link="src\Courses\SpeedTrap.cs" />
     <Compile Include="..\..\src\Races\RoomMessage.cs" Link="src\Races\RoomMessage.cs" />
     <Compile Include="..\..\src\Races\EventLedger.cs" Link="src\Races\EventLedger.cs" />
@@ -58,6 +63,10 @@
     <Reference Include="System.IO.Compression" />
     <Reference Include="UnityEngine.CoreModule">
       <HintPath>$(CarXPath)\Drift Racing Online_Data\Managed\UnityEngine.CoreModule.dll</HintPath>
+    </Reference>
+    <!-- For CourseScanner (colliders); the self-test only uses its game-free helpers. -->
+    <Reference Include="UnityEngine.PhysicsModule">
+      <HintPath>$(CarXPath)\Drift Racing Online_Data\Managed\UnityEngine.PhysicsModule.dll</HintPath>
     </Reference>
   </ItemGroup>
 

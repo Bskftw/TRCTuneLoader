@@ -10,6 +10,9 @@ namespace TRC.TuneLoader {
 		public string TuneSet = "";
 		public string TuneCode = "";
 		public string Car = "";
+
+		/// <summary>0.16: the car meets the regulation of the battle or race being driven (false when there's none).</summary>
+		public bool RuleOk;
 	}
 
 	/// <summary>
@@ -142,9 +145,27 @@ namespace TRC.TuneLoader {
 		public uint MatchId { get; private set; }
 		public int MatchGame { get; private set; }
 
-		/// <summary>An Open battle: cars don't have to be TRC spec, and it never counts.</summary>
+		/// <summary>An Open battle: cars don't have to be TRC spec, and it never counts (unless it's run to a regulation).</summary>
 		public bool Open { get; }
 		public Course Course { get; }
+
+		/// <summary>0.16: run to this regulation (each mod checks its own car against it), or null. Such a battle is Open too.</summary>
+		public Regulation Regulation { get; private set; }
+
+		/// <summary>0.16: just for fun: no ratings change.</summary>
+		public bool Fun { get; private set; }
+
+		public bool IsTrcSpec => !Open && Regulation == null;
+
+		/// <summary>This driver's Elo for the battle's ratings (the mod sets it), and the other driver's, from their heartbeats (0 until heard).</summary>
+		public float MyElo { get; set; }
+		public float PeerElo { get; private set; }
+
+		/// <summary>The car may line up: TRC spec in a TRC spec battle, meeting the regulation in a regulated one, anything when Open.</summary>
+		private string NotAllowedMessage => Regulation != null ? $"Your car doesn't meet the battle's regulation ({Regulation.Name}): see Regulations"
+			: "Your car isn't TRC spec, and this is a TRC spec battle";
+
+		public bool CarOk(BattleCar car) => car != null && (Regulation != null ? car.RuleOk : Open || car.Spec);
 
 		public Phase State { get; private set; }
 
@@ -268,12 +289,16 @@ namespace TRC.TuneLoader {
 
 		/// <summary>Challenges <paramref name="peer"/>. The course goes with the challenge unless it's official (they have it too).</summary>
 		public static BattleSession Challenge(uint id, ulong me, string myName, ulong peer, string peerName, Course course,
-			BattleFormat format, bool open, Func<BattleCar> checkMyCar, double now, int laps = 1, uint matchId = 0, int matchGame = 0) {
-			var session = new BattleSession(id, true, me, myName, peer, peerName, course, format, open, laps, checkMyCar, now) {
+			BattleFormat format, bool open, Func<BattleCar> checkMyCar, double now, int laps = 1, uint matchId = 0, int matchGame = 0,
+			Regulation regulation = null, bool fun = false) {
+			var session = new BattleSession(id, true, me, myName, peer, peerName, course, format, open || regulation != null, laps, checkMyCar, now) {
 				State = Phase.Inviting,
 				MatchId = matchId,
 				MatchGame = matchGame,
+				Regulation = regulation,
+				Fun = fun,
 			};
+			session.Counted = regulation != null || !open;
 			session.SendChallenge(now);
 			session.Message = $"Sending the challenge to {session.PeerName}";
 			return session;
@@ -282,11 +307,14 @@ namespace TRC.TuneLoader {
 		/// <summary>A challenge someone sent this player, with the course it's on (found here, or sent with it).</summary>
 		public static BattleSession FromChallenge(BattleMessage challenge, ulong me, string myName, Course course, Func<BattleCar> checkMyCar, double now) {
 			var session = new BattleSession(challenge.BattleId, false, me, myName, challenge.From, challenge.FromName, course,
-				challenge.Format, challenge.Open, challenge.Laps, checkMyCar, now) {
+				challenge.Format, challenge.Open || challenge.Regulation != null, challenge.Laps, checkMyCar, now) {
 				State = Phase.Invited,
 				MatchId = challenge.MatchId,
 				MatchGame = challenge.MatchGame,
+				Regulation = challenge.Regulation,
+				Fun = challenge.Fun,
 			};
+			session.Counted = challenge.Regulation != null || !challenge.Open;
 			session.Message = $"{session.PeerName} challenges you";
 			return session;
 		}
@@ -513,10 +541,10 @@ namespace TRC.TuneLoader {
 					} else if (MyCar == null) {
 						MyCar = checkMyCar_?.Invoke() ?? new BattleCar();
 					}
-					MyReady = together && (Open || MyCar.Spec);
-					bool sameSet = Open || (MyCar != null && PeerCar.TuneSet == MyCar.TuneSet);
+					MyReady = together && CarOk(MyCar);
+					bool sameSet = !IsTrcSpec || (MyCar != null && PeerCar.TuneSet == MyCar.TuneSet);
 					Message = !together ? $"Drive alongside {PeerName}: within {HighwayStartMetres:0} m, both over {HighwayStartKmh:0} km/h ({apart:0} m apart now)"
-						: !Open && !MyCar.Spec ? "Your car isn't TRC spec, and this is a TRC spec battle"
+						: !CarOk(MyCar) ? NotAllowedMessage
 						: !PeerReady ? $"Alongside. Waiting for {PeerName}"
 						: !sameSet ? "Different tune sets"
 						: "Both ready: keep rolling";
@@ -572,9 +600,9 @@ namespace TRC.TuneLoader {
 						Winner = draw ? 0 : iWin ? Me : Peer;
 						string text = draw ? "Time's up, dead even: a draw"
 							: iWin ? $"You gapped {PeerName}: you win" : $"{PeerName} gapped you: {PeerName} wins";
-						var mine = new RunResult { Run = 0, Finished = true, Time = now - goTime_, SpecAtEnd = Open || (checkMyCar_?.Invoke()?.Spec ?? false) };
+						var mine = new RunResult { Run = 0, Finished = true, Time = now - goTime_, SpecAtEnd = Open && Regulation == null || CarOk(checkMyCar_?.Invoke()) };
 						Runs.Add(new BattleRun { Index = 0, Mine = mine, Theirs = new RunResult { Run = 0, Finished = true, Time = now - goTime_, SpecAtEnd = true }, Winner = Winner, Text = text });
-						if (!Open) {
+						if (!Open || Regulation != null) {
 							Counted &= mine.SpecAtEnd;
 						}
 						End(Phase.Finished, text, now);
@@ -617,6 +645,8 @@ namespace TRC.TuneLoader {
 			if (IsSpeedTraps) {
 				challenge.Traps = new List<CourseGate>(Course.Traps);
 			}
+			challenge.Fun = Fun;
+			challenge.Regulation = Regulation;
 			outbox_.Add(challenge);
 		}
 
@@ -698,13 +728,13 @@ namespace TRC.TuneLoader {
 				// Checked once each time the car stops in its box, not every frame.
 				MyCar = checkMyCar_?.Invoke() ?? new BattleCar();
 			}
-			MyReady = inPlace && (Open || MyCar.Spec);
-			bool sameSet = Open || (MyCar != null && PeerCar.TuneSet == MyCar.TuneSet);
+			MyReady = inPlace && CarOk(MyCar);
+			bool sameSet = !IsTrcSpec || (MyCar != null && PeerCar.TuneSet == MyCar.TuneSet);
 
 			if (!inPlace) {
 				Message = Run.Message;
-			} else if (!Open && !MyCar.Spec) {
-				Message = "Your car isn't TRC spec, and this is a TRC spec battle";
+			} else if (!CarOk(MyCar)) {
+				Message = NotAllowedMessage;
 			} else if (!PeerReady) {
 				Message = $"Ready. Waiting for {PeerName}";
 			} else if (!sameSet) {
@@ -761,7 +791,7 @@ namespace TRC.TuneLoader {
 					Finished = Run.State == TimeAttackRun.Phase.Finished,
 					Time = Run.Result,
 					Reason = Run.State == TimeAttackRun.Phase.Finished ? "" : Run.Message,
-					SpecAtEnd = Open || (checkMyCar_?.Invoke()?.Spec ?? false),
+					SpecAtEnd = Open && Regulation == null || CarOk(checkMyCar_?.Invoke()),
 					TrapTotal = Run.TrapTotal,
 				};
 				lastResult_ = myResult_;
@@ -795,7 +825,7 @@ namespace TRC.TuneLoader {
 		private void Decide(double now) {
 			BattleRun run = BattleRules.Decide(Format, RunIndex, Leader, Me, Peer, PeerName, myResult_, peerResult_);
 			Runs.Add(run);
-			if (!Open) {
+			if (!Open || Regulation != null) {
 				Counted &= myResult_.SpecAtEnd && peerResult_.SpecAtEnd;
 			}
 
@@ -834,7 +864,10 @@ namespace TRC.TuneLoader {
 
 			bool sameRun = message.RunIndex == RunIndex;
 			PeerReady = sameRun && message.Ready;
-			PeerCar = new BattleCar { Spec = message.Spec, TuneSet = message.TuneSet, TuneCode = message.TuneCode, Car = message.Car };
+			PeerCar = new BattleCar { Spec = message.Spec, TuneSet = message.TuneSet, TuneCode = message.TuneCode, Car = message.Car, RuleOk = message.RuleOk };
+			if (message.HasRuleOk) {
+				PeerElo = message.Elo;
+			}
 			PeerPosition = message.Position;
 			PeerHeading = message.Heading;
 			PeerKmh = message.Kmh;
@@ -895,6 +928,8 @@ namespace TRC.TuneLoader {
 			beat.Heading = myForward_;
 			beat.Kmh = myKmh_;
 			beat.Sp = MySp;
+			beat.RuleOk = MyCar?.RuleOk ?? false;
+			beat.Elo = MyElo;
 			outbox_.Add(beat);
 		}
 

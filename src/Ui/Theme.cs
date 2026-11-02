@@ -323,7 +323,7 @@ namespace TRC.TuneLoader {
 		}
 
 		/// <summary>A rounded rectangle with a 1px border, for 9-slice stretching.</summary>
-		private static Texture2D Rounded(Color fill, Color border, int radius) {
+		internal static Texture2D Rounded(Color fill, Color border, int radius) {
 			int size = radius * 2 + 2;
 			var texture = new Texture2D(size, size, TextureFormat.RGBA32, false) {
 				hideFlags = HideFlags.HideAndDontSave,

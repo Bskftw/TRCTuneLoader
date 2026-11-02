@@ -16,7 +16,6 @@ namespace TRC.TuneLoader {
 		private static readonly System.Version BattleVersion = new System.Version(0, 13, 0);
 		private static readonly int[] BattleLapChoices = { 1, 2, 3, 5 };
 		private static readonly string[] BattleFormats = { "Side-by-side race", "Cat and mouse", "Highway battle (SP)", "Speed traps" };
-		private static readonly string[] BattleModes = { "TRC spec", "Open" };
 		private const float InviteSeconds = 45f;
 
 		/// <summary>A battle on the track survives the car being out of reach this long (a teleport, a loading hitch).</summary>
@@ -49,8 +48,15 @@ namespace TRC.TuneLoader {
 		private ulong pickedOpponent_;
 		private string pickedCourse_ = "";
 		private int pickedFormat_;
+		/// <summary>0 TRC spec, 1 a regulation (<see cref="pickedRule_"/>), 2 Open; and just for fun (no ratings).</summary>
 		private int pickedMode_;
+		private string pickedRule_ = "";
+		private bool pickedFun_;
+		private string pickedConsole_ = "";
 		private int pickedBattleLaps_;
+
+		/// <summary>Regulations (and the fun flag) in battles and races need this on the other side.</summary>
+		private static readonly System.Version RuleVersion = new System.Version(0, 16, 0);
 		private string battleResult_ = "";
 		private Vector2 battleScroll_;
 
@@ -181,7 +187,7 @@ namespace TRC.TuneLoader {
 			invites_.Add((challenge, Time.unscaledTime));
 			string courseName = challenge.Course?.Name ?? course?.Name ?? "";
 			TrcLog.Info($"Battle {challenge.BattleId}: challenge from {name} on {courseName} ({challenge.CourseCode}), " +
-				$"{BattleFormats[(int)challenge.Format]}, {(challenge.Open ? "Open" : "TRC spec")}.{(course == null ? $" Can't accept: {problem}." : "")}");
+				$"{BattleFormats[(int)challenge.Format]}, {RuleText(challenge.Open, challenge.Regulation, challenge.Fun)}.{(course == null ? $" Can't accept: {problem}." : "")}");
 
 			if (course != null && IsCalledMatch(challenge) && (battle_ == null || !battle_.Active)) {
 				TrcLog.Info($"Battle {challenge.BattleId}: the tournament battle the host called, accepted by itself.");
@@ -257,11 +263,16 @@ namespace TRC.TuneLoader {
 				TuneSet = check.Set,
 				TuneCode = check.Code,
 				Car = check.Car,
+				RuleOk = MyCarMeetsActiveRule(),
 			};
 			return lastBattleCar_;
 		}
 
-		private string MyName() => players_.FirstOrDefault(p => p.Player.IsLocal)?.Player.Name ?? "";
+		/// <summary>This player's name: as the room shows it, or (outside a room) CarX's own nickname for them.</summary>
+		private string MyName() {
+			string name = players_.FirstOrDefault(p => p.Player.IsLocal)?.Player.Name ?? "";
+			return name.Length > 0 ? name : adapter_.PlayerName;
+		}
 
 		private void StopOtherCourseWork() {
 			run_ = null;
@@ -290,11 +301,22 @@ namespace TRC.TuneLoader {
 				}
 				course = course.WithTraps(along);
 			}
-			StartBattle(opponent.Player.SteamId, opponent.Player.Name, course, format, pickedMode_ == 1, BattleLapChoices[pickedBattleLaps_], 0, 0);
+			Regulation regulation = pickedMode_ == 1 ? RegulationByCode(pickedRule_) : null;
+			if (pickedMode_ == 1 && regulation == null) {
+				battleResult_ = "Pick a regulation first (or make one in the Regulations tab).";
+				return;
+			}
+			if (regulation != null && sync_?.ReportFrom(opponent.Player.SteamId) is TrcSync.Report theirs &&
+				(!System.Version.TryParse(theirs.LoaderVersion, out System.Version v) || v < RuleVersion)) {
+				battleResult_ = $"{opponent.Player.Name} has TRC Tune Loader {theirs.LoaderVersion}: battles run to a regulation need {RuleVersion} or newer on both sides.";
+				return;
+			}
+			StartBattle(opponent.Player.SteamId, opponent.Player.Name, course, format, pickedMode_ == 2, BattleLapChoices[pickedBattleLaps_], 0, 0, regulation, pickedFun_);
 		}
 
 		/// <summary>Challenges a driver: from the Battle view, or by itself for a knockout battle the race host called.</summary>
-		private void StartBattle(ulong peer, string peerName, Course course, BattleFormat format, bool open, int laps, uint matchId, int matchGame) {
+		private void StartBattle(ulong peer, string peerName, Course course, BattleFormat format, bool open, int laps, uint matchId, int matchGame,
+			Regulation regulation = null, bool fun = false) {
 			if (battle_ != null && battle_.Active) {
 				battleResult_ = "Finish or leave the battle you're in first.";
 				return;
@@ -302,12 +324,12 @@ namespace TRC.TuneLoader {
 			StopOtherCourseWork();
 			uint id = (uint)battleIds_.Next(1, int.MaxValue);
 			battle_ = BattleSession.Challenge(id, MySteamId, MyName(), peer, peerName, course, format, open, CheckBattleCar, BattleNow,
-				laps: laps, matchId: matchId, matchGame: matchGame);
+				laps: laps, matchId: matchId, matchGame: matchGame, regulation: regulation, fun: fun);
 			battleLogged_ = false;
 			battleEndedAt_ = -1f;
 			battleResult_ = "";
 			TrcLog.Info($"Battle {id}: challenged {battle_.PeerName} ({peer}) on {course.Name} ({course.Code}, {course.Path.Count} path points), " +
-				$"{BattleFormats[(int)format]}, {(open ? "Open" : "TRC spec")}{(matchId != 0 ? $", tournament battle {matchId} game {matchGame}" : "")}.");
+				$"{BattleFormats[(int)format]}, {RuleText(open, regulation, fun)}{(regulation != null ? $" ({regulation.Code})" : "")}{(matchId != 0 ? $", tournament battle {matchId} game {matchGame}" : "")}.");
 		}
 
 		private void AnswerChallenge(BattleMessage challenge, bool accept) {
@@ -459,9 +481,17 @@ namespace TRC.TuneLoader {
 			GUILayout.BeginVertical(Theme.Guide);
 			GUILayout.Label($"{BattleMessage.PlainName(challenge.FromName)} challenges you", Theme.Heading);
 			string courseName = challenge.Course?.Name ?? course?.Name ?? challenge.CourseCode;
-			GUILayout.Label($"{courseName} · {BattleFormats[(int)challenge.Format]} · {(challenge.Open ? "Open" : "TRC spec")}", Theme.Body);
+			GUILayout.Label($"{courseName} · {BattleFormats[(int)challenge.Format]} · {RuleText(challenge.Open, challenge.Regulation, challenge.Fun)}", Theme.Body);
 			if (course == null) {
 				GUILayout.Label($"Can't accept: {problem}", Theme.PillWarn);
+			}
+			if (challenge.Regulation != null) {
+				RegulationResult mine = challenge.Regulation.Check(MyCarFacts());
+				GUILayout.Label($"{challenge.Regulation.Summary()}", Theme.Small);
+				GUILayout.Label(mine.Passes ? "Your car meets this regulation." : $"Your car doesn't meet it yet: {string.Join("; ", mine.Broken.Take(3))}", mine.Passes ? Theme.PillGood : Theme.PillWarn);
+				if (RegulationByCode(challenge.Regulation.Code) == null && GUILayout.Button("Save this regulation", Theme.Button)) {
+					SaveRegulation(challenge.Regulation.Copy(), $"Saved {challenge.Regulation.Name}.");
+				}
 			}
 			GUILayout.BeginHorizontal();
 			bool enabled = GUI.enabled;
@@ -484,7 +514,7 @@ namespace TRC.TuneLoader {
 			GUILayout.Label($"Battle vs {b.PeerName}", Theme.Heading);
 			string role = b.Format == BattleFormat.CatAndMouse ? $" · run {b.RunIndex + 1}: you {(b.IAmLeader ? "lead" : "chase")}" : $" · run {b.RunIndex + 1}";
 			string laps = b.Course.IsCircuit ? $" · {b.Laps} lap{(b.Laps == 1 ? "" : "s")}" : "";
-			GUILayout.Label($"{b.Course.Name}{laps} · {BattleFormats[(int)b.Format]} · {(b.Open ? "Open" : "TRC spec")}{(b.Active ? role : "")}", Theme.Small);
+			GUILayout.Label($"{b.Course.Name}{laps} · {BattleFormats[(int)b.Format]} · {RuleText(b.Open, b.Regulation, b.Fun)}{(b.Active ? role : "")}", Theme.Small);
 			GUILayout.Label(b.Message, b.Active ? Theme.Body : b.Winner == b.Me ? Theme.PillGood : b.Winner == b.Peer ? Theme.PillBad : Theme.PillNeutral);
 
 			foreach (BattleRun run in b.Runs) {
@@ -495,7 +525,10 @@ namespace TRC.TuneLoader {
 				GUILayout.Label($"Run {run.Index + 1}{led}: you {mine}, {b.PeerName} {theirs}. {run.Text}", Theme.Small);
 			}
 			if (!b.Active && b.Started) {
-				GUILayout.Label(b.Open ? "Open battle: it doesn't count." : b.Counted && b.Winner != 0 ? "TRC spec battle: both cars were spec the whole way." : "Doesn't count: a car wasn't TRC spec at a start or finish.", Theme.Small);
+				string kind = b.Regulation != null ? $"{b.Regulation.Name} battle" : "TRC spec battle";
+				string rule = b.Regulation != null ? "met the regulation" : "were spec";
+				GUILayout.Label(b.Fun ? "Just for fun: no ratings changed." : b.Open && b.Regulation == null ? "Open battle: it doesn't count."
+					: b.Counted && b.Winner != 0 ? $"{kind}: both cars {rule} the whole way." : $"Doesn't count: a car {(b.Regulation != null ? "didn't meet the regulation" : "wasn't TRC spec")} at a start or finish.", Theme.Small);
 			}
 			if (b.Active && b.RoundTrip > 0) {
 				GUILayout.Label($"Connection: {b.RoundTrip * 1000:0} ms there and back", Theme.Small);
@@ -538,6 +571,7 @@ namespace TRC.TuneLoader {
 			}
 
 			List<PlayerRow> rivals = players_.Where(p => !p.Player.IsLocal && p.Report != null).ToList();
+			List<PlayerRow> consoles = players_.Where(p => !p.Player.IsLocal && p.Player.IsConsole).ToList();
 			GUILayout.Label("Opponent (players here with TRC Tune Loader)", Theme.SectionLabel);
 			if (rivals.Count == 0) {
 				GUILayout.Label(string.IsNullOrEmpty(playersError_) ? "Nobody else in this room runs TRC Tune Loader yet." : playersError_, Theme.Small);
@@ -552,6 +586,20 @@ namespace TRC.TuneLoader {
 					pickedOpponent_ = rival.Player.SteamId;
 				}
 				GUI.enabled = enabled;
+			}
+			if (consoles.Count > 0) {
+				// Console players can't run the mod: a 1v1 with one is a two-car race this PC runs and times (bskftw, Nov 1).
+				GUILayout.Label("Console players here (your mod times them; the start shows on your headlights)", Theme.SectionLabel);
+				foreach (PlayerRow c in consoles) {
+					if (GUILayout.Button($"<b>{c.Player.Name}</b>  <color={Theme.MutedHex}>{c.Player.Platform} · {c.Player.CarName} · {c.SetupText}</color>",
+						pickedConsole_ == c.Player.Key ? Theme.RowSelected : Theme.Row)) {
+						pickedConsole_ = pickedConsole_ == c.Player.Key ? "" : c.Player.Key;
+						pickedOpponent_ = 0;
+					}
+				}
+			}
+			if (pickedOpponent_ != 0) {
+				pickedConsole_ = "";
 			}
 
 			List<Course> courses = courses_.ForMap(map_.Key).Where(c => c.Usable).ToList();
@@ -579,15 +627,26 @@ namespace TRC.TuneLoader {
 				GUILayout.Label("Laps", Theme.SectionLabel);
 				pickedBattleLaps_ = Choice(BattleLapChoices.Select(l => l.ToString(CultureInfo.InvariantCulture)).ToArray(), pickedBattleLaps_);
 			}
-			GUILayout.Label("Mode", Theme.SectionLabel);
-			pickedMode_ = Choice(BattleModes, pickedMode_);
-			GUILayout.Label(pickedMode_ == 0 ? "Both cars TRC spec, on the same tune set, with no flagged mods." : "Any setup. It doesn't count.", Theme.Small);
+			DrawRulePicker(ref pickedMode_, ref pickedRule_, ref pickedFun_);
 
 			PlayerRow opponent = rivals.FirstOrDefault(r => r.Player.SteamId == pickedOpponent_);
+			PlayerRow console = consoles.FirstOrDefault(c => c.Player.Key == pickedConsole_);
 			Course picked = courses.FirstOrDefault(c => c.Code == pickedCourse_);
 			GUILayout.BeginHorizontal();
 			bool ready = GUI.enabled;
 			bool highway = pickedFormat_ == (int)BattleFormat.Highway;
+			if (console != null) {
+				GUI.enabled = ready && picked != null && !highway && pickedFormat_ == (int)BattleFormat.Race;
+				if (GUILayout.Button($"Race {console.Player.Name}", Theme.ButtonPrimary)) {
+					RaceConsolePlayer(console, picked);
+				}
+				GUI.enabled = ready;
+				GUILayout.FlexibleSpace();
+				GUILayout.EndHorizontal();
+				GUILayout.Label("Against a console player it's a side-by-side race (they can't run the other formats without the mod). It opens as a two-car race in Races: line up and the host starts it.", Theme.Small);
+				GUILayout.EndVertical();
+				return;
+			}
 			GUI.enabled = ready && opponent != null && (picked != null || highway);
 			if (GUILayout.Button(opponent == null ? "Challenge" : $"Challenge {opponent.Player.Name}", Theme.ButtonPrimary)) {
 				ChallengePlayer(opponent, highway ? Course.FreeRoam(map_.Key) : picked);

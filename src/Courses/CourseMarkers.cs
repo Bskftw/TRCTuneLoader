@@ -37,6 +37,79 @@ namespace TRC.TuneLoader {
 
 		/// <summary>For <see cref="PathDots"/>: light blue.</summary>
 		internal static Material DotMaterial { get; private set; }
+
+		/// <summary>
+		/// 0.16: for ghosts, see-through when the game has a see-through material to copy: one of its transparent HDRP
+		/// Unlit or HDRP Lit materials (window glass and the like), whose shader is known to draw that way here. Else
+		/// the solid pale blue copy of the course markers' material. (Nov 1: switching an opaque material to
+		/// transparent by hand drew nothing at all in CarX, so that's not done.) <see cref="GhostLook"/> says which.
+		/// Looked for again each time the map changes (<see cref="ForgetGhostMaterial"/>), since a map brings its own materials.
+		/// </summary>
+		internal static Material GhostMaterial {
+			get {
+				if (ghostMaterial_ == null && !ghostTried_) {
+					ghostTried_ = true;
+					List<Material> loaded = Resources.FindObjectsOfTypeAll<Material>().Where(m => m != null && m.shader != null).ToList();
+					bool Transparent(Material m) => m.renderQueue >= 2900 && m.renderQueue <= 3500 &&
+						(!m.HasProperty("_SurfaceType") || m.GetFloat("_SurfaceType") >= 0.5f);
+					Material template = loaded.FirstOrDefault(m => m.shader.name == "HDRP/Unlit" && Transparent(m))
+						?? loaded.FirstOrDefault(m => m.shader.name == "HDRP/Lit" && Transparent(m) && !m.IsKeywordEnabled("_REFRACTION_PLANE") && !m.IsKeywordEnabled("_REFRACTION_SPHERE"));
+					if (template != null) {
+						ghostMaterial_ = Make(template, null, GhostColor);
+						foreach (string map in new[] { "_NormalMap", "_MaskMap", "_EmissiveColorMap", "_SpecularColorMap", "_DetailMap" }) {
+							if (ghostMaterial_.HasProperty(map)) {
+								ghostMaterial_.SetTexture(map, null);
+							}
+						}
+						if (ghostMaterial_.HasProperty("_EmissiveColor")) {
+							ghostMaterial_.SetColor("_EmissiveColor", new Color(0.15f, 0.25f, 0.35f));
+						}
+						GhostLook = $"see-through ({template.shader.name}, copied from the game's '{template.name}')";
+					} else if (MakeMaterials()) {
+						ghostMaterial_ = new Material(DotMaterial) { hideFlags = HideFlags.DontSave };
+						GhostLook = "solid (no see-through material in the game to copy here)";
+						var shaders = loaded.Where(m => m.renderQueue >= 2900).Select(m => m.shader.name).Distinct().Take(12);
+						GhostLook += $"; see-through shaders loaded: {string.Join(", ", shaders)}";
+					}
+					if (ghostMaterial_ != null) {
+						ghostMaterial_.name = "TRC ghost";
+						SetGhostOpacity(ghostOpacity_);
+					}
+				}
+				return ghostMaterial_;
+			}
+		}
+
+		/// <summary>How the ghost is drawn, for the log.</summary>
+		internal static string GhostLook { get; private set; } = "";
+
+		/// <summary>A new map: look for a see-through material again next time.</summary>
+		internal static void ForgetGhostMaterial() {
+			if (ghostMaterial_ != null) {
+				UnityEngine.Object.Destroy(ghostMaterial_);
+			}
+			ghostMaterial_ = null;
+			ghostTried_ = false;
+		}
+
+		private static readonly Color GhostColor = new Color(0.55f, 0.8f, 1f, 0.25f);
+		private static Material ghostMaterial_;
+		private static bool ghostTried_;
+		private static float ghostOpacity_ = 0.25f;
+
+		/// <summary>How see-through ghosts are: 0 invisible, 1 solid.</summary>
+		internal static void SetGhostOpacity(float opacity) {
+			ghostOpacity_ = Mathf.Clamp01(opacity);
+			if (ghostMaterial_ == null) {
+				return;
+			}
+			var color = new Color(GhostColor.r, GhostColor.g, GhostColor.b, ghostOpacity_);
+			foreach (string property in new[] { "_UnlitColor", "_BaseColor", "_Color" }) {
+				if (ghostMaterial_.HasProperty(property)) {
+					ghostMaterial_.SetColor(property, color);
+				}
+			}
+		}
 		private static bool materialsTried_;
 
 		private GameObject start_;

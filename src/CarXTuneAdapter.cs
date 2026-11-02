@@ -377,6 +377,9 @@ namespace TRC.TuneLoader {
 					var info = new RoomPlayer {
 						Name = BattleMessage.PlainName(string.IsNullOrEmpty(player.FilteredNickName) ? shared.Name ?? "" : player.FilteredNickName),
 						SteamId = SteamIdOf(shared.PlayerID),
+						Key = shared.PlayerID.ToString(),
+						Platform = PlatformName(shared.PlayerID.platform),
+						IsConsole = IsConsole(shared.PlayerID.platform),
 						IsLocal = player.IsLocal,
 						CarId = shared.CarId,
 						CarName = Db.GetById<PlayerCar>(shared.CarId)?.name ?? $"car {shared.CarId}",
@@ -489,6 +492,7 @@ namespace TRC.TuneLoader {
 				pose.Forward = body.forward;
 				pose.SpeedKmh = raceCar.carX != null ? Mathf.Abs(raceCar.carX.speedKMH) : 0f;
 				pose.CarId = CarIdOf(raceCar);
+				pose.Rotation = body.rotation;
 				return true;
 			} catch (Exception e) {
 				// Called every frame: log the first failure only.
@@ -947,6 +951,16 @@ namespace TRC.TuneLoader {
 			if (withPhysics) {
 				check.PhysicsLines = PhysicsLines(raceCar.carX, live);
 			}
+			try {
+				// The power and weight CarX's own garage shows (max power, and its "power density").
+				if (raceCar.carX != null) {
+					raceCar.carX.CalcMaxPowerMaxTorque(out float hp, out _, out _, out _);
+					check.Hp = hp;
+				}
+				check.Mass = live.weight.mass;
+			} catch (Exception) {
+				// Left unknown.
+			}
 			if (check.EngineSwap) {
 				check.Note = "a CarX engine swap brings its own engine and gearbox values";
 				return check;
@@ -1220,6 +1234,299 @@ namespace TRC.TuneLoader {
 		private static string ReferenceKey(CarInfo car) => $"{car.CarId}:{car.SlotId}";
 
 		private static int CarIdOf(RaceCar raceCar) => raceCar.metaInfo != null ? raceCar.metaInfo.id : raceCar.carId;
+
+		/// <summary>How many decimals a .NET number format shows ("N0" none, "N2" or "0.00" two), as Describe prints them.</summary>
+		private static int DecimalsOf(string format) {
+			if (string.IsNullOrEmpty(format)) {
+				return 0;
+			}
+			char kind = char.ToUpperInvariant(format[0]);
+			if ((kind == 'N' || kind == 'F') && format.Length > 1 && int.TryParse(format.Substring(1), NumberStyles.None, CultureInfo.InvariantCulture, out int digits)) {
+				return Math.Min(digits, 6);
+			}
+			int dot = format.IndexOf('.');
+			return dot < 0 ? 0 : Math.Min(6, format.Skip(dot + 1).TakeWhile(c => c == '0' || c == '#').Count());
+		}
+
+		private static string PlatformName(UserPlatform.Id platform) {
+			switch (platform) {
+				case UserPlatform.Id.PS4: return "PlayStation";
+				case UserPlatform.Id.Xbox: return "Xbox";
+				case UserPlatform.Id.Switch: return "Switch";
+				case UserPlatform.Id.EpicGames: return "Epic";
+				case UserPlatform.Id.MyGames: return "MY.GAMES";
+				case UserPlatform.Id.Steam: return "Steam";
+				default: return platform.ToString();
+			}
+		}
+
+		private static bool IsConsole(UserPlatform.Id platform) =>
+			platform == UserPlatform.Id.PS4 || platform == UserPlatform.Id.Xbox || platform == UserPlatform.Id.Switch;
+
+		public bool TryGetTuneNumbers(int slotId, IDictionary<string, float> values, out Dictionary<string, float> numbers, out Dictionary<string, int> decimals, out string error) {
+			numbers = new Dictionary<string, float>(StringComparer.Ordinal);
+			decimals = new Dictionary<string, int>(StringComparer.Ordinal);
+			try {
+				PlayerCarProfile slot = Db.GetById<PlayerCarProfile>(slotId);
+				if (slot == null) {
+					error = $"CarX doesn't know setup {slotId}.";
+					return false;
+				}
+				foreach (CarProfileController controller in slot.dynoInfo.controllers) {
+					if (controller?.changers == null || controller.changers.Count == 0 || !values.TryGetValue(controller.name, out float phase)) {
+						continue;
+					}
+					CarProfileChanger changer = controller.changers[0];
+					if (controller.isGroup || controller.isPercent) {
+						numbers[controller.name] = phase * 100f;
+						decimals[controller.name] = 0;
+					} else if (changer.parameter != null && changer.parameter.isBool) {
+						numbers[controller.name] = phase > 0.5f ? 1f : 0f;
+						decimals[controller.name] = 0;
+					} else {
+						numbers[controller.name] = changer.EvaluateValue(phase) * changer.multiplier;
+						decimals[controller.name] = DecimalsOf(changer.parameter?.format);
+					}
+				}
+				error = "";
+				return true;
+			} catch (Exception e) {
+				return Failed(e, out error);
+			}
+		}
+
+		private bool posesFailureLogged_;
+
+		public bool TryGetRoomCarPoses(List<RoomCarPose> poses) {
+			poses.Clear();
+			try {
+				NetworkGame game = NetworkController.InstanceGame;
+				if (!NetworkController.IsActive || game?.Players == null) {
+					return false;
+				}
+				foreach (NetworkPlayer player in game.Players) {
+					SmartfoxPlayerProperties shared = player?.PlayerProperties;
+					RaceCar car = player?.userCar;
+					if (shared == null || car == null || player.IsLocal) {
+						continue;
+					}
+					Transform body = car.carX != null ? car.carX.transform : car.transform;
+					poses.Add(new RoomCarPose {
+						Key = shared.PlayerID.ToString(),
+						Name = BattleMessage.PlainName(string.IsNullOrEmpty(player.FilteredNickName) ? shared.Name ?? "" : player.FilteredNickName),
+						Platform = PlatformName(shared.PlayerID.platform),
+						IsConsole = IsConsole(shared.PlayerID.platform),
+						Pose = new CarPose {
+							Position = body.position, Forward = body.forward, Rotation = body.rotation, CarId = shared.CarId,
+							SpeedKmh = car.carX != null ? Mathf.Abs(car.carX.speedKMH) : 0f,
+						},
+					});
+				}
+				return true;
+			} catch (Exception e) {
+				if (!posesFailureLogged_) {
+					posesFailureLogged_ = true;
+					TrcLog.Error(e);
+				}
+				return false;
+			}
+		}
+
+		// CarX's own headlight switch (what the light key calls): it lights the car and shares it with the room.
+		private static readonly MethodInfo UpdateHeadlightsMethod =
+			typeof(PlayerCarControl).GetMethod("UpdateHeadlights", BindingFlags.Instance | BindingFlags.NonPublic);
+
+		public bool HeadlightsOn {
+			get {
+				try {
+					return States.mainCurrent is BaseRaceModeState race && race.userCar != null && !race.userCar.isNetworkCar && race.userCar.headlightsEnabled;
+				} catch (Exception) {
+					return false;
+				}
+			}
+		}
+
+		public bool TrySetHeadlights(bool on, out string error) {
+			try {
+				if (!(States.mainCurrent is BaseRaceModeState race) || race.userCar == null || race.userCar.isNetworkCar) {
+					error = "Not driving.";
+					return false;
+				}
+				RaceCar car = race.userCar;
+				if (car.headlightsEnabled == on) {
+					error = "";
+					return true;
+				}
+				PlayerCarControl control = car.GetComponentInParent<PlayerCarControl>() ?? UnityEngine.Object.FindAnyObjectByType<PlayerCarControl>();
+				if (control != null && UpdateHeadlightsMethod != null) {
+					UpdateHeadlightsMethod.Invoke(control, new object[] { on, false });
+				} else {
+					car.SetHeadlightsEnabled(on, false, true);
+					NetworkController.InstanceGame?.systems?.Get<NetGameSyncCarLightsSystem>()?.SendToAll(car.headlightsEnabled);
+				}
+				error = car.headlightsEnabled == on ? "" : "CarX didn't switch the lights (is the engine running?).";
+				return error.Length == 0;
+			} catch (Exception e) {
+				return Failed(e, out error);
+			}
+		}
+
+		public GameObject BuildGhostBody(Material material) {
+			try {
+				if (!(States.mainCurrent is BaseRaceModeState race) || race.userCar == null || race.userCar.isNetworkCar || material == null) {
+					return null;
+				}
+				RaceCar car = race.userCar;
+				Transform body = car.carX != null ? car.carX.transform : car.transform;
+				var root = new GameObject("TRC ghost") { hideFlags = HideFlags.DontSave };
+				int count = 0;
+				var skipped = new List<string>();
+				foreach (MeshFilter filter in car.GetComponentsInChildren<MeshFilter>(false)) {
+					MeshRenderer renderer = filter.GetComponent<MeshRenderer>();
+					if (filter.sharedMesh == null || renderer == null || !renderer.enabled || count >= 300) {
+						continue;
+					}
+					if (NotCarBody(filter, renderer, body)) {
+						// A fake shadow or decal plane under the car (bskftw, testing: a square on the ground round the ghost).
+						skipped.Add(filter.name);
+						continue;
+					}
+					var part = new GameObject("part") { hideFlags = HideFlags.DontSave };
+					part.transform.SetParent(root.transform, false);
+					part.transform.localPosition = body.InverseTransformPoint(filter.transform.position);
+					part.transform.localRotation = Quaternion.Inverse(body.rotation) * filter.transform.rotation;
+					part.transform.localScale = filter.transform.lossyScale;
+					part.AddComponent<MeshFilter>().sharedMesh = filter.sharedMesh;
+					MeshRenderer copy = part.AddComponent<MeshRenderer>();
+					var materials = new Material[Math.Max(1, filter.sharedMesh.subMeshCount)];
+					for (int i = 0; i < materials.Length; i++) {
+						materials[i] = material;
+					}
+					copy.sharedMaterials = materials;
+					copy.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+					copy.receiveShadows = false;
+					count++;
+				}
+				if (count == 0) {
+					UnityEngine.Object.Destroy(root);
+					return null;
+				}
+				if (skipped.Count > 0) {
+					TrcLog.Info($"Ghost: left out {skipped.Count} flat or shadow part(s) of the car: {string.Join(", ", skipped.Take(8))}.");
+				}
+				return root;
+			} catch (Exception e) {
+				TrcLog.Error(e);
+				return null;
+			}
+		}
+
+		public string PlayerName {
+			get {
+				try {
+					return BattleMessage.PlainName(Overlay.instance?.player?.nickName ?? "");
+				} catch (Exception) {
+					return "";
+				}
+			}
+		}
+
+		private bool suspensionFailureLogged_;
+
+		/// <summary>
+		/// The four wheels as CarX's own D-BOX motion-seat support reads them (CarXDboxManager): each wheel's height under
+		/// its top mount against the spring's full length. Fully extended is the full length below the mount, fully
+		/// compressed is up at it.
+		/// </summary>
+		public bool TryGetSuspension(SuspensionFrame frame) {
+			try {
+				if (!(States.mainCurrent is BaseRaceModeState race) || race.userCar == null || race.userCar.isNetworkCar || race.userCar.carX == null) {
+					return false;
+				}
+				CarX.Car car = race.userCar.carX;
+				for (int i = 0; i < 4; i++) {
+					var index = (CarX.WheelIndex)i;
+					CarX.Wheel wheel = car.GetWheel(index);
+					Transform t = car.GetWheelTransform(index);
+					if (!wheel.isValid || t == null) {
+						return false;
+					}
+					float full = Mathf.Max(0.01f, wheel.maxSpringLen);
+					float below = wheel.topPos.y - t.localPosition.y;
+					frame.Wheels[i] = new WheelFrame {
+						Compression = Mathf.Clamp01(1f - below / full),
+						Load = wheel.vertForce.magnitude,
+						Contact = wheel.HasPatch(),
+						SlipAngle = wheel.sa,
+						SlipRatio = wheel.sr,
+					};
+				}
+				frame.Position = car.transform.position;
+				frame.Kmh = Mathf.Abs(car.speedKMH);
+				return true;
+			} catch (Exception e) {
+				if (!suspensionFailureLogged_) {
+					suspensionFailureLogged_ = true;
+					TrcLog.Error(e);
+				}
+				return false;
+			}
+		}
+
+		public bool TryGetSuspensionSetup(out CornerSetup[] corners) {
+			corners = null;
+			try {
+				if (!(States.mainCurrent is BaseRaceModeState race) || race.userCar == null || race.userCar.isNetworkCar || race.userCar.carX == null) {
+					return false;
+				}
+				CarX.Car car = race.userCar.carX;
+				CarX.CarDesc.Weight weight = race.userCar.GetDesc().carXDesc.weight;
+				float front = Mathf.Clamp01(weight.frontPercent / 100f);
+				float right = Mathf.Clamp01(weight.rightPercent / 100f);
+				corners = new CornerSetup[4];
+				for (int i = 0; i < 4; i++) {
+					CarX.Wheel wheel = car.GetWheel((CarX.WheelIndex)i);
+					float axle = i < 2 ? front : 1f - front;
+					float side = i % 2 == 1 ? right : 1f - right;
+					corners[i] = new CornerSetup {
+						Travel = wheel.maxSpringLen, Spring = wheel.springCoef,
+						SlowBump = wheel.slowBump, FastBump = wheel.fastBump, SlowRebound = wheel.slowRebound, FastRebound = wheel.fastRebound,
+						BumpSlowLimit = wheel.bumpSlowLimit, BumpFastLimit = wheel.bumpFastLimit,
+						ReboundSlowLimit = wheel.reboundSlowLimit, ReboundFastLimit = wheel.reboundFastLimit,
+						CornerMass = weight.mass * axle * side,
+					};
+				}
+				return true;
+			} catch (Exception e) {
+				TrcLog.Error(e);
+				return false;
+			}
+		}
+
+		/// <summary>
+		/// Not part of the car's body: a flat plane (no thicker than 3 cm, over a metre across, like the fake shadow under
+		/// a car), or something named or drawn like a shadow, decal or projector.
+		/// </summary>
+		private static bool NotCarBody(MeshFilter filter, MeshRenderer renderer, Transform body) {
+			string name = (filter.name + " " + filter.sharedMesh.name).ToLowerInvariant();
+			string[] words = { "shadow", "decal", "projector", "blob", "ground", "occlusion" };
+			if (words.Any(w => name.Contains(w))) {
+				return true;
+			}
+			foreach (Material material in renderer.sharedMaterials) {
+				string shader = material != null && material.shader != null ? material.shader.name.ToLowerInvariant() : "";
+				if (words.Any(w => shader.Contains(w)) || (material != null && material.name.ToLowerInvariant().Contains("shadow"))) {
+					return true;
+				}
+			}
+			Bounds bounds = filter.sharedMesh.bounds;
+			Vector3 size = Vector3.Scale(bounds.size, filter.transform.lossyScale);
+			// Measured along the car's up: thin and wide is a plane lying under it.
+			Vector3 up = body.InverseTransformDirection(filter.transform.up);
+			float thickness = Mathf.Abs(up.y) > 0.9f ? Mathf.Abs(size.y) : Mathf.Min(Mathf.Abs(size.x), Mathf.Min(Mathf.Abs(size.y), Mathf.Abs(size.z)));
+			float across = Mathf.Max(Mathf.Abs(size.x), Mathf.Abs(size.z));
+			return thickness < 0.03f && across > 1f;
+		}
 
 		private static ulong SteamIdOf(PlayerId id) {
 			if (id.platform != UserPlatform.Id.Steam) {

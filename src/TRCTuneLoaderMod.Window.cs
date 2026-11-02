@@ -17,8 +17,8 @@ namespace TRC.TuneLoader {
 		private static float WindowWidth => Mathf.Round(780f * (1f + (Theme.TextScale - 1f) * 0.6f));
 		private static float WindowHeight => Mathf.Round(640f * (1f + (Theme.TextScale - 1f) * 0.4f));
 		private const float StatusRefreshSeconds = 2.0f;
-		/// <summary>The main tabs. Since 0.15.0 Backups is part of My car, and Battles has its own tab (it was inside Time attack).</summary>
-		private static readonly string[] TabNames = { "Home", "My car", "Tune sets", "Players", "Mod check", "Time attack", "Battles", "Options", "About" };
+		/// <summary>The main tabs. Since 0.15.0 Backups is part of My car, and Battles has its own tab (it was inside Time attack). 0.16: Regulations and Suspension.</summary>
+		private static readonly string[] TabNames = { "Home", "My car", "Tune sets", "Players", "Mod check", "Time attack", "Battles", "Regulations", "Suspension", "Options", "About" };
 
 		// UGUI's EventSystem lives in UnityEngine.UI; found by name so the mod doesn't need that DLL.
 		private static readonly PropertyInfo CurrentEventSystem =
@@ -152,10 +152,15 @@ namespace TRC.TuneLoader {
 			} catch (Exception e) {
 				TrcLog.Error(e);
 			}
+			if (arranging_ && !windowOpen_) {
+				arranging_ = false;
+			}
+			// While arranging the screen, only the sample boxes show (the real ones would sit on top of them).
 			bool hud = !windowOpen_ && OnTrack && (showBadge_ || autoCheck_);
-			bool courseHud = CourseHudVisible || NoticeVisible;
+			bool courseHud = (CourseHudVisible || NoticeVisible) && !arranging_;
 			bool signs = TrapSignsVisible;
-			if (!windowOpen_ && !hud && !courseHud && !signs) {
+			bool suspension = SuspensionOverlayVisible && !arranging_;
+			if (!windowOpen_ && !hud && !courseHud && !signs && !suspension) {
 				return;
 			}
 
@@ -180,8 +185,15 @@ namespace TRC.TuneLoader {
 				if (hud) {
 					DrawHud(screenWidth, screenHeight);
 				}
+				if (suspension) {
+					DrawSuspensionOverlay(screenWidth, screenHeight);
+				}
 				DrawNotice(screenWidth, screenHeight);
 				if (!windowOpen_) {
+					return;
+				}
+				if (arranging_) {
+					DrawArranging(screenWidth, screenHeight);
 					return;
 				}
 
@@ -221,6 +233,8 @@ namespace TRC.TuneLoader {
 					case ModCheckTab: DrawModCheckTab(); break;
 					case CoursesTab: DrawCoursesTab(); break;
 					case BattlesTab: DrawBattlesTab(); break;
+					case RegulationsTab: DrawRegulationsTab(); break;
+					case SuspensionTab: DrawSuspensionTab(); break;
 					case OptionsTab: DrawOptionsTab(); break;
 					default: DrawAboutTab(); break;
 				}
@@ -252,24 +266,40 @@ namespace TRC.TuneLoader {
 		}
 
 		private void DrawTabs() {
-			GUILayout.BeginHorizontal(TabArea);
+			// One row when they fit, else two (11 tabs since 0.16, and a bigger text size makes them wider).
+			var labels = new string[TabNames.Length];
+			float total = 16f;
 			for (int i = 0; i < TabNames.Length; i++) {
-				string label = i == PlayersTab && players_.Count > 0 ? $"Players ({players_.Count})"
-					: i == BattlesTab && invites_.Count > 0 ? $"{TabNames[i]} ({invites_.Count})"
-					: i == HomeTab && whatsNewPending_ ? "Home (new)"
-					: TabNames[i];
-				if (GUILayout.Button(label, i == tab_ ? Theme.TabActive : Theme.Tab)) {
-					tab_ = i;
-					OnTabOpened(i);
-				}
-				if (i == tab_ && Event.current.type == EventType.Repaint) {
-					Rect tab = GUILayoutUtility.GetLastRect();
-					GUI.DrawTexture(new Rect(tab.x, tab.yMax - 2, tab.width, 2), Theme.AccentLine);
-				}
+				labels[i] = TabLabel(i);
+				total += Theme.Tab.CalcSize(new GUIContent(labels[i])).x + Theme.Tab.margin.horizontal;
 			}
-			GUILayout.FlexibleSpace();
-			GUILayout.EndHorizontal();
+			int perRow = total <= WindowWidth - 8f ? TabNames.Length : (TabNames.Length + 1) / 2;
+			for (int start = 0; start < TabNames.Length; start += perRow) {
+				GUILayout.BeginHorizontal(TabArea);
+				for (int i = start; i < TabNames.Length && i < start + perRow; i++) {
+					DrawTab(i, labels[i]);
+				}
+				GUILayout.FlexibleSpace();
+				GUILayout.EndHorizontal();
+			}
 			DividerLine();
+		}
+
+		private string TabLabel(int i) =>
+			i == PlayersTab && players_.Count > 0 ? $"Players ({players_.Count})"
+			: i == BattlesTab && invites_.Count > 0 ? $"{TabNames[i]} ({invites_.Count})"
+			: i == HomeTab && whatsNewPending_ ? "Home (new)"
+			: TabNames[i];
+
+		private void DrawTab(int i, string label) {
+			if (GUILayout.Button(label, i == tab_ ? Theme.TabActive : Theme.Tab)) {
+				tab_ = i;
+				OnTabOpened(i);
+			}
+			if (i == tab_ && Event.current.type == EventType.Repaint) {
+				Rect tab = GUILayoutUtility.GetLastRect();
+				GUI.DrawTexture(new Rect(tab.x, tab.yMax - 2, tab.width, 2), Theme.AccentLine);
+			}
 		}
 
 		private void OnTabOpened(int tab) {

@@ -12,7 +12,10 @@ A KSL mod for CarX Drift Racing Online, made for TRC (Touge Racing Community). B
 | --- | --- |
 | **Tunes & TRC spec** | Put the official TRC tunes on your car in one click, and check your car, and every car in the room, for anything that isn't TRC spec. Every tune has a code the TRC Discord bot uses to verify leaderboard runs. |
 | **Time attack & course builder** | Make your own courses on any map by driving them, or race the official ones. 3-2-1-GO or flying starts, circuits with laps, sectors in purple, green and amber, a live delta, and your best line drawn on the road. |
-| **Battles, races & tournaments** | Challenge anyone in the room: side by side, cat and mouse, or a Tokyo Xtreme Racer style highway battle. Races for up to 16 drivers with qualifying and grids, then points series, knockouts and heats. |
+| **Battles, races & tournaments** | Challenge anyone in the room: side by side, cat and mouse, or a Tokyo Xtreme Racer style highway battle. Races with qualifying and grids (no driver limit), then points series, knockouts and heats. Console players can race too, timed by a PC host. |
+| **Regulations** | For communities that tune their own cars to rules: a most power, tyre widths per weight class, no swaps, one setup. Make one, share it, and run battles, races and tournaments to it, with its own Elo. |
+| **Suspension** | Data logging like a real race team: how far each wheel compresses, the tyre's load, when it leaves the road, packing down over bumps, bottoming, and a damper speed histogram, with a live overlay. Off unless you turn it on. |
+| **Ghosts & shared runs** | Your best time attacks are kept as ghosts. Race a ghost, yours or one someone shared, with the live delta and sectors against it. Ghosts have no physics, so no slipstream. |
 | **Speed traps, room games & ratings** | Speed traps in free roam and on courses with a floating SPEED CHECK sign, speed trap races, fun games (cops and runners, tag, infected, king of the hill, highway cut-up and more), and an Elo rating, Safety Rating and license (still being tested). |
 
 ![The four parts of TRC Tune Loader](docs/images/overview.png)
@@ -122,7 +125,7 @@ Players see each other's reports only when they run the same report version (0.7
 
 The Time attack tab shows the map you're driving on, with four sections down the left: **Tracks**, **Speed traps**, **My times** and **Course builder**.
 
-**Tracks** lists every course on this map:
+**Tracks** lists every course on this map, one line each with its kind, length and your best: click one to open its buttons (Time attack, Record path, Ghosts, Edit...). On a map with lots of tracks, **Find a track** narrows the list as you type.
 
 | Kind of course | Where it comes from | Counts as TRC spec time |
 | --- | --- | --- |
@@ -159,19 +162,22 @@ A run is stopped if you take a shortcut, leave the course, reset the car, change
 **Speed traps** (the section, and while you drive):
 
 - Drive through a speed trap and your speed flashes on screen: **purple** for a new best on that trap, **green** close to it, **amber** slower. In a time attack, battle or race, the flash also shows your total so far. Free-roam traps always record, also after a reset or when you're out of a race.
-- Each trap has a floating **SPEED CHECK** sign over the road showing your last speed through it. A trap only shows a line on the road while you place or edit it, so you can see how wide it is.
+- Each trap has a floating **SPEED CHECK** sign over the road showing your last speed through it, or your fastest in this car (Options). A trap only shows a line on the road while you place or edit it, so you can see how wide it is.
 - Free-roam traps work all the time when they're on: in free roam, and during time attacks, battles and races too.
 - **New speed trap**: stop on the road where you want it, facing along the road, give it a name, pick a width (4 to 30 m) and press **Place it here**. The next one is named for you, so you can drive on and place the next.
 - **Grouped by track:** name them like "Tsubaki Speed Trap 1", "Tsubaki Speed Trap 2" and they fold under **Tsubaki**, the same way My times folds courses. **Edit** renames one, changes its width, moves it to where you are, or deletes it.
+- **Share...** sends the traps you placed on this map to everyone in the room or to one player: all of them, or one group. Traps others share with you show at the top of the section: **Add them** puts them with your own (a trap where you already have one is skipped), on any map. Both of you need 0.16.0 or newer.
 - A course's **Edit** can add traps along its road too: they flash during the run, and your trap speeds are saved with the time. Maps can come with their own.
 
 ### Battles
 
-The Battles tab has four sections down the left: **1v1 battles**, **Races & tournaments**, **Fun games** and **My ratings**. Battles and races need TRC Tune Loader 0.13.0 or newer on every player.
+The Battles tab has five sections down the left: **1v1 battles**, **Races**, **Tournaments**, **Fun games** and **My ratings**. Battles and races need TRC Tune Loader 0.13.0 or newer on every player (0.16.0 for regulations).
+
+Every battle, race and tournament has **rules**: **TRC spec** (every car on an official tune, same tune set, no flagged mods), a **regulation** (see Regulations below), or **Open** (any setup). Any of them can also be **just for fun**: nobody's Elo or Safety Rating changes.
 
 **1v1 battles** challenge another player in the same online room:
 
-1. Pick the opponent, a course on this map, the format, the laps (on a circuit) and the mode, and press **Challenge**. They see the challenge on screen and press the shortcut to answer it. A course of your own, or your recorded path, is sent to them with the challenge: a long course can take up to a minute to get there, so give it time. You see when it gets to them, and why if they can't accept it. If you both challenge each other at once to the same course, format and mode, it becomes one battle by itself. The room board on Home shows who's up for a battle.
+1. Pick the opponent, a course on this map, the format, the laps (on a circuit) and the rules, and press **Challenge**. They see the challenge on screen and press the shortcut to answer it. A course of your own, or your recorded path, is sent to them with the challenge: a long course can take up to a minute to get there, so give it time. You see when it gets to them, and why if they can't accept it. If you both challenge each other at once to the same course, format and mode, it becomes one battle by itself. The room board on Home shows who's up for a battle.
 2. Both drive to the start, or press **Teleport to my spot**. In a race you line up side by side (the challenger on the left); in cat and mouse the leader is just behind the line (within 5 m) and the chaser at least 5 m back.
 3. Stop in your spot. When both are ready, **3-2-1-GO** shows on both screens at the same moment (the mods measure the connection between you). Moving before GO calls the countdown off for both.
 4. Each mod times its own car from GO to the finish line, with the same rules as time attack, except that a **reset or going off the road doesn't end your run**: mess up, reset and keep going, and you can still win if the other driver messes up too. Only a shortcut, or a jump of over 100 m further along the course, stops it. When the other driver's run stops, you're told straight away: finish to win.
@@ -183,16 +189,27 @@ The Battles tab has four sections down the left: **1v1 battles**, **Races & tour
 | Highway battle (SP) | Tokyo Xtreme Racer style, anywhere on the map, no course. Drive alongside each other at speed for a rolling 3-2-1, then whoever's behind loses SP, faster the bigger the gap. A hit costs SP too. Empty SP, or 600 m behind, loses. |
 | Speed traps | For fun, like Most Wanted: side by side from a standing start, and the higher total of every speed trap on the course wins (every lap on a circuit), whoever gets to the finish first. You have to finish for yours to count. A course without traps of its own uses the free-roam traps along its road. Your total and theirs show live while you drive. It doesn't change your Elo, and both of you need 0.15.1 or newer. |
 
-A driver who doesn't finish loses the run to one who does. When it's over, **Run it back** challenges them again with the same course and format. After a battle against someone else's course, **Save this course** keeps it in your courses, to practise on. **TRC spec** battles need both cars TRC spec on the same tune set, with no flagged mods, at every start and finish; **Open** battles take any setup and don't count. After ten runs without a winner it's a draw. If the other driver leaves or stops answering for 10 seconds, the battle ends. Every battle is saved in `kino\mods\TRCTuneLoader\TimeAttack\battles.csv`.
+A driver who doesn't finish loses the run to one who does. When it's over, **Run it back** challenges them again with the same course and format. After a battle against someone else's course, **Save this course** keeps it in your courses, to practise on. **TRC spec** battles need both cars TRC spec on the same tune set, with no flagged mods, at every start and finish; **regulation** battles need both cars to meet the regulation at every start and finish; **Open** battles take any setup and don't count. After ten runs without a winner it's a draw. If the other driver leaves or stops answering for 10 seconds, the battle ends. Every battle is saved in `kino\mods\TRCTuneLoader\TimeAttack\battles.csv`.
 
-**Races & tournaments** are for up to 16 drivers:
+**Races** and **Tournaments** each have their own section, with no limit on drivers (custom servers can have bigger rooms; over 16, positions are sent less often):
 
-1. **Host a race:** pick what to race for (the fastest time, or speed traps), the course, the laps (circuits), the grid order (order joined, random, best time or qualifying), pole on the left or right, two-wide or line-up, the jump-start rule (+5 s or disqualified), TRC spec or Open, how many drivers, and optionally a tournament. Press **Open the race**.
+1. **Host a race** (or a tournament, in Tournaments): pick what to race for (the fastest time, or speed traps), the course, the laps (circuits), the grid order (order joined, random, best time or qualifying), pole on the left or right, two-wide or line-up, the jump-start rule, the rules, how many drivers, whether you drive in it or only run it, and when your headlights show the start. Press **Open the race**.
 2. Everyone in the room with the mod sees a pop-up and the race in **Open races**, and presses **Join**.
 3. The host can run **qualifying** first: everyone drives time attacks for a few minutes, and the best times set the grid.
 4. The host presses **Start race**. Drive to your grid spot or press **Teleport to my spot**, and stop. When everyone's lined up (or the host presses **Go now**), 3-2-1-GO lands on every screen at once.
-5. The timer shows your place (P3/12), the lap, and the gaps to the cars just ahead and behind. The race ends when everyone has finished, or when the host ends it (in 60 s or now). Resets and going off the road don't end your race (only a shortcut does); jump starts get the penalty the host picked.
+5. The timer shows your place (P3/12), the lap, and the gaps to the cars just ahead and behind. The race ends when everyone has finished, or when the host ends it (in 60 s or now). Resets and going off the road don't end your race (only a shortcut does).
 6. Everyone gets the same results, with times, gaps and best laps. The host's **Run it back** starts the same race again with the same drivers.
+
+| Jump start rule | What happens |
+| --- | --- |
+| +5 s penalty | 5 s is added to your time at the finish. |
+| Disqualified | You're out of the race. |
+| Recall the start | The start is stopped for everyone: all cars line up again and the countdown starts over. |
+| No penalty | Nothing. |
+
+Tournaments can also be set to **No penalties**: the host can't add time penalties.
+
+**Console players** (PlayStation, Xbox, Switch) can't run the mod, but a PC host can add them to a race from **Console players** in the lobby, or race one in **1v1 battles** (a two-car race). The host's mod times them from where their car is, and shows them the start on the host's **headlights**: on, then off for a moment at 3, 2 and 1, and off at GO. A jump start is caught from the host's view. They need CarX's synced headlights on (it's on by default), and the host has to stay in the room until it's over. A host can also **only run** a race without driving in it. Console players can race in points series and heats, but not knockouts or shootouts (those need the mod).
 
 | Tournament | How it works |
 | --- | --- |
@@ -235,13 +252,50 @@ A time counts as **TRC spec** when your car is TRC spec at the start and at the 
 
 **Delete** takes a time out: one run in Recent, a car's times on a course, or every time on a course, with a second click to be sure. The file from before is kept as `runs-before-delete.csv`, just in case. **TRC spec only** hides the times that don't count. A car on TRC Revival and the same car on V3.0 have separate times. Every finished run, and every lap of a circuit that counts, is saved in `kino\mods\TRCTuneLoader\TimeAttack\runs.csv`, with the tune set it used.
 
-**My ratings** (in Battles): an **Elo** rating for each kind of course (touge, highway, circuit), and a **Safety Rating** with a **license** (Rookie, D, C, B, A). Both move only in TRC spec battles and races that were really driven.
+**My ratings** (in Battles): an **Elo** rating for each kind of course (touge, highway, circuit), and a **Safety Rating** with a **license** (Rookie, D, C, B, A). Elo moves in TRC spec battles and races that were really driven; each regulation has an Elo of its own. The Safety Rating moves in TRC spec and regulation events. Events set to "just for fun" change nothing.
+
+### Suspension
+
+See what your suspension does instead of guessing from the feel. **Logging** is off by default (off, it costs nothing); turn it on in the Suspension tab, and pick whether it logs whenever you drive or only during runs. Your own car only: it only reads, and changes nothing.
+
+- **Overlay:** your car from above. Each tyre fills up as it compresses: green, amber when it gets deep, red at the bump stops, grey when it's off the road. Its travel, load and damper speed (bump or rebound) sit beside it, with a thin load bar under it and the last 4 seconds of all four wheels traced underneath. Show or hide it, and drag it anywhere while the window is open.
+- **Last run** and **Session**: for each wheel, the travel it used, how often it bottomed out, packed down or left the road (and whether that was right after a compression), load spikes, and a **damper speed histogram** (rebound on the left, bump on the right, with CarX's slow/fast damping limits marked). Then **what it points to**, in plain words: for example "packed down through a run of bumps: try less rebound", or "thrown off the road after compressions: try less fast bump". The list underneath says where each thing happened on the course.
+- **Compare against this later** keeps a report as the baseline: change the tune, drive the same road, and the next report shows the difference.
+- **Export CSV** saves every frame (each wheel's compression, damper speed, load, contact and slip) to `kino\mods\TRCTuneLoader\Suspension`, for a spreadsheet or a telemetry tool.
+- **Setup sheet**: from your tune, each corner's spring frequency and damping ratios (slow and fast, bump and rebound), and the weight on it.
+
+### Ghosts and shared runs
+
+Every run you drive is recorded as a **ghost**: where your car was, ten times a second. Options picks what's kept (in `kino\mods\TRCTuneLoader\Ghosts`): **your 3 best** time attacks on each car and course (the default), **every run** you finish (time attacks, battles and races), or **nothing** (no recording at all; ghosts you have still play).
+
+- **Ghosts** on a track's row in Tracks lists its ghosts: yours, your last run (any time attack, battle or race, to **Save**), and runs others shared with you.
+- **Race it** starts a time attack with the ghost on the road. The live delta and your sectors compare with the ghost's run, and the result shows how far ahead or behind you finished.
+- A ghost is only something to look at: a see-through copy of your car body with **no collider and no physics** (Options sets how see-through: faint, light, medium or solid). It can't push, tow or slipstream you, so a time driven with a ghost still counts. It's noted in your times anyway (`runs.csv`, "ghost").
+- **Name** gives a ghost your own name (and saves it, if it wasn't). **Save** keeps one that wouldn't be kept by itself.
+- **Share...** sends a run (its time, sectors and ghost) to everyone in the room or one player. They need 0.16.0 or newer.
+
+### Regulations
+
+For communities that don't run TRC tunes but keep things balanced with rules, like a tournament where everyone tunes their own car but has to stay under 600 hp, on tyres no wider than 300, with no drivetrain swaps.
+
+- **Make or edit** a regulation. Everything to do with tuning can be a rule:
+  - which setups are allowed (Stock, Turbo, Race, Drift, Ultimate, Ultimate Pro)
+  - which cars
+  - the most power, the least and most weight, and power to weight (the least kg per hp)
+  - CarX engine swaps, CarX drivetrain changes, KINO engine, gearbox or drivetrain swaps, KINO weight reduction and distribution, KINO air suspension, and widebody kits: allowed or not
+  - a least and a most for any tune value, in the numbers CarX's tuning screen shows (rear tyre width at most 285, front camber between -6 and 0...)
+  - tyres by weight class: up to 1200 kg tyres at most 265 wide, up to 1400 kg 285, and so on
+- Values are checked **the way CarX shows them**, since nobody hits 600 hp on the dot: a value passes when it rounds to the limit. 600.4 hp counts as 600; a tyre stretch of 10.3 shows as 10, so it counts as 10 (10.6 shows as 11 and doesn't).
+- **Check my car** shows what your car breaks, with your numbers next to each rule, and how everyone else in the room does.
+- **Share...** sends it to the room or one player. **Copy for Discord** copies one line that anyone with the mod imports with **Paste from clipboard**.
+- Pick it as the **rules** of a 1v1 battle, a race or a tournament. Each driver's mod checks their own car before the start, and a car that doesn't meet it can't line up.
+- Each regulation has a code (REG-XXXX-XXXX) worked out from its rules, so renaming it keeps the same regulation and the same Elo.
 
 - The Safety Rating goes up with clean kilometres and down with hard contact, hard hits and resets: at most 0.30 in one battle or race.
 - Light touches in close racing, time attacks, leaving the road and jump starts don't count.
 - Keep it at 3.00 or more over enough events to move up a license; below 1.00 you go down one.
 
-**Ratings are still being tested.** They're not official yet, and Elo and Safety Rating will both be reset before they count. 0.15.0 reset the Safety Rating and license once, for the new rules. Other TRC Tune Loader players see your license and Elo. For now they're kept on your PC; they'll be checked and shared once the TRC server is up.
+**Ratings are still being tested.** They're not official yet, and Elo and Safety Rating will both be reset before they count. 0.15.0 reset the Safety Rating and license once, for the new rules. Other TRC Tune Loader players see your license and Elo. For now they're kept on your PC, in a sealed file tied to your Steam account: editing it, or using someone else's, makes your ratings start again from the beginning. They'll be checked and shared once the TRC server is up.
 
 **Course builder** makes your own practice courses on any map, one step at a time. First pick **Point to point** or **Circuit**:
 
@@ -257,6 +311,9 @@ Your courses are saved in `kino\mods\TRCTuneLoader\Courses`. In Tracks, **Edit**
 - **Shortcut**: press **Change shortcut**, then the keys you want (for example Ctrl + T or F8). Ctrl, Shift and Alt can be combined with any key. **Reset** goes back to Ctrl + T. The shortcut doesn't fire while you're typing in CarX's chat.
 - **Restart key** (Ctrl + R): during a time attack, sends your car back to the start line, ready to go again. **Change restart key** picks another.
 - **Best line**: speed colours, one colour, or off.
+- **Ghosts**: keep your 3 best, keep every run, or don't record; and how see-through they are.
+- **Speed trap signs**: your last speed through each trap, or your fastest.
+- **Screen layout**: **Arrange the screen** shows every box the mod draws over the track at once (the timer, the speed trap flash, pop-up notices, the TRC spec badge and the suspension overlay) so you can drag each where you want it. **Put everything back** resets them.
 - **Share my tune values** (off by default): lets other TRC Tune Loader users see your tune's real values on their Players page. Off, they only see what you changed.
 - **Wheel and controller buttons**: **Pick a button**, then press it on your wheel or controller. The **TRC action** button does what fits right now: accepts a challenge, joins a race that just opened, runs the last battle or race back, or restarts your time attack. **Open the window** opens and closes this window. Pick buttons CarX doesn't use: CarX still sees every press.
 - **Report a bug**: the same as on Home.
@@ -321,4 +378,6 @@ The mod writes what it does to its own log, `kino\mods\TRCTuneLoader\TRCTuneLoad
 | Home, room board, share a course, wheel buttons, Run it back, Report a bug, new tour | 0.14 | Partly: room board and Report a bug |
 | Tracks / Speed traps / Battles layout, named speed traps with signs, speed trap races, colours and text size, delete times, reverse on save, new Safety Rating | 0.15 | Partly (Oct 29, with a second player): colours, speed trap races and the weight check were tried, and fixed in 0.15.1 |
 | Speed trap battles, live trap totals, races that keep going after resets, KINO weight check, second text colour | 0.15.1 | Not yet |
+| Sharing speed traps, sealed ratings file, map paths and grids from map objects | 0.16 | Not yet |
+| Regulations, just-for-fun events, console players and the headlight start, host-only races, recalled starts, no driver limit, ghosts and shared runs, suspension logging | 0.16 | Not yet |
 

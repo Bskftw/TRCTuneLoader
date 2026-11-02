@@ -67,6 +67,13 @@ namespace TRC.TuneLoader {
 		/// </summary>
 		public const byte TrapProtocol = 6;
 
+		/// <summary>
+		/// A challenge run to a regulation (0.16) goes out as protocol 7, so older copies (which can't check one) never
+		/// see it. The fun flag and the regulation ride at the end of a challenge; the car's rule and Elo at the end of a heartbeat.
+		/// </summary>
+		public const byte RuleProtocol = 7;
+		private const int MaxRegulationText = 12000;
+
 		/// <summary>The most traps a speed trap challenge carries.</summary>
 		public const int MaxTraps = 64;
 
@@ -93,6 +100,10 @@ namespace TRC.TuneLoader {
 
 		/// <summary>A speed trap battle's traps (the course's own, or the free-roam ones along it), in driving order.</summary>
 		public List<CourseGate> Traps = new List<CourseGate>();
+
+		/// <summary>0.16: just for fun (no ratings change), and the regulation it's run to (null: TRC spec or Open).</summary>
+		public bool Fun;
+		public Regulation Regulation;
 
 		// Answer, Abort and Leave
 		public bool Accept;
@@ -126,6 +137,11 @@ namespace TRC.TuneLoader {
 		/// <summary>The sender's trap total so far in this run (speed trap battles), for the live standings.</summary>
 		public float TrapTotal;
 
+		/// <summary>0.16: the sender's car meets the battle's regulation, and their Elo for this battle's ratings.</summary>
+		public bool HasRuleOk;
+		public bool RuleOk;
+		public float Elo;
+
 		// Countdown and Abort
 		public int CountdownId;
 		public double GoHostTime;
@@ -133,7 +149,7 @@ namespace TRC.TuneLoader {
 		public byte[] Encode() {
 			using (var memory = new MemoryStream())
 			using (var writer = new BinaryWriter(memory, Encoding.UTF8)) {
-				writer.Write(Kind == BattleKind.Challenge && Format == BattleFormat.SpeedTraps ? TrapProtocol : Protocol);
+				writer.Write(Kind == BattleKind.Challenge && Regulation != null ? RuleProtocol : Kind == BattleKind.Challenge && Format == BattleFormat.SpeedTraps ? TrapProtocol : Protocol);
 				writer.Write((byte)Kind);
 				writer.Write(BattleId);
 				writer.Write(From);
@@ -158,6 +174,10 @@ namespace TRC.TuneLoader {
 								WriteGate(writer, Traps[i]);
 							}
 						}
+						// 0.16: read only when there.
+						writer.Write(Fun);
+						string regulation = Regulation?.ToText() ?? "";
+						writer.Write(regulation.Length <= MaxRegulationText ? regulation : "");
 						break;
 					case BattleKind.Answer:
 					case BattleKind.Leave:
@@ -195,6 +215,9 @@ namespace TRC.TuneLoader {
 						// 0.15.1: read only when there.
 						writer.Write(TrapTotal);
 						writer.Write(Result?.TrapTotal ?? 0f);
+						// 0.16: read only when there.
+						writer.Write(RuleOk);
+						writer.Write(Elo);
 						break;
 					case BattleKind.Countdown:
 						writer.Write(CountdownId);
@@ -216,7 +239,7 @@ namespace TRC.TuneLoader {
 			try {
 				using (var reader = new BinaryReader(new MemoryStream(data), Encoding.UTF8)) {
 					byte protocol = reader.ReadByte();
-					if (protocol != Protocol && protocol != TrapProtocol) {
+					if (protocol != Protocol && protocol != TrapProtocol && protocol != RuleProtocol) {
 						return null;
 					}
 					var message = new BattleMessage {
@@ -244,6 +267,14 @@ namespace TRC.TuneLoader {
 								}
 							}
 							if (message.Format > BattleFormat.SpeedTraps) {
+								return null;
+							}
+							if (reader.BaseStream.Position < reader.BaseStream.Length) {
+								message.Fun = reader.ReadBoolean();
+								string regulation = reader.ReadString();
+								message.Regulation = regulation.Length > 0 && regulation.Length <= MaxRegulationText ? Regulation.Parse(regulation) : null;
+							}
+							if (protocol == RuleProtocol && message.Regulation == null) {
 								return null;
 							}
 							break;
@@ -284,6 +315,11 @@ namespace TRC.TuneLoader {
 								if (message.Result != null) {
 									message.Result.TrapTotal = resultTraps;
 								}
+							}
+							if (reader.BaseStream.Length - reader.BaseStream.Position >= 5) {
+								message.HasRuleOk = true;
+								message.RuleOk = reader.ReadBoolean();
+								message.Elo = reader.ReadSingle();
 							}
 							break;
 						case BattleKind.Countdown:

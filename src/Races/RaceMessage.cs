@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 using UnityEngine;
 
@@ -41,7 +42,12 @@ namespace TRC.TuneLoader {
 
 	/// <summary>The race's rules, picked by the host.</summary>
 	public sealed class RaceSettings {
-		public const int MaxDrivers = 16;
+		/// <summary>
+		/// No real limit since 0.16 (bskftw: Jeefrect's custom servers take more than 16 players). Past
+		/// <see cref="ManyDrivers"/>, beats go out less often. 0.15 copies show at most 16 of the list.
+		/// </summary>
+		public const int MaxDrivers = 100;
+		public const int ManyDrivers = 16;
 
 		public string Name = "";
 		public int MaxPlayers = MaxDrivers;
@@ -70,6 +76,25 @@ namespace TRC.TuneLoader {
 		public int Cops = 1;
 		public int HillSeconds = 60;
 		public int KeepUpMetres = 250;
+
+		// 0.16, sent at the end of the lobby message (0.15 copies stop reading before it).
+
+		/// <summary>Just for fun: no ratings change, whatever the rules (bskftw: TRC spec too).</summary>
+		public bool Fun;
+
+		/// <summary>Run to a regulation (its whole text travels with the lobby), or null. <see cref="Open"/> is set too, so 0.15 copies don't take it for TRC spec.</summary>
+		public Regulation Regulation;
+
+		/// <summary>The host drives in it; false: the host only runs it (console players' races, a race director).</summary>
+		public bool HostDrives = true;
+
+		/// <summary>The host's headlights show the start (3, 2, 1 flashes, off at GO), for console players.</summary>
+		public bool LightStart;
+
+		/// <summary>Tournaments: no time penalties from the host (jump starts follow <see cref="Jump"/>).</summary>
+		public bool NoPenalties;
+
+		public bool IsTrcSpec => !Open && Regulation == null;
 
 		public void Write(BinaryWriter w) {
 			w.Write(RaceMessage.Clip(Name));
@@ -115,7 +140,11 @@ namespace TRC.TuneLoader {
 			KeepUpMetres = r.ReadUInt16(),
 		};
 
-		public RaceSettings Copy() => (RaceSettings)MemberwiseClone();
+		public RaceSettings Copy() {
+			var copy = (RaceSettings)MemberwiseClone();
+			copy.Regulation = Regulation?.Copy();
+			return copy;
+		}
 	}
 
 	/// <summary>One driver in the lobby, as the host lists them.</summary>
@@ -136,6 +165,10 @@ namespace TRC.TuneLoader {
 		public RoomRole Role;
 		public int Points;
 		public bool Out;
+
+		/// <summary>0.16: a console player the host added and times from where CarX shows their car ("PS4", "Xbox"...).</summary>
+		public bool Console;
+		public string Platform = "";
 	}
 
 	/// <summary>A driver's place in a race's results.</summary>
@@ -164,8 +197,11 @@ namespace TRC.TuneLoader {
 	/// to the whole room, says who it's from, and is ignored by mods that aren't in that race.
 	/// </summary>
 	public sealed class RaceMessage {
-		/// <summary>2 since 0.13.0: positions, incidents, speed traps and room games.</summary>
+		/// <summary>2 since 0.13.0: positions, incidents, speed traps and room games. 0.16 adds to the ends of messages only.</summary>
 		public const byte Protocol = 2;
+
+		/// <summary>A regulation's text in the lobby, at most.</summary>
+		private const int MaxRegulationText = 12000;
 
 		/// <summary>Speed traps sent with a race's course, at most.</summary>
 		public const int MaxTraps = 64;
@@ -235,6 +271,16 @@ namespace TRC.TuneLoader {
 		/// <summary>Room games: this driver's own points (cut-up), or seconds (king of the hill) as their mod counts them.</summary>
 		public float Score;
 
+		// Beat, 0.16 (at the end): the car meets the race's regulation; the driver's Elo for this race's ratings; a jump start in this countdown.
+		public bool HasRuleOk;
+		public bool RuleOk;
+		public float Elo;
+		public int JumpedCountdown;
+
+		// Lobby and HostBeat, 0.16 (at the end): how many times the start was recalled, and who jumped.
+		public int Recalls;
+		public string RecallBy = "";
+
 		// HostBeat (room games)
 		/// <summary>King of the hill: where the hill is, and how far it reaches.</summary>
 		public Vector3 Zone;
@@ -292,6 +338,21 @@ namespace TRC.TuneLoader {
 						w.Write((byte)MatchFormat);
 						w.Write((byte)MatchGame);
 						w.Write((byte)Math.Max(1, Math.Min(255, MatchLaps)));
+						// 0.16: read only when there.
+						w.Write(Settings.Fun);
+						w.Write(Settings.HostDrives);
+						w.Write(Settings.LightStart);
+						w.Write(Settings.NoPenalties);
+						string regulation = Settings.Regulation?.ToText() ?? "";
+						w.Write(regulation.Length <= MaxRegulationText ? regulation : "");
+						var consoles = Entries.Take(RaceSettings.MaxDrivers).Where(e => e.Console).ToList();
+						w.Write((byte)consoles.Count);
+						foreach (LobbyEntry e in consoles) {
+							w.Write(e.Id);
+							w.Write(Clip(e.Platform));
+						}
+						w.Write(Recalls);
+						w.Write(Clip(BattleMessage.PlainName(RecallBy)));
 						break;
 					case RaceKind.Join:
 						w.Write(Clip(BattleMessage.PlainName(Name)));
@@ -357,6 +418,10 @@ namespace TRC.TuneLoader {
 						w.Write((ushort)Mathf.Clamp(Incidents, 0, 65535));
 						w.Write(Clip(LastIncident));
 						w.Write(Score);
+						// 0.16: read only when there.
+						w.Write(RuleOk);
+						w.Write(Elo);
+						w.Write(JumpedCountdown);
 						break;
 					case RaceKind.HostBeat:
 						w.Write(SentAt);
@@ -375,6 +440,8 @@ namespace TRC.TuneLoader {
 						w.Write(Zone.y);
 						w.Write(Zone.z);
 						w.Write(ZoneRadius);
+						// 0.16: read only when there.
+						w.Write(Recalls);
 						break;
 					case RaceKind.Results:
 						w.Write((byte)Math.Min(Rows.Count, RaceSettings.MaxDrivers));
@@ -444,6 +511,26 @@ namespace TRC.TuneLoader {
 							m.MatchFormat = (BattleFormat)r.ReadByte();
 							m.MatchGame = r.ReadByte();
 							m.MatchLaps = Math.Max(1, (int)r.ReadByte());
+							if (r.BaseStream.Position < r.BaseStream.Length) {
+								m.Settings.Fun = r.ReadBoolean();
+								m.Settings.HostDrives = r.ReadBoolean();
+								m.Settings.LightStart = r.ReadBoolean();
+								m.Settings.NoPenalties = r.ReadBoolean();
+								string regulation = r.ReadString();
+								m.Settings.Regulation = regulation.Length > 0 && regulation.Length <= MaxRegulationText ? Regulation.Parse(regulation) : null;
+								int consoles = r.ReadByte();
+								for (int i = 0; i < consoles; i++) {
+									ulong id = r.ReadUInt64();
+									string platform = Clip(r.ReadString());
+									LobbyEntry e = m.Entries.FirstOrDefault(x => x.Id == id);
+									if (e != null) {
+										e.Console = true;
+										e.Platform = platform;
+									}
+								}
+								m.Recalls = r.ReadInt32();
+								m.RecallBy = Clip(r.ReadString());
+							}
 							break;
 						}
 						case RaceKind.Join:
@@ -510,6 +597,12 @@ namespace TRC.TuneLoader {
 							m.Incidents = r.ReadUInt16();
 							m.LastIncident = Clip(r.ReadString());
 							m.Score = r.ReadSingle();
+							if (r.BaseStream.Position < r.BaseStream.Length) {
+								m.HasRuleOk = true;
+								m.RuleOk = r.ReadBoolean();
+								m.Elo = r.ReadSingle();
+								m.JumpedCountdown = r.ReadInt32();
+							}
 							break;
 						case RaceKind.HostBeat: {
 							m.SentAt = r.ReadDouble();
@@ -524,6 +617,9 @@ namespace TRC.TuneLoader {
 							}
 							m.Zone = new Vector3(r.ReadSingle(), r.ReadSingle(), r.ReadSingle());
 							m.ZoneRadius = r.ReadSingle();
+							if (r.BaseStream.Position < r.BaseStream.Length) {
+								m.Recalls = r.ReadInt32();
+							}
 							break;
 						}
 						case RaceKind.Results: {

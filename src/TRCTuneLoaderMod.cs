@@ -23,7 +23,7 @@ namespace TRC.TuneLoader {
 	/// </summary>
 	[KSLMeta("TRCTuneLoader", Version, "bskftw")]
 	public partial class TRCTuneLoaderMod : BaseMod {
-		public const string Version = "0.15.1";
+		public const string Version = "0.16.0";
 
 		private const string BackupsFolderName = "Backups";
 		private const float CarRefreshSeconds = 1.0f;
@@ -136,6 +136,7 @@ namespace TRC.TuneLoader {
 
 			try {
 				SetupCourses();
+				LoadRegulations();
 				SetupBattles();
 				SetupRatings();
 				SetupRaces();
@@ -145,10 +146,14 @@ namespace TRC.TuneLoader {
 			SetupWindow();
 			try {
 				SetupHome();
+				StartDevTools();
 			} catch (Exception e) {
 				TrcLog.Error(e);
 			}
 		}
+
+		/// <summary>Empty in the player mod: only a private build on bskftw's PC fills it in (map load timing).</summary>
+		partial void StartDevTools();
 
 		private void Update() {
 			sync_?.Tick();
@@ -208,6 +213,22 @@ namespace TRC.TuneLoader {
 				}
 			}
 			try {
+				UpdateSuspension();
+			} catch (Exception e) {
+				liveFrame_ = null;
+				if (courseErrors_++ < 6) {
+					TrcLog.Error(e);
+				}
+			}
+			try {
+				UpdateGhosts();
+			} catch (Exception e) {
+				StopGhost();
+				if (courseErrors_++ < 6) {
+					TrcLog.Error(e);
+				}
+			}
+			try {
 				UpdateControl();
 			} catch (Exception e) {
 				if (courseErrors_++ < 6) {
@@ -217,6 +238,7 @@ namespace TRC.TuneLoader {
 			try {
 				UpdateHome();
 				UpdateLook();
+				LoadRatings();
 			} catch (Exception e) {
 				if (courseErrors_++ < 6) {
 					TrcLog.Error(e);
@@ -226,6 +248,7 @@ namespace TRC.TuneLoader {
 
 		private void OnDestroy() {
 			CloseWindow();
+			StopGhost();
 			CleanUpCourses();
 		}
 

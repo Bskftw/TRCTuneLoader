@@ -32,7 +32,29 @@ namespace TRC.TuneLoader {
 
 		private void SetupRatings() {
 			try {
-				ratings_ = RatingBook.Load(TimesFolder);
+				RatingSeal.LoadEmbeddedKey();
+				if (!RatingSeal.HasPrivateKey) {
+					TrcLog.Warning("This build has no private ratings key (ratings.key), so ratings files use the development key.");
+				}
+			} catch (Exception e) {
+				TrcLog.Error(e);
+			}
+			LoadRatings();
+		}
+
+		/// <summary>
+		/// The ratings file is tied to the SteamID, so it's only read once KSL knows it: a file read with none would
+		/// look like another player's and start again. Until then <see cref="ratings_"/> stays null (nothing is rated).
+		/// </summary>
+		private void LoadRatings() {
+			if (ratings_ != null || MySteamId == 0) {
+				return;
+			}
+			try {
+				ratings_ = RatingBook.Load(TimesFolder, MySteamId);
+				if (ratings_.WasChanged) {
+					TrcLog.Warning($"The ratings file was changed outside the mod (or was another player's), so the ratings started again. The changed file is kept as {RatingBook.ChangedFileFor(MySteamId)}.");
+				}
 			} catch (Exception e) {
 				ratings_ = new RatingBook();
 				TrcLog.Error(e);
@@ -40,8 +62,11 @@ namespace TRC.TuneLoader {
 		}
 
 		private void SaveRatings() {
+			if (ratings_ == null || MySteamId == 0) {
+				return;
+			}
 			try {
-				ratings_.Save(TimesFolder);
+				ratings_.Save(TimesFolder, MySteamId);
 				sync_?.SendReportNow();
 			} catch (Exception e) {
 				TrcLog.Error(e);
@@ -147,19 +172,32 @@ namespace TRC.TuneLoader {
 			runKm_ = 0;
 		}
 
-		/// <summary>A battle ended: Elo when it counted (TRC spec), and the Safety Rating when it was a TRC spec battle that was really driven.</summary>
+		/// <summary>
+		/// A battle ended: Elo when it counted (TRC spec, or a regulation's own Elo), and the Safety Rating when it was
+		/// really driven. A "just for fun" battle changes nothing.
+		/// </summary>
 		private void RateBattle(BattleSession b) {
 			if (ratings_ == null || !b.Started || ratedBattle_ == b.Id) {
 				return;
 			}
 			ratedBattle_ = b.Id;
+			if (b.Fun) {
+				battlePoints_ = 0;
+				battleKm_ = 0;
+				return;
+			}
 			CourseKind kind = b.IsHighway ? CourseKind.Highway : b.Course.Kind;
-			bool driven = !b.Open && b.State == BattleSession.Phase.Finished && b.Runs.Count > 0;
+			string rule = b.Regulation?.Code ?? "";
+			bool driven = (b.IsTrcSpec || b.Regulation != null) && b.State == BattleSession.Phase.Finished && b.Runs.Count > 0;
 			if (b.Counted && driven && !b.IsSpeedTraps) {
 				// Speed trap battles are for fun: no Elo.
-				double opponent = sync_?.ReportFrom(b.Peer) is TrcSync.Report r && r.HasRatings ? r.EloFor(kind) : RatingBook.StartElo;
+				if (b.Regulation != null) {
+					ratings_.RuleNames[rule] = b.Regulation.Name;
+				}
+				double opponent = b.PeerElo > 0 ? b.PeerElo
+					: rule.Length == 0 && sync_?.ReportFrom(b.Peer) is TrcSync.Report r && r.HasRatings ? r.EloFor(kind) : RatingBook.StartElo;
 				double score = b.Winner == b.Me ? 1 : b.Winner == 0 ? 0.5 : 0;
-				ratings_.Battle(kind, opponent, score, b.PeerName, DateTime.Now);
+				ratings_.Battle(kind, opponent, score, b.PeerName, DateTime.Now, rule);
 			}
 			if (driven) {
 				int points = battlePoints_ + (b.Run?.Resets ?? 0) * RatingBook.ResetPoints;
@@ -181,12 +219,24 @@ namespace TRC.TuneLoader {
 				return;
 			}
 			CourseKind kind = race_.Course.Kind;
-			if (!race_.Settings.Open && race_.Results.Count >= 2) {
-				var others = race_.Results.Where(r => r.Id != MySteamId)
-					.Select(r => (sync_?.ReportFrom(r.Id) is TrcSync.Report rep && rep.HasRatings ? (double)rep.EloFor(kind) : RatingBook.StartElo, r.Position)).ToList();
-				ratings_.Race(kind, mine.Position, others, DateTime.Now);
+			RaceSettings settings = race_.Settings;
+			bool counts = !settings.Fun && (settings.IsTrcSpec || settings.Regulation != null) && race_.MyDriver?.Racer == true;
+			string rule = settings.Regulation?.Code ?? "";
+			if (counts && race_.Results.Count >= 2) {
+				if (settings.Regulation != null) {
+					ratings_.RuleNames[rule] = settings.Regulation.Name;
+				}
+				double EloOf(RaceResultRow r) {
+					RaceDriver d = race_.Drivers.FirstOrDefault(x => x.Id == r.Id);
+					if (d != null && d.Elo > 0) {
+						return d.Elo;
+					}
+					return rule.Length == 0 && sync_?.ReportFrom(r.Id) is TrcSync.Report rep && rep.HasRatings ? rep.EloFor(kind) : RatingBook.StartElo;
+				}
+				var others = race_.Results.Where(r => r.Id != MySteamId).Select(r => (EloOf(r), r.Position)).ToList();
+				ratings_.Race(kind, mine.Position, others, DateTime.Now, rule);
 			}
-			if (!race_.Settings.Open) {
+			if (counts) {
 				int points = racePoints_ + (race_.Run?.Resets ?? 0) * RatingBook.ResetPoints;
 				ratings_.Drive(raceKm_, points, $"Race on {race_.Course.Name}", DateTime.Now);
 			}
@@ -200,6 +250,9 @@ namespace TRC.TuneLoader {
 		private void DrawRatings() {
 			RatingBook r = ratings_ ?? new RatingBook();
 			GUILayout.Label(RatingBook.TestingNote, Theme.PillWarn);
+			if (r.WasChanged) {
+				GUILayout.Label("Your ratings file was changed outside the TRC Tune Loader (or was another player's), so your ratings started again. The file is sealed: editing it never counts.", Theme.PillBad);
+			}
 			GUILayout.Label("Kept on this PC until the TRC server is up: then they'll be checked and shared. Other TRC Tune Loader players see your license and Safety Rating.", Theme.Small);
 			GUILayout.BeginVertical(Theme.Guide);
 			GUILayout.Label($"<b>{RatingBook.LicenseName(r.License)} license</b> · Safety Rating {r.Safety:0.00} · {r.Events} event(s)", Theme.Heading);
@@ -210,7 +263,12 @@ namespace TRC.TuneLoader {
 			for (int i = 0; i < 3; i++) {
 				GUILayout.Label($"<b>{Course.KindNames[i]}</b>  Elo {r.Elo[i]:0}", Theme.Body);
 			}
-			GUILayout.Label("Elo moves only in TRC spec battles and races. The Safety Rating moves only in TRC spec battles and races too: up with clean kilometres, " +
+			foreach (var pool in r.RuleElo.OrderBy(p => p.Key, StringComparer.Ordinal)) {
+				string name = r.RuleNames.TryGetValue(pool.Key, out string n) && n.Length > 0 ? n : pool.Key;
+				GUILayout.Label($"<b>{name}</b> <color={Theme.MutedHex}>({pool.Key})</color>  touge {pool.Value[0]:0} · highway {pool.Value[1]:0} · circuit {pool.Value[2]:0}", Theme.Small);
+			}
+			GUILayout.Label("Elo moves only in TRC spec battles and races; events run to a regulation have their own Elo (above), and \"just for fun\" ones change nothing. " +
+				"The Safety Rating moves in TRC spec and regulation battles and races: up with clean kilometres, " +
 				$"down with hard contact, hard hits and resets (at most {RatingBook.MaxDropPerEvent:0.00} an event). Light touches in close racing, time attack, " +
 				"leaving the road and jump starts don't count. No blame: like iRacing, both cars in a contact get it.", Theme.Small);
 			GUILayout.EndVertical();

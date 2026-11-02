@@ -128,6 +128,12 @@ namespace TRC.TuneLoader {
 		public GridLayout GridLayout;
 
 		/// <summary>
+		/// Map courses: the map's path past the finish line, from the line on. It's the reverse twin's grid run-up
+		/// (<see cref="ReversedAs"/>). Not saved and not part of the code.
+		/// </summary>
+		public List<Vector3> RunOut = new List<Vector3>();
+
+		/// <summary>
 		/// Speed traps along the course (map objects "TRC &lt;course&gt; Trap N", or added in Edit): the car's speed is
 		/// caught at each in a run, and a speed trap race is won on their total. Not part of the code.
 		/// </summary>
@@ -262,6 +268,12 @@ namespace TRC.TuneLoader {
 				Traps = Traps.Select(t => new CourseGate { Center = t.Center, Forward = -t.Forward, Width = t.Width }).Reverse().ToList(),
 			};
 			reversed.SectorPoints.Reverse();
+			// Lined up past the old finish, on the map's path that runs on beyond it; the old run-up is past the new finish.
+			if (GridObjects.Count == 0) {
+				reversed.GridPath = new List<Vector3>(RunOut);
+				reversed.GridLayout = GridLayout;
+			}
+			reversed.RunOut = new List<Vector3>(GridPath);
 			reversed.Path = new List<Vector3>(Path);
 			reversed.Path.Reverse();
 			reversed.Problems.AddRange(Problems);

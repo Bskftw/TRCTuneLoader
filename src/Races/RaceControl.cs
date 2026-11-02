@@ -129,6 +129,36 @@ namespace TRC.TuneLoader {
 		}
 	}
 
+	/// <summary>
+	/// The start shown on the host's headlights, for console players who can't see the mod's countdown (bskftw, Nov 1:
+	/// "3 flashes, off = GO"): on a second before the count, off for a moment at 3, 2 and 1, and off at GO, like
+	/// drag-strip lights going out. CarX shares the host's lights with the room, so everyone sees it.
+	/// </summary>
+	public static class LightStart {
+		/// <summary>How long each flash is off.</summary>
+		public const double FlashSeconds = 0.4;
+
+		/// <summary>The lights stay off this long after GO, then go back to how they were.</summary>
+		public const double AfterGoSeconds = 2;
+
+		/// <summary>Whether the lights should be on <paramref name="toGo"/> seconds before GO (negative after it); null when they're left alone.</summary>
+		public static bool? LightsAt(double toGo) {
+			double count = TimeAttackRun.CountdownSeconds;
+			if (toGo > count + 1 || toGo < -AfterGoSeconds) {
+				return null;
+			}
+			if (toGo <= 0) {
+				return false;
+			}
+			for (int n = (int)count; n >= 1; n--) {
+				if (toGo <= n && toGo > n - FlashSeconds) {
+					return false;
+				}
+			}
+			return true;
+		}
+	}
+
 	/// <summary>Race flags for one driver, worked out from where everyone is.</summary>
 	public static class RaceFlags {
 		/// <summary>A slow or stopped car (or one that's out) this far ahead along the course shows a yellow flag.</summary>

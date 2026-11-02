@@ -31,7 +31,7 @@ namespace TRC.TuneLoader {
 			IEnumerable<string> files = Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories).Select(f => Path.GetFileName(f).ToLowerInvariant());
 			switch (name) {
 				case "TimeAttack":
-					return files.Any(f => f == "runs.csv" || f == "battles.csv" || f == "races.csv" || f == "ratings.txt" || f == "speedtraps.csv" ||
+					return files.Any(f => f == "runs.csv" || f == "battles.csv" || f == "races.csv" || f == "ratings.txt" || (f.StartsWith("ratings_", StringComparison.Ordinal) && f.EndsWith(".dat", StringComparison.Ordinal)) || f == "speedtraps.csv" ||
 						f == "events.jsonl" || f.EndsWith(".trace", StringComparison.Ordinal) || f.EndsWith(".line", StringComparison.Ordinal));
 				case "Courses":
 					return files.Any(f => f.EndsWith(".trccourse", StringComparison.Ordinal) || f.EndsWith(".trctraps", StringComparison.Ordinal));

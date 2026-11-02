@@ -204,9 +204,18 @@ namespace TRC.TuneLoader {
 		/// straight on, so it follows hairpins instead of jumping across them. Points it never reaches are
 		/// counted in <paramref name="unused"/>.
 		/// </summary>
-		public static List<Vector3> OrderPoints(IEnumerable<Vector3> points, Vector3 start, Vector3 startForward, float merge, float maxGap, out int unused) {
+		public static List<Vector3> OrderPoints(IEnumerable<Vector3> points, Vector3 start, Vector3 startForward, float merge, float maxGap, out int unused) =>
+			OrderPoints(points, start, startForward, merge, maxGap, out unused, out _);
+
+		/// <summary>
+		/// The same, and also the chain going the other way from the start (<paramref name="behind"/>, from the point
+		/// nearest the start backwards): a strip that runs on past the start line gives the road leading up to it.
+		/// Points in either chain count as used.
+		/// </summary>
+		public static List<Vector3> OrderPoints(IEnumerable<Vector3> points, Vector3 start, Vector3 startForward, float merge, float maxGap, out int unused, out List<Vector3> behind) {
 			List<Vector3> clusters = Merge(points, merge);
 			var ordered = new List<Vector3>();
+			behind = new List<Vector3>();
 			unused = 0;
 			if (clusters.Count == 0) {
 				return ordered;
@@ -233,11 +242,23 @@ namespace TRC.TuneLoader {
 				}
 			}
 
-			Vector3 direction = Level(startForward);
+			int first = current;
 			used[current] = true;
-			ordered.Add(clusters[current]);
 			int reach = Mathf.CeilToInt(maxGap / cell);
+			ordered = Walk(clusters, grid, used, first, Level(startForward), cell, reach, maxGap);
+			behind = Walk(clusters, grid, used, first, -Level(startForward), cell, reach, maxGap);
 
+			foreach (bool u in used) {
+				if (!u) {
+					unused++;
+				}
+			}
+			return Smooth(ordered);
+		}
+
+		/// <summary>The chain from <paramref name="current"/> on, starting off along <paramref name="direction"/>, taking points not yet used.</summary>
+		private static List<Vector3> Walk(List<Vector3> clusters, Dictionary<long, List<int>> grid, bool[] used, int current, Vector3 direction, float cell, int reach, float maxGap) {
+			var ordered = new List<Vector3> { clusters[current] };
 			while (true) {
 				Vector3 here = clusters[current];
 				int cx = Mathf.FloorToInt(here.x / cell);
@@ -282,13 +303,68 @@ namespace TRC.TuneLoader {
 				ordered.Add(clusters[next]);
 				current = next;
 			}
+			return ordered;
+		}
 
-			foreach (bool u in used) {
-				if (!u) {
-					unused++;
+		/// <summary>
+		/// A line of points along the road cut at the start and finish lines (bskftw, Oct 30: a map's path may run on
+		/// past both, so races can line up on it). <paramref name="runUp"/> is the part before the start line, from the
+		/// line backwards (where the grid goes); <paramref name="runOut"/> the part after the finish, from the line on
+		/// (the reverse direction's run-up). Both are empty when the line stops at the start or finish. Returns the
+		/// course itself, from the start line to the finish line.
+		/// </summary>
+		public static List<Vector3> SplitAtLines(List<Vector3> line, CourseGate start, CourseGate finish, out List<Vector3> runUp, out List<Vector3> runOut) {
+			runUp = new List<Vector3>();
+			runOut = new List<Vector3>();
+			var course = new List<Vector3>(line);
+			for (int i = 1; i < course.Count; i++) {
+				if (Crossed(start, course[i - 1], course[i], out float fraction)) {
+					Vector3 at = Vector3.Lerp(course[i - 1], course[i], fraction);
+					runUp.Add(at);
+					for (int j = i - 1; j >= 0; j--) {
+						runUp.Add(course[j]);
+					}
+					course.RemoveRange(0, i);
+					course.Insert(0, at);
+					break;
+				}
+				if (Vector3.Distance(course[0], course[i]) > RunUpSearchMetres) {
+					break; // the start line is near the beginning or not crossed at all
 				}
 			}
-			return Smooth(ordered);
+			float along = 0f;
+			for (int i = 1; i < course.Count; i++) {
+				along += Vector3.Distance(course[i - 1], course[i]);
+				if (along > RunUpSearchMetres && Crossed(finish, course[i - 1], course[i], out float fraction)) {
+					Vector3 at = Vector3.Lerp(course[i - 1], course[i], fraction);
+					runOut.Add(at);
+					runOut.AddRange(course.GetRange(i, course.Count - i));
+					course.RemoveRange(i, course.Count - i);
+					course.Add(at);
+					break;
+				}
+			}
+			if (Length(runUp) < MinRunUpMetres) {
+				runUp.Clear();
+			}
+			if (Length(runOut) < MinRunUpMetres) {
+				runOut.Clear();
+			}
+			return course;
+		}
+
+		/// <summary>A run-up shorter than this isn't one: just the strip's end a little past the line.</summary>
+		public const float MinRunUpMetres = 10f;
+
+		/// <summary>The start line is looked for this far into the line; the finish only after this far.</summary>
+		private const float RunUpSearchMetres = 400f;
+
+		private static float Length(IList<Vector3> points) {
+			float total = 0f;
+			for (int i = 1; i < points.Count; i++) {
+				total += Vector3.Distance(points[i - 1], points[i]);
+			}
+			return total;
 		}
 
 		/// <summary>Averages each point with its neighbours, which takes out the zigzag between the two edges of a strip.</summary>
@@ -302,6 +378,44 @@ namespace TRC.TuneLoader {
 				}
 			}
 			return result;
+		}
+
+		/// <summary>
+		/// The middle of a strip of faces one face across, flat on the road or standing up like a fence (bskftw, Oct 30:
+		/// a path may be the road's own centre faces duplicated, however wide they are). Every edge two faces share
+		/// crosses the strip (the rungs and the quads' diagonals), so its midpoint is on the centre line. Vertices are
+		/// joined by position, as Unity splits them at seams. Empty when no edge is shared (loose triangles).
+		/// </summary>
+		public static List<Vector3> StripCentre(IList<Vector3> vertices, IList<int> triangles) {
+			var welded = new Dictionary<(int, int, int), int>();
+			var at = new int[vertices.Count];
+			for (int i = 0; i < vertices.Count; i++) {
+				Vector3 v = vertices[i];
+				var key = (Mathf.RoundToInt(v.x * 100f), Mathf.RoundToInt(v.y * 100f), Mathf.RoundToInt(v.z * 100f));
+				if (!welded.TryGetValue(key, out int index)) {
+					welded[key] = index = i;
+				}
+				at[i] = index;
+			}
+			var edges = new Dictionary<long, int>();
+			for (int t = 0; t + 2 < triangles.Count; t += 3) {
+				for (int e = 0; e < 3; e++) {
+					int a = at[triangles[t + e]];
+					int b = at[triangles[t + (e + 1) % 3]];
+					if (a == b) {
+						continue;
+					}
+					long key = a < b ? ((long)a << 32) | (uint)b : ((long)b << 32) | (uint)a;
+					edges[key] = edges.TryGetValue(key, out int count) ? count + 1 : 1;
+				}
+			}
+			var centre = new List<Vector3>();
+			foreach (var edge in edges) {
+				if (edge.Value >= 2) {
+					centre.Add((vertices[(int)(edge.Key >> 32)] + vertices[(int)(edge.Key & 0xffffffffL)]) / 2f);
+				}
+			}
+			return centre;
 		}
 
 		/// <summary>The direction made level and one metre long (zero when it points straight up or down).</summary>

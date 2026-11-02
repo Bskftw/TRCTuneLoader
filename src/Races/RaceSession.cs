@@ -69,6 +69,15 @@ namespace TRC.TuneLoader {
 
 		/// <summary>Host only: how long a room game's rule has held for them (busted, too far from the leader).</summary>
 		public double RuleSince = -1;
+
+		/// <summary>0.16: a console player the host added; the host's mod times them from where CarX shows their car.</summary>
+		public bool Console;
+		public string Platform = "";
+
+		/// <summary>0.16: their car meets the race's regulation (their mod said so; false until a 0.16 beat came), and their Elo for this race.</summary>
+		public bool RuleOk;
+		public bool SaidRuleOk;
+		public float Elo;
 	}
 
 	/// <summary>Where a driver is in the race right now: their place, and metres along it.</summary>
@@ -79,21 +88,30 @@ namespace TRC.TuneLoader {
 	}
 
 	/// <summary>
-	/// An open race between up to 16 TRC Tune Loader users, as one of them sees it. The host opens it, anyone in the
+	/// An open race between TRC Tune Loader users (no limit since 0.16), as one of them sees it. The host opens it, anyone in the
 	/// room can join, and the host starts it (optionally after qualifying). Every mod times its own car with its own
 	/// TimeAttackRun from a 3-2-1-GO that lands at the same moment on every screen (each driver keeps its clock in
 	/// step with the host's), and tells everyone its progress and result, so positions show live and the results
 	/// come in even if the host leaves. Nothing here knows about CarX or KSL, so the self-test can run a whole race.
 	///
-	/// Beats go out 5 times a second with up to 8 racers and twice a second with more, except where it matters:
-	/// the countdown, the first seconds after GO and the last 150 m, where it's 5 times a second again.
+	/// Beats go out 5 times a second with up to 8 racers, twice a second with more and once a second past 16 (0.16,
+	/// custom servers with bigger rooms), except where it matters: the countdown, the first seconds after GO and the
+	/// last 150 m, where it's 5 times a second again (twice past 16).
+	///
+	/// 0.16: a race can be run to a regulation (each mod checks its own car), or just for fun; a jump start can recall
+	/// the start for everyone; the host may only run it, not drive; and the host can add console players, whose
+	/// runs the host's mod times from where CarX shows their car (<see cref="AddConsole"/>, <see cref="SetConsolePose"/>).
 	/// </summary>
 	public sealed class RaceSession {
 		private const double LobbySeconds = 2;
 		private const double PresenceSeconds = 1;
 		private const double FastSeconds = 0.2;
 		private const double SlowSeconds = 0.5;
+		private const double SlowestSeconds = 1.0;
 		private const int SlowAbove = 8;
+
+		/// <summary>A jump start this long after GO (heard late) still recalls the start.</summary>
+		public const double RecallAfterGoSeconds = 3;
 		private const float FastNearFinishMetres = 150f;
 		private const double FastAfterGoSeconds = 3;
 		private const double CourseResendSeconds = 4;
@@ -186,6 +204,25 @@ namespace TRC.TuneLoader {
 		private int resultsSends_;
 		private RacerState lastBeatState_;
 		private int eliminations_;
+		private double myCarCheckedAt_;
+		private const double RecheckSeconds = 3;
+		private int myJumps_;
+		private int myJumpedCountdown_;
+		private int recallsSeen_;
+
+		/// <summary>How many times this race's start was recalled (a jump start under the recall rule), and who jumped last.</summary>
+		public int Recalls { get; private set; }
+		public string RecallBy { get; private set; } = "";
+
+		/// <summary>This driver's Elo for the race's ratings, said in the beats (the mod sets it).</summary>
+		public float MyElo { get; set; }
+
+		/// <summary>When GO is (this clock) for the countdown running now, or -1.</summary>
+		public double GoAt => (Phase == RacePhase.Countdown || Phase == RacePhase.Running) && countdownId_ > 0 ? goHostTime_ - ClockOffset : -1;
+		public int CountdownId => countdownId_;
+
+		/// <summary>The host's headlights should show the start: asked for, or a console player is racing.</summary>
+		public bool NeedsLightStart => IsHost && !IsGame && (Settings.LightStart || Racers.Any(d => d.Console));
 
 		private RaceSession(uint id, bool host, ulong me, string myName, ulong hostId, Func<BattleCar> checkCar, Func<double> personalBest, double now) {
 			Id = id;
@@ -259,7 +296,7 @@ namespace TRC.TuneLoader {
 		/// </summary>
 		public void Penalize(ulong id, double seconds, bool disqualify, double now) {
 			RaceDriver d = Drivers.FirstOrDefault(x => x.Id == id);
-			if (!IsHost || d == null || Results == null) {
+			if (!IsHost || d == null || Results == null || (Settings.NoPenalties && (seconds != 0 || disqualify))) {
 				return;
 			}
 			if (disqualify) {
@@ -373,7 +410,7 @@ namespace TRC.TuneLoader {
 			}
 			RaceNumber++;
 			foreach (RaceDriver d in Drivers) {
-				d.Racer = racers == null || racers.Contains(d.Id);
+				d.Racer = (racers == null || racers.Contains(d.Id)) && (d.Id != Me || Settings.HostDrives);
 				d.Slot = -1;
 				d.EliminatedOnLap = 0;
 				d.State = RacerState.Racing;
@@ -393,6 +430,9 @@ namespace TRC.TuneLoader {
 			}
 			myIncidents_ = 0;
 			myLastIncident_ = "";
+			consoleRuns_.Clear();
+			Recalls = 0;
+			RecallBy = "";
 			List<RaceDriver> grid = GridOrderOf(Racers, order);
 			for (int i = 0; i < grid.Count; i++) {
 				grid[i].Slot = i;
@@ -600,7 +640,13 @@ namespace TRC.TuneLoader {
 				d.Role = e.Role;
 				d.Points = e.Points;
 				d.Out = e.Out;
+				d.Console = e.Console;
+				d.Platform = e.Platform;
 				Drivers.Add(d);
+			}
+			Recalls = Math.Max(Recalls, m.Recalls);
+			if (m.RecallBy.Length > 0) {
+				RecallBy = m.RecallBy;
 			}
 			if (!Joined && m.Entries.Count >= m.Settings.MaxPlayers) {
 				Message = "The race is full";
@@ -628,7 +674,7 @@ namespace TRC.TuneLoader {
 
 		private void OnBeat(RaceMessage m, double now) {
 			RaceDriver d = Drivers.FirstOrDefault(x => x.Id == m.From);
-			if (d == null) {
+			if (d == null || (IsHost && d.Console)) {
 				return;
 			}
 			d.LastHeard = now;
@@ -662,6 +708,14 @@ namespace TRC.TuneLoader {
 			}
 			d.LapsDone = m.LapsDone;
 			d.TrapTotal = m.TrapTotal;
+			if (m.HasRuleOk) {
+				d.SaidRuleOk = true;
+				d.RuleOk = m.RuleOk;
+				d.Elo = m.Elo;
+				if (IsHost && Settings.Jump == JumpRule.Recall && m.JumpedCountdown > 0 && m.JumpedCountdown == countdownId_) {
+					Recall(now, d.Name);
+				}
+			}
 			if (m.Incidents > d.Incidents && IsHost) {
 				int at = (int)Math.Max(0, now - goHostTime_);
 				d.IncidentLog.Add($"{at / 60}:{at % 60:00} {m.LastIncident}");
@@ -697,6 +751,7 @@ namespace TRC.TuneLoader {
 			if (m.RaceNumber != RaceNumber) {
 				return;
 			}
+			Recalls = Math.Max(Recalls, m.Recalls);
 			if (m.Phase == RacePhase.Countdown || m.Phase == RacePhase.Running) {
 				goHostTime_ = m.GoHostTime;
 				countdownId_ = m.CountdownId;
@@ -837,14 +892,35 @@ namespace TRC.TuneLoader {
 					ExternalStart = true,
 					AllowResets = true,
 					KeepGoing = true,
-					OnJump = Settings.Jump == JumpRule.Disqualify ? JumpRule.Disqualify : JumpRule.Penalty,
+					OnJump = RunJumpRule(Settings.Jump),
 					Spot = MySpot(),
 				};
+				myJumps_ = 0;
+				recallsSeen_ = Recalls;
 				myState_ = RacerState.Racing;
 				myTime_ = 0;
 				myPenalty_ = 0;
 				myReason_ = "";
 				myCar_ = null;
+			}
+
+			// The start was recalled (someone jumped): back to the grid spot, and the countdown starts again once everyone's ready.
+			if (Recalls != recallsSeen_) {
+				recallsSeen_ = Recalls;
+				if (myState_ == RacerState.Racing && Run.State != TimeAttackRun.Phase.ToStart) {
+					Run.Restart();
+				}
+				countdownStarted_ = countdownId_;
+			}
+			if (Run.JumpStarts > myJumps_) {
+				myJumps_ = Run.JumpStarts;
+				if (Settings.Jump == JumpRule.Recall) {
+					myJumpedCountdown_ = countdownId_;
+					lastBeat_ = double.MinValue;
+					if (IsHost) {
+						Recall(now, myName_);
+					}
+				}
 			}
 
 			// Also when the countdown message was missed and the race is already running: GO is in the past, the clock runs from it.
@@ -868,19 +944,21 @@ namespace TRC.TuneLoader {
 				myReason_ = "the race was ended";
 			}
 
-			// The car is checked once each time it stops in its spot (not every frame), like battles.
+			// The car is checked once each time it stops in its spot (not every frame), like battles; and again every few
+			// seconds while it may not race, so a car fixed in the dyno without moving gets ready.
 			if (Run.State == TimeAttackRun.Phase.ToStart) {
 				if (!Run.ReadyToStart) {
 					myCar_ = null;
-				} else if (myCar_ == null) {
+				} else if (myCar_ == null || (!CarAllowed(myCar_) && now - myCarCheckedAt_ >= RecheckSeconds)) {
 					myCar_ = checkCar_?.Invoke() ?? new BattleCar();
+					myCarCheckedAt_ = now;
 				}
 			}
 
 			if (myState_ == RacerState.Racing && before != Run.State && !Run.Active) {
 				if (Run.State == TimeAttackRun.Phase.Finished) {
 					myState_ = RacerState.Finished;
-					myPenalty_ = Run.JumpStarts > 0 && Settings.Jump == JumpRule.Penalty ? Settings.JumpPenaltySeconds : 0;
+					myPenalty_ = Run.JumpStarts > 0 && Settings.Jump == JumpRule.Penalty && !Settings.NoPenalties ? Settings.JumpPenaltySeconds : 0;
 					myTime_ = Run.Result + myPenalty_;
 				} else if (Run.JumpStarts > 0 && Settings.Jump == JumpRule.Disqualify) {
 					myState_ = RacerState.Disqualified;
@@ -902,7 +980,42 @@ namespace TRC.TuneLoader {
 			me.Ready = MyReady;
 		}
 
-		private bool MyReady => Run != null && Run.State == TimeAttackRun.Phase.ToStart && Run.ReadyToStart && myCar_ != null && (Settings.Open || myCar_.Spec);
+		private bool MyReady => Run != null && Run.State == TimeAttackRun.Phase.ToStart && Run.ReadyToStart && myCar_ != null && CarAllowed(myCar_);
+
+		/// <summary>The car may race: TRC spec in a TRC spec race, meeting the regulation in a regulated one, anything in an open one.</summary>
+		private bool CarAllowed(BattleCar car) => Settings.Regulation != null ? car.RuleOk : Settings.Open || car.Spec;
+
+		/// <summary>What a driver's own run does on a jump start; the race's penalty is added at the finish only for <see cref="JumpRule.Penalty"/>.</summary>
+		public static JumpRule RunJumpRule(JumpRule race) =>
+			race == JumpRule.Disqualify ? JumpRule.Disqualify : race == JumpRule.Recall ? JumpRule.Restart : JumpRule.Penalty;
+
+		/// <summary>
+		/// Host: a jump start under the recall rule. Everyone goes back to their grid spot, and the countdown starts
+		/// again once they're all ready (only before GO, or just after it when the jump was heard late).
+		/// </summary>
+		private void Recall(double now, string who) {
+			if (!IsHost || Settings.Jump != JumpRule.Recall) {
+				return;
+			}
+			bool late = Phase == RacePhase.Running && now - goHostTime_ <= RecallAfterGoSeconds;
+			if (Phase != RacePhase.Countdown && !late) {
+				return;
+			}
+			Recalls++;
+			RecallBy = BattleMessage.PlainName(who ?? "");
+			Phase = RacePhase.Gridding;
+			bothReadySince_ = -1;
+			foreach (RaceDriver d in Racers) {
+				d.Ready = false;
+				d.Progress = 0;
+				d.ProgressAt = -1;
+			}
+			foreach (TimeAttackRun run in consoleRuns_.Values) {
+				run.Restart();
+			}
+			lobbyDirty_ = true;
+			lastHostBeat_ = double.MinValue;
+		}
 
 		/// <summary>This driver's grid spot (null without one yet).</summary>
 		public GridSpot? MySpot() {
@@ -928,7 +1041,9 @@ namespace TRC.TuneLoader {
 				me.RaceNumber = RaceNumber;
 			}
 
-			// Drivers who stopped answering.
+			TickConsoles(now);
+
+			// Drivers who stopped answering (a console player: no longer in the room).
 			foreach (RaceDriver d in Drivers.Where(d => d.Id != Me && now - d.LastHeard > TimeoutSeconds).ToList()) {
 				if ((Phase == RacePhase.Running || Phase == RacePhase.Countdown) && d.Racer) {
 					if (d.State == RacerState.Racing) {
@@ -964,8 +1079,9 @@ namespace TRC.TuneLoader {
 
 				case RacePhase.Gridding: {
 					List<RaceDriver> racers = Racers;
-					bool sameSet = Settings.Open || racers.Select(r => r.TuneSet).Distinct().Count() == 1;
-					if (racers.Count >= 1 && racers.All(r => r.Ready && r.RaceNumber == RaceNumber) && sameSet) {
+					bool sameSet = !Settings.IsTrcSpec || racers.Select(r => r.TuneSet).Distinct().Count() == 1;
+					bool rules = Settings.Regulation == null || racers.All(r => r.Id == Me || r.Console || r.RuleOk);
+					if (racers.Count >= 1 && racers.All(r => r.Ready && r.RaceNumber == RaceNumber) && sameSet && rules) {
 						if (bothReadySince_ < 0) {
 							bothReadySince_ = now;
 						} else if (now - bothReadySince_ >= ReadyHoldSeconds) {
@@ -1181,8 +1297,13 @@ namespace TRC.TuneLoader {
 			lobby.MatchGame = MatchGame;
 			lobby.MatchLaps = MatchLaps;
 			foreach (RaceDriver d in Drivers) {
-				lobby.Entries.Add(new LobbyEntry { Id = d.Id, Name = d.Name, Racer = d.Racer, Slot = d.Slot, EliminatedOnLap = d.EliminatedOnLap, Role = d.Role, Points = d.Points, Out = d.Out });
+				lobby.Entries.Add(new LobbyEntry {
+					Id = d.Id, Name = d.Name, Racer = d.Racer, Slot = d.Slot, EliminatedOnLap = d.EliminatedOnLap, Role = d.Role, Points = d.Points, Out = d.Out,
+					Console = d.Console, Platform = d.Platform,
+				});
 			}
+			lobby.Recalls = Recalls;
+			lobby.RecallBy = RecallBy;
 			outbox_.Add(lobby);
 		}
 
@@ -1206,13 +1327,15 @@ namespace TRC.TuneLoader {
 				case RacePhase.Countdown:
 					return FastSeconds;
 			}
-			if (Racers.Count <= SlowAbove || Run == null) {
-				return FastSeconds;
+			bool many = Racers.Count > RaceSettings.ManyDrivers;
+			if (Racers.Count <= SlowAbove || Run == null || Course == null) {
+				return Racers.Count <= SlowAbove ? FastSeconds : many ? SlowestSeconds : SlowSeconds;
 			}
 			float distance = Course.Length * Math.Max(1, Run.Laps);
 			bool nearFinish = Run.TotalProgress > distance - FastNearFinishMetres;
 			bool justStarted = Run.State == TimeAttackRun.Phase.Running && Run.Elapsed < FastAfterGoSeconds;
-			return nearFinish || justStarted ? FastSeconds : SlowSeconds;
+			// Past 16 drivers (custom servers), less often, so a big room doesn't flood the channel.
+			return nearFinish || justStarted ? (many ? SlowSeconds : FastSeconds) : many ? SlowestSeconds : SlowSeconds;
 		}
 
 		private void Beat(double now) {
@@ -1251,7 +1374,13 @@ namespace TRC.TuneLoader {
 			beat.Incidents = myIncidents_;
 			beat.LastIncident = myLastIncident_;
 			beat.Score = myScore_;
+			beat.RuleOk = myCar_?.RuleOk ?? false;
+			beat.Elo = MyElo;
+			beat.JumpedCountdown = myJumpedCountdown_;
 			outbox_.Add(beat);
+			if (IsHost) {
+				ConsoleBeats(now);
+			}
 		}
 
 		private void HostBeat(double now) {
@@ -1271,10 +1400,158 @@ namespace TRC.TuneLoader {
 			}
 			beat.Zone = Zone;
 			beat.ZoneRadius = ZoneRadius;
+			beat.Recalls = Recalls;
 			outbox_.Add(beat);
 		}
 
 		private RaceMessage New(RaceKind kind) => new RaceMessage { Kind = kind, RaceId = Id, From = Me, RaceNumber = RaceNumber };
+
+		// ---- Console players (host) ----
+
+		/// <summary>The host's runs for its console players, by their ID (made when they line up for a race).</summary>
+		private readonly Dictionary<ulong, TimeAttackRun> consoleRuns_ = new Dictionary<ulong, TimeAttackRun>();
+		private readonly Dictionary<ulong, int> consoleCountdowns_ = new Dictionary<ulong, int>();
+		private readonly Dictionary<ulong, BattleCar> consoleCars_ = new Dictionary<ulong, BattleCar>();
+		private readonly Dictionary<ulong, (Vector3 Position, Vector3 Forward, float Kmh)> consolePoses_ = new Dictionary<ulong, (Vector3, Vector3, float)>();
+		private double lastConsoleBeat_ = double.MinValue;
+
+		/// <summary>
+		/// Host: adds a console player (bskftw, Nov 1: console players can't run the mod, so a PC host adds them and
+		/// its mod times them from where CarX shows their car). <paramref name="id"/> is any number that isn't a
+		/// SteamID, the same for them all session (<see cref="ConsoleId"/>).
+		/// </summary>
+		public bool AddConsole(ulong id, string name, string platform, double now) {
+			if (!IsHost || Drivers.Any(d => d.Id == id) || Drivers.Count >= Settings.MaxPlayers) {
+				return false;
+			}
+			bool racing = Phase == RacePhase.Gridding || Phase == RacePhase.Countdown || Phase == RacePhase.Running;
+			Drivers.Add(new RaceDriver { Id = id, Name = BattleMessage.PlainName(name), Console = true, Platform = platform ?? "", Racer = !racing, HasCourse = true, LastHeard = now });
+			lobbyDirty_ = true;
+			return true;
+		}
+
+		/// <summary>An ID for a console player from what CarX calls them ("123|PS4"): the top bits set, so it's never a SteamID.</summary>
+		public static ulong ConsoleId(string playerKey) {
+			ulong hash = 14695981039346656037UL;
+			foreach (char c in playerKey ?? "") {
+				hash = (hash ^ c) * 1099511628211UL;
+			}
+			return 0xC000000000000000UL | (hash & 0x3FFFFFFFFFFFFFFFUL);
+		}
+
+		public static bool IsConsoleId(ulong id) => (id & 0xC000000000000000UL) == 0xC000000000000000UL;
+
+		/// <summary>Host, every frame: where a console player's car is, as CarX shows it here.</summary>
+		public void SetConsolePose(ulong id, Vector3 position, Vector3 forward, float kmh, double now) {
+			RaceDriver d = Drivers.FirstOrDefault(x => x.Id == id && x.Console);
+			if (d == null) {
+				return;
+			}
+			d.LastHeard = now;
+			consolePoses_[id] = (position, CourseGeometry.Level(forward), Mathf.Abs(kmh));
+		}
+
+		/// <summary>Host: a console player's car, checked from what CarX shares (TRC spec, the regulation).</summary>
+		public void SetConsoleCar(ulong id, BattleCar car) {
+			if (car != null) {
+				consoleCars_[id] = car;
+			}
+		}
+
+		/// <summary>Host: times every console player's race like a driver's own mod would.</summary>
+		private void TickConsoles(double now) {
+			foreach (RaceDriver d in Drivers.Where(x => x.Console).ToList()) {
+				if (!consolePoses_.TryGetValue(d.Id, out var pose)) {
+					continue;
+				}
+				d.Position = pose.Position;
+				d.Heading = pose.Forward;
+				d.Kmh = pose.Kmh;
+				d.HasPosition = true;
+				d.HasCourse = true;
+				d.RaceNumber = RaceNumber;
+				consoleCars_.TryGetValue(d.Id, out BattleCar car);
+				d.Spec = car?.Spec ?? false;
+				d.TuneSet = car?.TuneSet ?? "";
+				d.Car = car?.Car ?? d.Car;
+				d.RuleOk = car?.RuleOk ?? false;
+				d.SaidRuleOk = car != null;
+				bool racing = Phase == RacePhase.Gridding || Phase == RacePhase.Countdown || Phase == RacePhase.Running;
+				if (IsGame || !racing || !d.Racer || Course == null || d.Slot < 0) {
+					continue;
+				}
+				if (!consoleRuns_.TryGetValue(d.Id, out TimeAttackRun run)) {
+					List<GridSpot> spots = Course.GridSpots(d.Slot + 1, Settings.PoleLeft, Settings.LayoutFromCourse ? (GridLayout?)null : Settings.Layout);
+					run = new TimeAttackRun(Course, Settings.Laps) {
+						ExternalStart = true, AllowResets = true, KeepGoing = true, OnJump = RunJumpRule(Settings.Jump), Spot = spots[d.Slot],
+					};
+					consoleRuns_[d.Id] = run;
+					consoleCountdowns_[d.Id] = 0;
+					d.State = RacerState.Racing;
+				}
+				if ((Phase == RacePhase.Countdown || Phase == RacePhase.Running) && countdownId_ > 0 && consoleCountdowns_[d.Id] != countdownId_ && run.State == TimeAttackRun.Phase.ToStart) {
+					consoleCountdowns_[d.Id] = countdownId_;
+					run.StartCountdown(goHostTime_);
+				}
+				int jumps = run.JumpStarts;
+				TimeAttackRun.Phase before = run.State;
+				if (d.State == RacerState.Racing) {
+					run.Tick(now, pose.Position, pose.Forward, pose.Kmh, 1f, null);
+				}
+				if (run.JumpStarts > jumps && Settings.Jump == JumpRule.Recall) {
+					Recall(now, d.Name);
+					continue;
+				}
+				if (EndAt >= 0 && now >= EndAt && d.State == RacerState.Racing) {
+					run.Cancel("The race was ended.");
+					d.State = RacerState.Out;
+					d.Reason = "the race was ended";
+				}
+				if (d.EliminatedOnLap > 0 && run.Active) {
+					run.Cancel($"Eliminated on lap {d.EliminatedOnLap}.");
+				}
+				if (d.State == RacerState.Racing && before != run.State && !run.Active) {
+					if (run.State == TimeAttackRun.Phase.Finished) {
+						d.State = RacerState.Finished;
+						d.Penalty = run.JumpStarts > 0 && Settings.Jump == JumpRule.Penalty && !Settings.NoPenalties ? Settings.JumpPenaltySeconds : 0;
+						d.Time = run.Result + d.Penalty;
+					} else if (run.JumpStarts > 0 && Settings.Jump == JumpRule.Disqualify) {
+						d.State = RacerState.Disqualified;
+						d.Reason = "jump start";
+					} else {
+						d.State = RacerState.Out;
+						d.Reason = run.Message.TrimEnd('.');
+					}
+				}
+				d.Progress = run.TotalProgress;
+				d.ProgressAt = now;
+				d.ProgressHeardAt = now;
+				d.Speed = 0;
+				d.LapsDone = run.LapTimes.Count;
+				d.BestLap = run.BestLap?.Time ?? 0;
+				d.TrapTotal = run.TrapTotal;
+				d.Ready = run.State == TimeAttackRun.Phase.ToStart && run.ReadyToStart && car != null && CarAllowed(car);
+			}
+		}
+
+		/// <summary>Host: the console players' beats, sent for them (so every other mod sees them like any driver).</summary>
+		private void ConsoleBeats(double now) {
+			if (now - lastConsoleBeat_ < BeatSeconds(now)) {
+				return;
+			}
+			lastConsoleBeat_ = now;
+			foreach (RaceDriver d in Drivers.Where(x => x.Console && x.HasPosition)) {
+				outbox_.Add(new RaceMessage {
+					Kind = RaceKind.Beat, RaceId = Id, From = d.Id, RaceNumber = RaceNumber, SentAt = now, Ready = d.Ready, Spec = d.Spec, TuneSet = d.TuneSet,
+					Car = d.Car, HasCourse = true, Progress = d.Racer ? d.Progress : 0f, LapsDone = d.LapsDone, State = d.State, Time = d.Time, Penalty = d.Penalty,
+					Reason = d.Reason, BestLap = d.BestLap, Position = d.Position, Heading = d.Heading, Speed = d.Kmh, TrapTotal = d.TrapTotal, RuleOk = d.RuleOk,
+					Elo = (float)RatingBook.StartElo,
+				});
+			}
+		}
+
+		/// <summary>The host's run for a console player (for the HUD and tests), or null.</summary>
+		public TimeAttackRun ConsoleRun(ulong id) => consoleRuns_.TryGetValue(id, out TimeAttackRun run) ? run : null;
 
 		// ---- Room games (host) ----
 
@@ -1537,13 +1814,15 @@ namespace TRC.TuneLoader {
 				case RacePhase.Gridding:
 					if (me == null || !me.Racer) {
 						Message = "Watching this race";
-					} else if (Run != null && Run.State == TimeAttackRun.Phase.ToStart && Run.ReadyToStart && myCar_ != null && !Settings.Open && !myCar_.Spec) {
-						Message = "Your car isn't TRC spec, and this is a TRC spec race";
+					} else if (Run != null && Run.State == TimeAttackRun.Phase.ToStart && Run.ReadyToStart && myCar_ != null && !CarAllowed(myCar_)) {
+						Message = Settings.Regulation != null ? $"Your car doesn't meet the race's regulation ({Settings.Regulation.Name}): see Regulations"
+							: "Your car isn't TRC spec, and this is a TRC spec race";
 					} else if (Run != null && !Run.ReadyToStart) {
 						Message = Run.Message;
 					} else {
 						int waiting = Racers.Count(r => !r.Ready);
-						Message = waiting > 0 ? $"Ready. Waiting for {waiting} driver(s)" : "Everyone's ready";
+						string recalled = Recalls > 0 && RecallBy.Length > 0 ? $"Start recalled: {RecallBy} jumped. " : "";
+						Message = recalled + (waiting > 0 ? $"Ready. Waiting for {waiting} driver(s)" : "Everyone's ready");
 					}
 					break;
 				case RacePhase.Countdown:

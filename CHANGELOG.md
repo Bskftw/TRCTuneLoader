@@ -2,6 +2,30 @@
 
 All versions of TRC Tune Loader, newest first. "Not tested in game yet" means the version builds and its automatic tests pass, but nobody has tried it in CarX yet.
 
+## 0.16.0 (Nov 1 2026)
+
+Not tested in game yet. (0.15.2 was never released: its changes are in here too.)
+
+**New**
+- **Regulations** (new tab), for communities that tune their own cars to rules. Make one with any of: which setups (Race, Ultimate, Ultimate Pro...), which cars, the most power, weight, power to weight, CarX and KINO swaps, KINO weight and air suspension, widebody kits, a least and a most for any tune value, and tyre widths by weight class. **Check my car** shows what your car breaks; it also checks everyone in the room. Values are checked the way CarX shows them, so 600.4 hp counts as 600 and a tyre stretch of 10.3 (shown as 10) counts as 10. Share it with the room or one player, or **Copy for Discord** and **Paste from clipboard**. 1v1 battles, races and tournaments can be run to a regulation, and each regulation has its own Elo.
+- **Just for fun**: any battle, race or tournament, TRC spec ones too, can be set to change nobody's ratings.
+- **Console players**: a PC host can add PlayStation, Xbox and Switch players to a race, or race one in 1v1 battles. The host's mod times them from where their car is, and the host's headlights show them the start (on, off at 3, 2 and 1, off at GO). Their jump starts are caught too. The host can also run a race without driving in it.
+- **Jump starts** can recall the start (everyone lines up again and the countdown starts over) or go unpunished, and tournaments can have **no penalties**.
+- **No driver limit** for races and tournaments, for custom servers with more than 16 players. Over 16, positions are sent less often.
+- **Ghosts**: every run is recorded. Options picks what's kept: your three best time attacks per car and course, every run, or nothing. Name any ghost, and pick how see-through ghosts are. **Race it** puts a ghost on the road, with the live delta and sectors against it. Ghosts have no collider or physics, so they can't give a slipstream; a time driven with one still counts, and it's noted in `runs.csv`.
+- **Suspension** (new tab): suspension data logging, off unless you turn it on. A live overlay shows your car from above, each tyre filling up as it compresses, with its load, damper speed and whether it's on the road. After a run (or for the whole session): travel used, bottoming, packing down over bumps, contact lost (and whether right after a compression), load spikes, a damper speed histogram, and plain-language notes on what to change. Compare against a baseline, export to CSV, and see each corner's spring frequency and damping ratios.
+- **Share a run** (its time, sectors and ghost) with the room or one player, and race theirs.
+- **Share your speed traps** (Time attack, Speed traps, **Share...**): send the traps you placed on a map to everyone in the room or to one player, all of them or one group. They show up in the other player's Speed traps section, and **Add them** puts them with their own. A trap where they already have one is skipped. The other player needs 0.16.0 or newer.
+
+**Changed**
+- **Arrange the screen** (Options): drag the timer, the speed trap flash, pop-up notices, the TRC spec badge and the suspension overlay wherever you want, all at once, without starting anything first.
+- **Speed trap signs** can show your fastest speed through each trap instead of your last (Options).
+- Starting a **time attack** (or racing a ghost, or Record path) keeps the window open: **Teleport to start** is right there on the track, and it closes the window.
+- **Tracks** fold to one line each, like My times: click a track to open it. Maps with lots of tracks get a **Find a track** box.
+- **Races** and **Tournaments** are separate sections in Battles now.
+- **For map makers:** only a course's start and finish need "Downhill" or "Uphill" in their names. A path and sectors named after just the road (`TRC Path Akina`, `TRC Akina Sector 1`) work for both directions. Older names still work. A path that runs on past the start line is where races line up (no grid objects to place), and past the finish, where the other direction lines up. A path can be the road's centre faces duplicated (flat, any width) or a line extruded up or down, and can be in pieces. Copies named `.001` or `(1)` are read as the same object, the unnumbered one first. See [MAP_MAKERS.md](https://github.com/Bskftw/TRCTuneLoader/blob/main/MAP_MAKERS.md).
+- **Your ratings file is sealed.** Elo, Safety Rating and license can't be changed by editing the file any more: a changed file, or someone else's, makes your ratings start again from the beginning. Your current ratings carry over when you update.
+
 ## 0.15.1 (Oct 30 2026)
 
 Not tested in game yet. Fixes from testing 0.15.0, and speed traps the way they were meant to be.

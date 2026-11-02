@@ -30,7 +30,12 @@ namespace TRC.TuneLoader {
 	}
 
 	/// <summary>What a jump start does: start again (time attack, battles), or in a race a time penalty or disqualification.</summary>
-	public enum JumpRule : byte { Restart, Penalty, Disqualify }
+	/// <summary>
+	/// What a jump start does. Restart: time attack goes back to the start. Races pick a penalty, disqualification, a
+	/// recall (0.16: everyone lines up again and the countdown starts over; the run itself goes back like Restart), or
+	/// none (0.16, tournaments' "no penalties"). 0.15 copies read Recall and None as a penalty that's never added.
+	/// </summary>
+	public enum JumpRule : byte { Restart, Penalty, Disqualify, Recall, None }
 
 	/// <summary>A sector just finished, to flash on screen.</summary>
 	public struct SectorSplit {

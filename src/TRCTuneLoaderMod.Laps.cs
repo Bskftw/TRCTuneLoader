@@ -108,6 +108,7 @@ namespace TRC.TuneLoader {
 			lapFlash_ = "";
 			lapFlashUntil_ = 0;
 			referenceLoaded_ = false;
+			ghostReferenceFor_ = null;
 		}
 
 		/// <summary>The kind of time a run's whole result is, and the kind its laps are (circuits).</summary>

@@ -132,9 +132,7 @@ namespace TRC.TuneLoader {
 
 			var badge = new GUIContent(text);
 			Vector2 size = style.CalcSize(badge);
-			float x = badgeCorner_ % 2 == 0 ? HudMargin : screenWidth - size.x - HudMargin;
-			float y = badgeCorner_ < 2 ? HudMargin : screenHeight - size.y - HudMargin;
-			GUI.Label(new Rect(x, y, size.x, size.y), badge, style);
+			GUI.Label(BadgeRect(size, screenWidth, screenHeight), badge, style);
 		}
 	}
 }

@@ -15,11 +15,20 @@ namespace TRC.TuneLoader {
 
 		/// <summary>A player shared one of their courses with the room.</summary>
 		CourseShare = 2,
+
+		/// <summary>A player shared their own speed traps on a map with the room or one player (0.15.2; older copies skip it).</summary>
+		TrapShare = 3,
+
+		/// <summary>A player shared a regulation with the room or one player (0.16; older copies skip it).</summary>
+		RegulationShare = 4,
+
+		/// <summary>A player shared a run (time, sectors and its ghost) with the room or one player (0.16; older copies skip it).</summary>
+		RunShare = 5,
 	}
 
 	/// <summary>
-	/// A message on the room channel (KSL packet "trc_room"): player statuses for the room board, and shared
-	/// courses. Separate from battles and races, so those stay the same as 0.13.
+	/// A message on the room channel (KSL packet "trc_room"): player statuses for the room board, shared courses
+	/// and shared speed traps. Separate from battles and races, so those stay the same as 0.13.
 	/// </summary>
 	public sealed class RoomMessage {
 		public const byte Protocol = 1;
@@ -46,6 +55,25 @@ namespace TRC.TuneLoader {
 
 		// CourseShare
 		public Course Course;
+
+		// TrapShare
+		/// <summary>Who it's for: one player's SteamID, or 0 for everyone in the room.</summary>
+		public ulong To;
+
+		/// <summary>What was shared, like "Tsubaki" or "All my traps", for the list.</summary>
+		public string Label = "";
+		public string MapName = "";
+		public List<SpeedTrap> Traps = new List<SpeedTrap>();
+
+		/// <summary>The most speed traps one share carries (about 25 pieces on the channel).</summary>
+		public const int MaxTraps = 250;
+
+		// RegulationShare (To and Label too)
+		public Regulation Regulation;
+
+		// RunShare (To, MapKey and MapName too): the ghost, packed.
+		public Ghost Ghost;
+		private const int MaxRegulationText = 12000;
 
 		public byte[] Encode() {
 			using (var stream = new MemoryStream())
@@ -77,6 +105,39 @@ namespace TRC.TuneLoader {
 						}
 						writer.Write((byte)Course.GridLayout);
 						break;
+					case RoomKind.TrapShare:
+						writer.Write(To);
+						writer.Write(Clip(MapKey));
+						writer.Write(Clip(MapName));
+						writer.Write(Clip(Label));
+						int count = Math.Min(MaxTraps, Traps.Count);
+						writer.Write((ushort)count);
+						for (int i = 0; i < count; i++) {
+							SpeedTrap trap = Traps[i];
+							writer.Write(Clip(trap.Name));
+							WriteVector(writer, trap.Gate.Center);
+							writer.Write(trap.Gate.Forward.x);
+							writer.Write(trap.Gate.Forward.z);
+							writer.Write(trap.Gate.Width);
+						}
+						break;
+					case RoomKind.RegulationShare: {
+						writer.Write(To);
+						string text = Regulation?.ToText() ?? "";
+						writer.Write(text.Length <= MaxRegulationText ? text : "");
+						break;
+					}
+					case RoomKind.RunShare: {
+						writer.Write(To);
+						writer.Write(Clip(MapKey));
+						writer.Write(Clip(MapName));
+						byte[] ghost = Ghost?.Encode() ?? new byte[0];
+						writer.Write(ghost.Length <= Ghost.MaxBytes ? ghost.Length : 0);
+						if (ghost.Length <= Ghost.MaxBytes) {
+							writer.Write(ghost);
+						}
+						break;
+					}
 				}
 				writer.Flush();
 				return stream.ToArray();
@@ -121,6 +182,47 @@ namespace TRC.TuneLoader {
 							}
 							m.Course.GridLayout = (GridLayout)reader.ReadByte();
 							return m;
+						case RoomKind.TrapShare: {
+							m.To = reader.ReadUInt64();
+							m.MapKey = Clip(reader.ReadString());
+							m.MapName = Clip(reader.ReadString());
+							m.Label = Clip(reader.ReadString());
+							int count = reader.ReadUInt16();
+							if (count > MaxTraps || m.MapKey.Length == 0) {
+								return null;
+							}
+							for (int i = 0; i < count; i++) {
+								string name = Clip(reader.ReadString());
+								Vector3 center = ReadVector(reader);
+								var forward = new Vector3(reader.ReadSingle(), 0f, reader.ReadSingle());
+								float width = reader.ReadSingle();
+								if (forward.sqrMagnitude < 0.01f || !(width >= 1f && width <= 60f) || float.IsNaN(center.x + center.y + center.z) || float.IsInfinity(center.x + center.y + center.z)) {
+									return null;
+								}
+								m.Traps.Add(new SpeedTrap {
+									Name = name.Length > 0 ? name : $"Speed trap {i + 1}", MapKey = m.MapKey, Source = CourseSource.Custom,
+									Gate = new CourseGate { Center = center, Forward = forward.normalized, Width = width },
+								});
+							}
+							return m;
+						}
+						case RoomKind.RegulationShare: {
+							m.To = reader.ReadUInt64();
+							string text = reader.ReadString();
+							m.Regulation = text.Length > 0 && text.Length <= MaxRegulationText ? Regulation.Parse(text) : null;
+							return m.Regulation != null ? m : null;
+						}
+						case RoomKind.RunShare: {
+							m.To = reader.ReadUInt64();
+							m.MapKey = Clip(reader.ReadString());
+							m.MapName = Clip(reader.ReadString());
+							int length = reader.ReadInt32();
+							if (length <= 0 || length > Ghost.MaxBytes) {
+								return null;
+							}
+							m.Ghost = Ghost.Decode(reader.ReadBytes(length));
+							return m.Ghost != null && m.Ghost.Samples.Count >= 2 ? m : null;
+						}
 						default:
 							return null;
 					}
@@ -170,9 +272,73 @@ namespace TRC.TuneLoader {
 			public double At;
 		}
 
+		/// <summary>Speed traps someone shared with the room or with this player, waiting to be added.</summary>
+		public sealed class SharedTraps {
+			public ulong From;
+			public string FromName = "";
+			public string MapKey = "";
+			public string MapName = "";
+			public string Label = "";
+			public List<SpeedTrap> Traps = new List<SpeedTrap>();
+
+			/// <summary>Sent to this player only (not the whole room).</summary>
+			public bool JustForMe;
+			public double At;
+		}
+
+		/// <summary>A regulation or a run someone shared with the room or this player (0.16), waiting to be saved.</summary>
+		public sealed class SharedItem {
+			public ulong From;
+			public string FromName = "";
+			public bool JustForMe;
+			public double At;
+			public Regulation Regulation;
+			public Ghost Ghost;
+			public string MapKey = "";
+			public string MapName = "";
+		}
+
+		public List<SharedItem> SharedRegulations { get; } = new List<SharedItem>();
+		public List<SharedItem> SharedRuns { get; } = new List<SharedItem>();
+		private readonly Dictionary<ulong, double> lastItemShare_ = new Dictionary<ulong, double>();
+
+		/// <summary>
+		/// Takes a shared regulation or run (0.16): for everyone, or for <paramref name="me"/>. Returns it (for a pop-up),
+		/// or null when it's for someone else, broken, or the sender shared again too soon.
+		/// </summary>
+		public SharedItem ReceiveItem(RoomMessage m, double now, ulong me) {
+			bool regulation = m.Kind == RoomKind.RegulationShare && m.Regulation != null;
+			bool run = m.Kind == RoomKind.RunShare && m.Ghost != null;
+			if ((!regulation && !run) || m.From == me || (m.To != 0 && m.To != me)) {
+				return null;
+			}
+			if (lastItemShare_.TryGetValue(m.From, out double last) && now - last < ShareGapSeconds) {
+				return null;
+			}
+			lastItemShare_[m.From] = now;
+			var item = new SharedItem {
+				From = m.From, FromName = BattleMessage.PlainName(m.Name), JustForMe = m.To == me, At = now,
+				Regulation = m.Regulation, Ghost = m.Ghost, MapKey = m.MapKey, MapName = m.MapName,
+			};
+			List<SharedItem> list = regulation ? SharedRegulations : SharedRuns;
+			if (regulation) {
+				list.RemoveAll(i => i.From == m.From && i.Regulation.Code == m.Regulation.Code);
+			} else {
+				list.RemoveAll(i => i.From == m.From && i.Ghost.CourseCode == m.Ghost.CourseCode && Math.Abs(i.Ghost.Time - m.Ghost.Time) < 0.001);
+				m.Ghost.DriverId = m.From;
+			}
+			list.Insert(0, item);
+			if (list.Count > MaxShared) {
+				list.RemoveRange(MaxShared, list.Count - MaxShared);
+			}
+			return item;
+		}
+
 		private readonly Dictionary<ulong, Entry> statuses_ = new Dictionary<ulong, Entry>();
 		private readonly Dictionary<ulong, double> lastShare_ = new Dictionary<ulong, double>();
 		public List<Shared> SharedCourses { get; } = new List<Shared>();
+		public List<SharedTraps> SharedTrapSets { get; } = new List<SharedTraps>();
+		private readonly Dictionary<ulong, double> lastTrapShare_ = new Dictionary<ulong, double>();
 
 		private string lastSent_ = "";
 		private double lastSentAt_ = double.NegativeInfinity;
@@ -203,7 +369,48 @@ namespace TRC.TuneLoader {
 			return null;
 		}
 
-		/// <summary>Players heard from in the last <see cref="StaleSeconds"/>, by name.</summary>
+		/// <summary>
+		/// Takes speed traps shared on the room channel: for everyone, or for <paramref name="me"/>. Returns them
+		/// (for a pop-up), or null when they're for someone else, empty, or the sender shared again too soon.
+		/// </summary>
+		public SharedTraps ReceiveTraps(RoomMessage m, double now, ulong me) {
+			if (m.Kind != RoomKind.TrapShare || m.From == me || (m.To != 0 && m.To != me) || m.Traps.Count == 0) {
+				return null;
+			}
+			if (lastTrapShare_.TryGetValue(m.From, out double last) && now - last < ShareGapSeconds) {
+				return null;
+			}
+			lastTrapShare_[m.From] = now;
+			SharedTrapSets.RemoveAll(s => s.From == m.From && s.MapKey == m.MapKey && s.Label == m.Label);
+			var shared = new SharedTraps {
+				From = m.From, FromName = BattleMessage.PlainName(m.Name), MapKey = m.MapKey, MapName = m.MapName, Label = m.Label,
+				Traps = m.Traps, JustForMe = m.To == me, At = now,
+			};
+			SharedTrapSets.Insert(0, shared);
+			if (SharedTrapSets.Count > MaxShared) {
+				SharedTrapSets.RemoveRange(MaxShared, SharedTrapSets.Count - MaxShared);
+			}
+			return shared;
+		}
+
+		/// <summary>
+		/// <paramref name="theirs"/> added to <paramref name="mine"/>: each one not within 3 m of a trap already there.
+		/// Returns how many were added.
+		/// </summary>
+		public static int MergeTraps(List<SpeedTrap> mine, IEnumerable<SpeedTrap> theirs, IEnumerable<SpeedTrap> alsoThere = null) {
+			var there = mine.Concat(alsoThere ?? Enumerable.Empty<SpeedTrap>()).Select(t => t.Gate.Center).ToList();
+			int added = 0;
+			foreach (SpeedTrap trap in theirs) {
+				if (there.Any(c => Vector3.Distance(c, trap.Gate.Center) < 3f)) {
+					continue;
+				}
+				mine.Add(new SpeedTrap { Name = trap.Name, Gate = trap.Gate, MapKey = trap.MapKey, Source = CourseSource.Custom });
+				there.Add(trap.Gate.Center);
+				added++;
+			}
+			return added;
+		}
+
 		/// <summary>
 		/// Whether <paramref name="theirs"/> is a newer version than <paramref name="mine"/> ("0.15.1" over "0.15.0").
 		/// Oct 29: a player's KSL had treated an update as optional and never installed it.
@@ -238,6 +445,8 @@ namespace TRC.TuneLoader {
 		public void Clear() {
 			statuses_.Clear();
 			lastShare_.Clear();
+			lastTrapShare_.Clear();
+			lastItemShare_.Clear();
 			someoneNew_ = false;
 			lastSentAt_ = double.NegativeInfinity;
 		}

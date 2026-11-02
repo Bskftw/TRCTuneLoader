@@ -8,21 +8,37 @@ using UnityEngine;
 
 namespace TRC.TuneLoader {
 	/// <summary>
-	/// Open races and tournaments in game: the "Races &amp; tournaments" part of the Battle view (open races to join,
+	/// Open races and tournaments in game: the Races and Tournaments sections of the Battles tab (open races to join,
 	/// hosting one, the lobby), the race fed from Update, the tournament the host runs, knockout battles called by
 	/// it, and what's drawn over the track. The race and tournament logic is in src/Races/; messages go through RaceSync.
 	/// </summary>
 	public partial class TRCTuneLoaderMod {
 		/// <summary>The Battles tab (its own tab since 0.15.0) and its sections down the left.</summary>
 		private const int BattlesTab = 6;
-		private static readonly string[] BattleSections = { "1v1 battles", "Races & tournaments", "Fun games", "My ratings" };
+		/// <summary>0.16 (bskftw): races and tournaments are sections of their own, to keep each one cleaner.</summary>
+		private static readonly string[] BattleSections = { "1v1 battles", "Races", "Tournaments", "Fun games", "My ratings" };
+		private const int RacesSection = 1;
+		private const int TournamentsSection = 2;
+		private const int GamesSection = 3;
+		private const int RatingsSection = 4;
+
+		/// <summary>The section a race lobby shows in: a fun game, a tournament (its host sends tournament lines), or a race.</summary>
+		private static int SectionFor(RaceMessage lobby) =>
+			lobby.Settings.Mode != RoomMode.Race ? GamesSection : lobby.Lines.Count > 0 ? TournamentsSection : RacesSection;
+
+		private int SectionFor(RaceSession race) =>
+			race.IsGame ? GamesSection : race.Lines.Count > 0 || (race.IsHost && hostTournament_ > 0) ? TournamentsSection : RacesSection;
 		private Vector2 ratingsScroll_;
 		private static readonly int[] RaceLapChoices = { 1, 2, 3, 5, 10 };
 		private static readonly string[] GridOrders = { "Order joined", "Random", "Best time", "Qualifying" };
 		private static readonly string[] PoleSides = { "Pole on the left", "Pole on the right" };
 		private static readonly string[] Layouts = { "Course's own", "Two-wide grid", "Line-up" };
-		private static readonly string[] JumpRules = { "+5 s penalty", "Disqualified" };
-		private static readonly int[] MaxDriverChoices = { 4, 8, 12, 16 };
+		private static readonly string[] JumpRules = { "+5 s penalty", "Disqualified", "Recall the start", "No penalty" };
+		private static readonly JumpRule[] JumpRuleValues = { JumpRule.Penalty, JumpRule.Disqualify, JumpRule.Recall, JumpRule.None };
+
+		/// <summary>No limit since 0.16 (custom servers): "No limit" is the most a lobby lists.</summary>
+		private static readonly int[] MaxDriverChoices = { 4, 8, 12, 16, 24, 32, 64, RaceSettings.MaxDrivers };
+		private static string MaxDriversText(int max) => max >= RaceSettings.MaxDrivers ? "No limit" : max.ToString(CultureInfo.InvariantCulture);
 		private static readonly string[] TournamentKinds = { "None", "Points series", "Knockout", "Heats and final", "Shootout" };
 		private static readonly string[] KnockoutFormats = { "Side by side", "Cat and mouse" };
 		private static readonly int[] BestOfChoices = { 1, 3 };
@@ -70,6 +86,11 @@ namespace TRC.TuneLoader {
 		private int hostLayout_;
 		private int hostJump_;
 		private int hostMode_;
+		private string hostRule_ = "";
+		private bool hostFun_;
+		private bool hostDrives_ = true;
+		private bool hostLights_;
+		private bool hostNoPenalties_;
 		private int hostMax_ = 3;
 		private bool hostElimination_;
 		private int hostQualMinutes_ = 1;
@@ -129,6 +150,7 @@ namespace TRC.TuneLoader {
 				openRaces_.Remove(id);
 			}
 			if (race_ == null) {
+				UpdateLightStart(now);
 				return;
 			}
 
@@ -137,7 +159,10 @@ namespace TRC.TuneLoader {
 				adapter_.TryCheckOverRoad(race_.Course.RoadColliders, out bool overRoad)) {
 				onRoad = overRoad;
 			}
+			UpdateConsoleRacers(now);
+			UpdateEventElo();
 			race_.Tick(now, pose_.Position, pose_.Forward, hasPose_ ? pose_.SpeedKmh : 0f, Time.timeScale, onRoad);
+			UpdateLightStart(now);
 			foreach (RaceMessage m in race_.TakeOutbox()) {
 				raceSync_.Send(m);
 			}
@@ -170,14 +195,19 @@ namespace TRC.TuneLoader {
 			}
 			var settings = new RaceSettings {
 				Name = $"{BattleMessage.PlainName(MyName())}'s race",
-				MaxPlayers = MaxDriverChoices[hostMax_],
+				MaxPlayers = MaxDriverChoices[Math.Min(hostMax_, MaxDriverChoices.Length - 1)],
 				Laps = course != null && course.IsCircuit ? RaceLapChoices[hostLaps_] : 1,
-				Open = hostMode_ == 1,
+				Open = hostMode_ != 0 || course == null,
+				Regulation = course != null && hostMode_ == 1 ? RegulationByCode(hostRule_)?.Copy() : null,
+				Fun = hostFun_,
+				HostDrives = course == null || hostDrives_,
+				LightStart = course != null && hostLights_,
+				NoPenalties = course != null && hostTournament_ > 0 && hostNoPenalties_,
 				Order = (GridOrder)hostOrder_,
 				PoleLeft = hostPole_ == 0,
 				LayoutFromCourse = hostLayout_ == 0,
 				Layout = hostLayout_ == 2 ? GridLayout.LineUp : GridLayout.Grid,
-				Jump = hostJump_ == 1 ? JumpRule.Disqualify : JumpRule.Penalty,
+				Jump = JumpRuleValues[Math.Min(hostJump_, JumpRuleValues.Length - 1)],
 				Elimination = course != null && hostElimination_ && course.IsCircuit,
 				QualifyingMinutes = QualifyingMinuteChoices[hostQualMinutes_],
 				QualifyingRuns = hostQualRuns_,
@@ -191,6 +221,13 @@ namespace TRC.TuneLoader {
 			if (course == null) {
 				settings.Name = $"{BattleMessage.PlainName(MyName())}'s {RoomModeNames[hostGame_].ToLowerInvariant()}";
 			}
+			if (course != null && hostMode_ == 1 && settings.Regulation == null) {
+				raceResult_ = "Pick a regulation first (or make one in the Regulations tab).";
+				return;
+			}
+			if (settings.NoPenalties && settings.Jump == JumpRule.Penalty) {
+				settings.Jump = JumpRule.None;
+			}
 			uint id = (uint)raceIds_.Next(1, int.MaxValue);
 			race_ = RaceSession.Host(id, MySteamId, MyName(), course, settings, CheckBattleCar, () => course != null ? PersonalBestOn(course) : 0, BattleNow);
 			tournament_ = null;
@@ -203,7 +240,8 @@ namespace TRC.TuneLoader {
 			}
 			raceResult_ = "";
 			TrcLog.Info($"Race {id}: opened {(course != null ? $"on {course.Name} ({course.Code})" : RoomModeNames[hostGame_])}, {settings.MaxPlayers} drivers max, {settings.Laps} lap(s), " +
-				$"grid {GridOrders[hostOrder_]}, jump {JumpRules[hostJump_]}, {(settings.Open ? "Open" : "TRC spec")}{(hostTournament_ > 0 ? $", {TournamentKinds[hostTournament_]}" : "")}.");
+				$"grid {GridOrders[hostOrder_]}, jump {JumpRules[Math.Min(hostJump_, JumpRules.Length - 1)]}, {RuleText(settings.Open, settings.Regulation, settings.Fun)}" +
+				$"{(settings.Regulation != null ? $" ({settings.Regulation.Code})" : "")}{(settings.HostDrives ? "" : ", host not driving")}{(hostTournament_ > 0 ? $", {TournamentKinds[hostTournament_]}" : "")}.");
 		}
 
 		private void JoinRace(RaceMessage lobby) {
@@ -345,6 +383,13 @@ namespace TRC.TuneLoader {
 				? race_.Drivers.OrderBy(d => d.PersonalBest > 0 ? d.PersonalBest : double.MaxValue).ToList()
 				: race_.Settings.Order == GridOrder.Random ? race_.Drivers.OrderBy(_ => raceIds_.Next()).ToList()
 				: race_.Drivers.ToList();
+			if (settings.Kind == TournamentKind.Knockout || settings.Kind == TournamentKind.Shootout) {
+				// 1v1 battles and time attacks need the mod: console players can't take part in these.
+				seeded = seeded.Where(d => !d.Console).ToList();
+			}
+			if (!race_.Settings.HostDrives) {
+				seeded = seeded.Where(d => d.Id != MySteamId).ToList();
+			}
 			tournament_ = new Tournament(settings, seeded.Select(d => (d.Id, d.Name)).ToList());
 			tournamentRaceCounted_ = race_.RaceNumber;
 			race_.SetLines(tournament_.Lines());
@@ -403,7 +448,8 @@ namespace TRC.TuneLoader {
 			if (race_.MatchA == MySteamId && matchChallenged_ != key && (battle_ == null || !battle_.Active) && hasPose_) {
 				matchChallenged_ = key;
 				RaceDriver other = race_.Drivers.FirstOrDefault(d => d.Id == race_.MatchB);
-				StartBattle(race_.MatchB, other?.Name ?? "", race_.Course, race_.MatchFormat, race_.Settings.Open, race_.MatchLaps, race_.MatchId, race_.MatchGame);
+				StartBattle(race_.MatchB, other?.Name ?? "", race_.Course, race_.MatchFormat, race_.Settings.Open && race_.Settings.Regulation == null, race_.MatchLaps, race_.MatchId, race_.MatchGame,
+					race_.Settings.Regulation, race_.Settings.Fun);
 			}
 		}
 
@@ -498,10 +544,14 @@ namespace TRC.TuneLoader {
 			GUILayout.BeginHorizontal(GUILayout.ExpandHeight(true));
 			int openRaces = openRaces_.Values.Count(v => v.Lobby.Settings.Mode == RoomMode.Race);
 			int openGames = openRaces_.Count - openRaces;
+			int openTournaments = openRaces_.Values.Count(v => SectionFor(v.Lobby) == TournamentsSection);
+			openRaces -= openTournaments;
+			int inSection = race_ != null ? SectionFor(race_) : -1;
 			int view = SideNav(BattleSections, battleViewMode_, new[] {
 				invites_.Count > 0 ? $"{invites_.Count} waiting" : battle_ != null && battle_.Active ? "on" : "",
-				race_ != null && !race_.IsGame ? "in one" : openRaces > 0 ? $"{openRaces} open" : "",
-				race_ != null && race_.IsGame ? "in one" : openGames > 0 ? $"{openGames} open" : "",
+				inSection == RacesSection ? "in one" : openRaces > 0 ? $"{openRaces} open" : "",
+				inSection == TournamentsSection ? "in one" : openTournaments > 0 ? $"{openTournaments} open" : "",
+				inSection == GamesSection ? "in one" : openGames > 0 ? $"{openGames} open" : "",
 				"testing",
 			});
 			if (view != battleViewMode_) {
@@ -512,8 +562,11 @@ namespace TRC.TuneLoader {
 			GUILayout.BeginVertical(GUILayout.ExpandHeight(true));
 			switch (battleViewMode_) {
 				case 0: DrawBattleView(); break;
-				case 1: DrawRacesView(games: false); break;
-				case 2: DrawRacesView(games: true); break;
+				case RacesSection:
+				case TournamentsSection:
+				case GamesSection:
+					DrawRacesView(battleViewMode_);
+					break;
 				default:
 					ratingsScroll_ = GUILayout.BeginScrollView(ratingsScroll_);
 					DrawRatings();
@@ -524,8 +577,8 @@ namespace TRC.TuneLoader {
 			GUILayout.EndHorizontal();
 		}
 
-		/// <summary>Races & tournaments, or (<paramref name="games"/>) the fun games: cops and runners, tag and the rest.</summary>
-		private void DrawRacesView(bool games) {
+		/// <summary>Races, tournaments, or the fun games (cops and runners, tag and the rest): what's open, the lobby, and hosting one.</summary>
+		private void DrawRacesView(int section) {
 			if (!raceSync_.IsAvailable) {
 				GUILayout.Label(raceSync_.Status, Theme.PillNeutral);
 				return;
@@ -534,29 +587,31 @@ namespace TRC.TuneLoader {
 			if (!string.IsNullOrEmpty(raceResult_)) {
 				GUILayout.Label(raceResult_, Theme.Body);
 			}
-			if (race_ != null && race_.IsGame == games) {
+			if (race_ != null && SectionFor(race_) == section) {
 				DrawRaceLobby();
 			} else if (race_ != null) {
+				int theirs = SectionFor(race_);
 				GUILayout.BeginVertical(Theme.Guide);
-				GUILayout.Label(race_.IsGame ? "You're in a fun game." : "You're in a race.", Theme.Body);
-				if (GUILayout.Button(race_.IsGame ? "Go to Fun games" : "Go to Races & tournaments", Theme.Button)) {
-					battleViewMode_ = race_.IsGame ? 2 : 1;
+				GUILayout.Label(theirs == GamesSection ? "You're in a fun game." : theirs == TournamentsSection ? "You're in a tournament." : "You're in a race.", Theme.Body);
+				if (GUILayout.Button($"Go to {BattleSections[theirs]}", Theme.Button)) {
+					battleViewMode_ = theirs;
 				}
 				GUILayout.EndVertical();
 			} else {
-				DrawOpenRaces(games);
-				DrawHostRaceForm(games);
+				DrawOpenRaces(section);
+				DrawHostRaceForm(section);
 			}
 			GUILayout.EndScrollView();
 		}
 
-		private void DrawOpenRaces(bool games) {
-			GUILayout.Label(games ? "Games in this room" : "Open races in this room", Theme.SectionLabel);
+		private void DrawOpenRaces(int section) {
+			bool games = section == GamesSection;
+			string what = games ? "Games" : section == TournamentsSection ? "Tournaments" : "Open races";
+			GUILayout.Label($"{what} in this room", Theme.SectionLabel);
 			GUILayout.BeginVertical(Theme.Card);
-			List<(RaceMessage Lobby, float SeenAt, float FirstSeen)> listed = openRaces_.Values.Where(v => (v.Lobby.Settings.Mode != RoomMode.Race) == games).ToList();
+			List<(RaceMessage Lobby, float SeenAt, float FirstSeen)> listed = openRaces_.Values.Where(v => SectionFor(v.Lobby) == section).ToList();
 			if (listed.Count == 0) {
-				GUILayout.Label(games ? "No games right now. Host one below: everyone in the room with TRC Tune Loader sees it."
-					: "No open races right now. Host one below, and everyone in the room with TRC Tune Loader sees it.", Theme.Small);
+				GUILayout.Label($"No {what.ToLowerInvariant()} right now. Host one below: everyone in the room with TRC Tune Loader sees it.", Theme.Small);
 			}
 			foreach (var (lobby, _, _) in listed) {
 				Course course = courses_.ByCode(lobby.CourseCode);
@@ -564,8 +619,10 @@ namespace TRC.TuneLoader {
 				bool full = lobby.Entries.Count >= lobby.Settings.MaxPlayers;
 				bool running = lobby.Phase != RacePhase.Lobby && lobby.Phase != RacePhase.Qualifying && lobby.Phase != RacePhase.Finished;
 				GUILayout.BeginHorizontal();
-				GUILayout.Label($"<b>{BattleMessage.PlainName(lobby.HostName)}</b>: {where}  <color={Theme.MutedHex}>{lobby.Entries.Count}/{lobby.Settings.MaxPlayers} · " +
-					$"{(lobby.Settings.Laps > 1 ? $"{lobby.Settings.Laps} laps · " : "")}{(lobby.Settings.Open ? "Open" : "TRC spec")}{(lobby.Lines.Count > 0 ? " · tournament" : "")}{(running ? " · racing now" : "")}</color>", Theme.Body);
+				int consoles = lobby.Entries.Count(e => e.Console);
+				GUILayout.Label($"<b>{BattleMessage.PlainName(lobby.HostName)}</b>: {where}  <color={Theme.MutedHex}>{lobby.Entries.Count}/{MaxDriversText(lobby.Settings.MaxPlayers)} · " +
+					$"{(lobby.Settings.Laps > 1 ? $"{lobby.Settings.Laps} laps · " : "")}{RuleText(lobby.Settings.Open, lobby.Settings.Regulation, lobby.Settings.Fun)}" +
+					$"{(consoles > 0 ? $" · {consoles} on console" : "")}{(running ? " · racing now" : "")}</color>", Theme.Body);
 				GUILayout.FlexibleSpace();
 				bool enabled = GUI.enabled;
 				GUI.enabled = enabled && !full && hasPose_;
@@ -578,8 +635,10 @@ namespace TRC.TuneLoader {
 			GUILayout.EndVertical();
 		}
 
-		private void DrawHostRaceForm(bool games) {
-			GUILayout.Label(games ? "Host a game" : "Host a race", Theme.SectionLabel);
+		private void DrawHostRaceForm(int section) {
+			bool games = section == GamesSection;
+			bool tournament = section == TournamentsSection;
+			GUILayout.Label(games ? "Host a game" : tournament ? "Host a tournament" : "Host a race", Theme.SectionLabel);
 			GUILayout.BeginVertical(Theme.Card);
 			if (!hasPose_ || map_ == null) {
 				GUILayout.Label("Join a room and drive onto the map first.", Theme.Small);
@@ -595,6 +654,12 @@ namespace TRC.TuneLoader {
 				return;
 			}
 			hostGame_ = 0;
+			if (tournament) {
+				GUILayout.Label("Tournament", Theme.SectionLabel);
+				hostTournament_ = Choice(TournamentKinds.Skip(1).ToArray(), Math.Max(0, hostTournament_ - 1)) + 1;
+			} else {
+				hostTournament_ = 0;
+			}
 			GUILayout.Label("Race for", Theme.SectionLabel);
 			hostTrapScoring_ = Choice(new[] { "Fastest time", "Speed traps" }, hostTrapScoring_ ? 1 : 0) == 1;
 			GUILayout.Label(hostTrapScoring_
@@ -636,22 +701,34 @@ namespace TRC.TuneLoader {
 				hostQualRuns_ = Choice(QualifyingRunChoices, hostQualRuns_);
 			}
 			GUILayout.Label("Jump start", Theme.SectionLabel);
-			hostJump_ = Choice(JumpRules, hostJump_);
-			GUILayout.Label("Mode", Theme.SectionLabel);
-			hostMode_ = Choice(BattleModes, hostMode_);
-			GUILayout.Label(hostMode_ == 0 ? "Every car TRC spec, all on the same tune set, no flagged mods." : "Any setup. It doesn't count.", Theme.Small);
+			hostJump_ = Choice(JumpRules, Math.Min(hostJump_, JumpRules.Length - 1));
+			GUILayout.Label(JumpRuleValues[hostJump_] == JumpRule.Recall ? "Anyone moving before GO stops the start: everyone lines up again and the countdown starts over."
+				: JumpRuleValues[hostJump_] == JumpRule.None ? "Jump starts aren't punished." : JumpRuleValues[hostJump_] == JumpRule.Disqualify ? "A jump start is out of the race."
+				: "A jump start adds 5 s at the finish.", Theme.Small);
+			DrawRulePicker(ref hostMode_, ref hostRule_, ref hostFun_);
 			GUILayout.Label("Drivers (most)", Theme.SectionLabel);
-			hostMax_ = Choice(MaxDriverChoices.Select(m => m.ToString(CultureInfo.InvariantCulture)).ToArray(), hostMax_);
+			hostMax_ = Choice(MaxDriverChoices.Select(MaxDriversText).ToArray(), Math.Min(hostMax_, MaxDriverChoices.Length - 1));
+			if (MaxDriverChoices[hostMax_] > RaceSettings.ManyDrivers) {
+				GUILayout.Label("Over 16 (custom servers with bigger rooms): positions go out less often, so the live gaps are rougher.", Theme.Small);
+			}
+			GUILayout.Label("You", Theme.SectionLabel);
+			hostDrives_ = Choice(new[] { "Drive in it", "Only run it (don't drive)" }, hostDrives_ ? 0 : 1) == 0;
+			GUILayout.Label(hostDrives_ ? "You line up and race too." : "You run the race without driving in it: good for console players' races. Park facing the grid: your headlights show the start.", Theme.Small);
+			GUILayout.Label("Headlight start", Theme.SectionLabel);
+			hostLights_ = Choice(new[] { "When console players race", "Always" }, hostLights_ ? 1 : 0) == 1;
+			GUILayout.Label("Your headlights count the start down for players without the mod: on, then off and on at 3, 2 and 1, and off at GO.", Theme.Small);
 
-			GUILayout.Label("Tournament", Theme.SectionLabel);
-			hostTournament_ = Choice(TournamentKinds, hostTournament_);
-			DrawTournamentOptions(courses, picked);
+			if (tournament) {
+				GUILayout.Label("Penalties", Theme.SectionLabel);
+				hostNoPenalties_ = Choice(new[] { "Host can give penalties", "No penalties" }, hostNoPenalties_ ? 1 : 0) == 1;
+				DrawTournamentOptions(courses, picked);
+			}
 
 			GUILayout.Space(4);
 			GUILayout.BeginHorizontal();
 			bool enabled = GUI.enabled;
 			GUI.enabled = enabled && picked != null;
-			if (GUILayout.Button(hostTournament_ > 0 ? "Open the tournament" : "Open the race", Theme.ButtonPrimary)) {
+			if (GUILayout.Button(tournament ? "Open the tournament" : "Open the race", Theme.ButtonPrimary)) {
 				HostRace(picked);
 			}
 			GUI.enabled = enabled;
@@ -680,7 +757,7 @@ namespace TRC.TuneLoader {
 				hostKeepUp_ = Choice(KeepUpChoices.Select(m => $"{m} m").ToArray(), hostKeepUp_);
 			}
 			GUILayout.Label("Drivers (most)", Theme.SectionLabel);
-			hostMax_ = Choice(MaxDriverChoices.Select(m => m.ToString(CultureInfo.InvariantCulture)).ToArray(), hostMax_);
+			hostMax_ = Choice(MaxDriverChoices.Select(MaxDriversText).ToArray(), Math.Min(hostMax_, MaxDriverChoices.Length - 1));
 			GUILayout.Space(4);
 			GUILayout.BeginHorizontal();
 			if (GUILayout.Button($"Open {RoomModeNames[hostGame_].ToLowerInvariant()}", Theme.ButtonPrimary)) {
@@ -749,8 +826,19 @@ namespace TRC.TuneLoader {
 				GUILayout.Label($"{RoomModeNames[(int)r.Settings.Mode]} · anywhere on the map{(r.Settings.Mode != RoomMode.Convoy ? $" · {r.Settings.RoundMinutes} min" : "")}", Theme.Small);
 				GUILayout.Label(RoomModeRules[(int)r.Settings.Mode], Theme.Small);
 			} else {
-				GUILayout.Label($"{r.Course?.Name ?? r.CourseCode}{laps} · {(r.Settings.Open ? "Open" : "TRC spec")}{(r.Settings.SpeedTrapScoring ? " · speed trap race" : "")} · grid {GridOrders[(int)Math.Min((int)r.Settings.Order, 3)].ToLowerInvariant()}, " +
-					$"{(r.Settings.PoleLeft ? "pole left" : "pole right")} · jump start {(r.Settings.Jump == JumpRule.Disqualify ? "disqualifies" : $"+{r.Settings.JumpPenaltySeconds:0} s")}", Theme.Small);
+				string jump = r.Settings.Jump == JumpRule.Disqualify ? "disqualifies" : r.Settings.Jump == JumpRule.Recall ? "recalls the start" : r.Settings.Jump == JumpRule.None || r.Settings.NoPenalties ? "no penalty" : $"+{r.Settings.JumpPenaltySeconds:0} s";
+				GUILayout.Label($"{r.Course?.Name ?? r.CourseCode}{laps} · {RuleText(r.Settings.Open, r.Settings.Regulation, r.Settings.Fun)}{(r.Settings.SpeedTrapScoring ? " · speed trap race" : "")} · grid {GridOrders[(int)Math.Min((int)r.Settings.Order, 3)].ToLowerInvariant()}, " +
+					$"{(r.Settings.PoleLeft ? "pole left" : "pole right")} · jump start {jump}{(r.Settings.NoPenalties ? " · no penalties" : "")}{(r.Settings.HostDrives ? "" : " · the host isn't driving")}", Theme.Small);
+				if (r.Settings.Regulation != null) {
+					RegulationResult mine = r.Settings.Regulation.Check(MyCarFacts());
+					GUILayout.Label($"{r.Settings.Regulation.Name}: {r.Settings.Regulation.Summary()}", Theme.Small);
+					if (r.MyDriver?.Racer == true || !r.IsHost) {
+						GUILayout.Label(mine.Passes ? "Your car meets the regulation." : $"Your car doesn't meet it: {string.Join("; ", mine.Broken.Take(3))}", mine.Passes ? Theme.PillGood : Theme.PillWarn);
+					}
+					if (RegulationByCode(r.Settings.Regulation.Code) == null && GUILayout.Button("Save this regulation", Theme.Button)) {
+						SaveRegulation(r.Settings.Regulation.Copy(), $"Saved {r.Settings.Regulation.Name}.");
+					}
+				}
 			}
 			GUILayout.Label(r.Message, Theme.Body);
 			if (r.RoundTrip > 0) {
@@ -778,7 +866,7 @@ namespace TRC.TuneLoader {
 					GUILayout.Label($"<b>P{row.Position}</b>  {row.Name}  {RowText(row)}{(r.IsGame ? "" : gap + lap)}{incidents}", row.Id == MySteamId ? Theme.Body : Theme.Small);
 					GUILayout.FlexibleSpace();
 					// The host as race director: penalties after the race, and everyone sees the new results.
-					if (r.IsHost && !r.IsGame) {
+					if (r.IsHost && !r.IsGame && !r.Settings.NoPenalties) {
 						if (GUILayout.Button("+5 s", Theme.Button)) {
 							r.Penalize(row.Id, 5, false, BattleNow);
 							TrcLog.Info($"Race {r.Id}: +5 s for {row.Name}.");
@@ -800,7 +888,7 @@ namespace TRC.TuneLoader {
 				GUILayout.EndVertical();
 			}
 
-			GUILayout.Label($"Drivers ({r.Drivers.Count}/{r.Settings.MaxPlayers})", Theme.SectionLabel);
+			GUILayout.Label($"Drivers ({r.Drivers.Count}/{MaxDriversText(r.Settings.MaxPlayers)})", Theme.SectionLabel);
 			GUILayout.BeginVertical(Theme.Card);
 			bool racing = r.Phase == RacePhase.Gridding || r.Phase == RacePhase.Countdown || r.Phase == RacePhase.Running;
 			List<RaceStanding> standings = racing ? r.Standings(now) : null;
@@ -813,10 +901,16 @@ namespace TRC.TuneLoader {
 					parts.Add($"P{standings.First(s => s.Driver == d).Position}");
 				}
 				if (!d.Racer) {
-					parts.Add("watching");
+					parts.Add(d.Id == r.HostId && !r.Settings.HostDrives ? "running the race" : "watching");
+				}
+				if (d.Console) {
+					parts.Add($"{(d.Platform.Length > 0 ? d.Platform : "console")}, timed by the host");
+				}
+				if (r.Settings.Regulation != null && d.Racer && !d.Console && d.Id != MySteamId && r.Phase == RacePhase.Gridding) {
+					parts.Add(!d.SaidRuleOk ? $"<color={Theme.WarnHex}>needs 0.16</color>" : d.RuleOk ? "meets the regulation" : $"<color={Theme.WarnHex}>doesn't meet the regulation</color>");
 				}
 				if (d.Car.Length > 0) {
-					parts.Add($"{d.Car}{(d.TuneSet.Length > 0 ? $", {d.TuneSet}" : "")}{(d.Spec ? "" : r.Settings.Open ? "" : " (not spec)")}");
+					parts.Add($"{d.Car}{(d.TuneSet.Length > 0 && r.Settings.IsTrcSpec ? $", {d.TuneSet}" : "")}{(d.Spec || !r.Settings.IsTrcSpec ? "" : " (not spec)")}");
 				}
 				if (r.Phase == RacePhase.Gridding && d.Racer) {
 					parts.Add(d.Ready ? $"<color={Theme.GoodHex}>ready</color>" : "lining up");
@@ -852,6 +946,9 @@ namespace TRC.TuneLoader {
 				}
 			}
 			GUILayout.EndVertical();
+			if (r.IsHost && !r.IsGame) {
+				DrawConsolePlayersToAdd(r);
+			}
 
 			GUILayout.BeginHorizontal();
 			if (r.Phase == RacePhase.Gridding && r.MySpot().HasValue && GUILayout.Button("Teleport to my spot", Theme.ButtonPrimary)) {

@@ -13,7 +13,7 @@ namespace TRC.TuneLoader {
 	/// with Kino.Input: it's matched in OnGUI against Unity's key events.
 	/// </summary>
 	public partial class TRCTuneLoaderMod {
-		private const int OptionsTab = 7;
+		private const int OptionsTab = 9;
 		private const string ShortcutPref = "open_shortcut";
 		private const string RestartPref = "restart_shortcut";
 		private const string ShareValuesPref = "share_tune_values";
@@ -93,6 +93,12 @@ namespace TRC.TuneLoader {
 				problemsOnly_ = Kino.Prefs.Get(ProblemsOnlyPref, false);
 				showSectors_ = Kino.Prefs.Get(SectorsPref, true);
 				bestLineMode_ = Mathf.Clamp(Kino.Prefs.Get(BestLinePref, 0), 0, 2);
+				ghostMode_ = Mathf.Clamp(Kino.Prefs.Get(GhostsPref, KeepBestGhosts), 0, 2);
+				LoadSuspensionOptions();
+				ghostOpacity_ = Mathf.Clamp(Kino.Prefs.Get(GhostOpacityPref, 1), 0, GhostOpacities.Length - 1);
+				CourseMarkers.SetGhostOpacity(GhostOpacityValues[ghostOpacity_]);
+				LoadLayout();
+				trapSignMode_ = Mathf.Clamp(Kino.Prefs.Get(TrapSignPref, 0), 0, 1);
 				shareValues_ = Kino.Prefs.Get(ShareValuesPref, false);
 				LoadLook();
 				Vector2 timer = Kino.Prefs.Get(HudPositionPref, DefaultHudPosition);
@@ -359,11 +365,39 @@ namespace TRC.TuneLoader {
 				SavePref(BestLinePref, bestLineMode_);
 			}
 			GUILayout.Space(8);
-			GUILayout.Label("<b>Time attack timer</b>: drag it anywhere on the screen while this window is open during a run.", Theme.Body);
+			GUILayout.Label("<b>Ghosts</b>: your runs are recorded as ghosts to race later or share (Time attack, Tracks, Ghosts). " +
+				"Keep your 3 best time attacks on each car and course, keep every run you finish (time attacks, battles and races), or record nothing. " +
+				"Ghosts you already have, and ones others share, still play either way.", Theme.Body);
+			int ghosts = Choice(GhostModes, ghostMode_);
+			if (ghosts != ghostMode_) {
+				ghostMode_ = ghosts;
+				SavePref(GhostsPref, ghostMode_);
+			}
 			GUILayout.BeginHorizontal();
-			if (hudPosition_ != DefaultHudPosition && GUILayout.Button("Put the timer back at the top", Theme.Button)) {
-				hudPosition_ = DefaultHudPosition;
-				SavePref(HudPositionPref, hudPosition_);
+			GUILayout.Label("How see-through", Theme.Small, GUILayout.Width(110));
+			int opacity = Choice(GhostOpacities, ghostOpacity_);
+			GUILayout.EndHorizontal();
+			if (opacity != ghostOpacity_) {
+				ghostOpacity_ = opacity;
+				SavePref(GhostOpacityPref, ghostOpacity_);
+				CourseMarkers.SetGhostOpacity(GhostOpacityValues[ghostOpacity_]);
+			}
+			GUILayout.Space(8);
+			GUILayout.Label("<b>Speed trap signs</b> show the speed you went through each trap at:", Theme.Body);
+			int signMode = Choice(new[] { "Your last speed", "Your fastest" }, trapSignMode_);
+			if (signMode != trapSignMode_) {
+				trapSignMode_ = signMode;
+				SavePref(TrapSignPref, trapSignMode_);
+			}
+			GUILayout.Space(8);
+			GUILayout.Label("<b>Screen layout</b>: move the timer (time attacks, races and battles), the speed trap flash, pop-up notices, the TRC spec badge and the suspension overlay " +
+				"wherever you like, all at once, without starting anything first.", Theme.Body);
+			GUILayout.BeginHorizontal();
+			if (GUILayout.Button("Arrange the screen", Theme.ButtonPrimary)) {
+				StartArranging();
+			}
+			if (GUILayout.Button("Put everything back", Theme.Button)) {
+				ResetLayout();
 			}
 			GUILayout.FlexibleSpace();
 			GUILayout.EndHorizontal();
@@ -536,9 +570,9 @@ namespace TRC.TuneLoader {
 			},
 			new TourStep {
 				Title = "Battles, races and fun games",
-				Text = "The Battles tab has 1v1 battles (side by side, cat and mouse, or a Tokyo Xtreme Racer style highway battle on SP), Races & tournaments for up to 16 drivers " +
-					"(qualifying, grids, points series, knockouts, heats, and speed trap races), and Fun games: cops and runners, tag, infected, king of the hill, keep-up, convoy and highway cut-up. " +
-					"When it's over, Run it back plays it again.",
+				Text = "The Battles tab has 1v1 battles (side by side, cat and mouse, or a Tokyo Xtreme Racer style highway battle on SP), Races and Tournaments " +
+					"(qualifying, grids, points series, knockouts, heats, and speed trap races; console players can race too), and Fun games: cops and runners, tag, infected, king of the hill, keep-up, convoy and highway cut-up. " +
+					"Run any of them to TRC spec, a regulation (Regulations tab) or Open, and just for fun if you like. When it's over, Run it back plays it again.",
 				Tab = BattlesTab,
 			},
 			new TourStep {
