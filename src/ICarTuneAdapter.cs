@@ -4,6 +4,15 @@ using UnityEngine;
 
 namespace TRC.TuneLoader {
 	/// <summary>Where the player's car is and how fast it goes, while driving.</summary>
+	/// <summary>Nov 3: an icon on CarX's minimap and big map (a start, finish, sector or speed trap).</summary>
+	public struct MapIcon {
+		public Vector3 Position;
+		public Color Color;
+
+		/// <summary>In the map's pixels.</summary>
+		public int Size;
+	}
+
 	public struct CarPose {
 		public Vector3 Position;
 		public Vector3 Forward;
@@ -277,6 +286,26 @@ namespace TRC.TuneLoader {
 		bool TryCheckOverRoad(ICollection<int> roadColliders, out bool overRoad);
 
 		/// <summary>
+		/// Nov 2: how wide these road colliders (instance IDs) are across <paramref name="centre"/>, along
+		/// <paramref name="right"/> (metres), by looking straight down every 25 cm out to each side. False when the
+		/// road isn't under the centre or the map isn't loaded.
+		/// </summary>
+		bool TryMeasureRoadWidth(Vector3 centre, Vector3 right, ICollection<int> roadColliders, out float width);
+
+		/// <summary>
+		/// Nov 3 (bskftw: "you can see where players on a map are, why cant we add icons for all of these too"): shows
+		/// these icons on CarX's minimap and big map, the same way CarX shows its own (and takes away any shown before).
+		/// False when this map has no CarX minimap.
+		/// </summary>
+		bool TryShowMapIcons(IList<MapIcon> icons);
+
+		/// <summary>
+		/// Every frame while icons show: sizes them for the map they're on (bskftw, Nov 3: smaller on the full map in
+		/// the menu, a bit bigger on the minimap while driving). CarX gives an icon one size for every map.
+		/// </summary>
+		void SizeMapIcons();
+
+		/// <summary>
 		/// 0.16: the numbers CarX's tuning screen shows for these slider positions (mm, Nm, degrees...), as numbers, and how
 		/// many decimals it shows each with (a tyre stretch of 10.3 shows as "10": 0 decimals).
 		/// </summary>
@@ -461,6 +490,16 @@ namespace TRC.TuneLoader {
 		public bool TryCheckOverRoad(ICollection<int> roadColliders, out bool overRoad) {
 			overRoad = false;
 			return false;
+		}
+
+		public bool TryMeasureRoadWidth(Vector3 centre, Vector3 right, ICollection<int> roadColliders, out float width) {
+			width = 0f;
+			return false;
+		}
+
+		public bool TryShowMapIcons(IList<MapIcon> icons) => false;
+
+		public void SizeMapIcons() {
 		}
 	}
 }

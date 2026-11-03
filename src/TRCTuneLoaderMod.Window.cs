@@ -160,7 +160,8 @@ namespace TRC.TuneLoader {
 			bool courseHud = (CourseHudVisible || NoticeVisible) && !arranging_;
 			bool signs = TrapSignsVisible;
 			bool suspension = SuspensionOverlayVisible && !arranging_;
-			if (!windowOpen_ && !hud && !courseHud && !signs && !suspension) {
+			bool gantrySigns = hasPose_ && markers_.HasVisibleGantries && !arranging_;
+			if (!windowOpen_ && !hud && !courseHud && !signs && !suspension && !gantrySigns) {
 				return;
 			}
 
@@ -178,6 +179,9 @@ namespace TRC.TuneLoader {
 
 				if (signs) {
 					DrawTrapSigns(scale);
+				}
+				if (gantrySigns) {
+					DrawGantrySigns(scale, screenWidth);
 				}
 				if (courseHud) {
 					DrawCourseHud(screenWidth, screenHeight, scale);
@@ -216,6 +220,7 @@ namespace TRC.TuneLoader {
 		}
 
 		private void DrawWindow(int id) {
+			FrogInput();
 			DrawHeader();
 			DrawTabs();
 
@@ -240,6 +245,7 @@ namespace TRC.TuneLoader {
 				}
 			}
 			GUILayout.EndVertical();
+			DrawFrog();
 
 			GUI.DragWindow(new Rect(0, 0, WindowWidth, 64));
 		}
@@ -249,6 +255,10 @@ namespace TRC.TuneLoader {
 			if (logo_ != null) {
 				Rect logoRect = GUILayoutUtility.GetRect(44, 44, GUILayout.Width(44), GUILayout.Height(44));
 				GUI.DrawTexture(logoRect, logo_, ScaleMode.ScaleToFit);
+				if (Event.current.type == EventType.MouseDown && Event.current.button == 0 && logoRect.Contains(Event.current.mousePosition)) {
+					Event.current.Use();
+					LogoClicked();
+				}
 				GUILayout.Space(10);
 			}
 

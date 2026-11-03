@@ -323,6 +323,9 @@ namespace TRC.TuneLoader {
 			}
 			StopOtherCourseWork();
 			uint id = (uint)battleIds_.Next(1, int.MaxValue);
+			if (course != null) {
+				MeasureRoad(course);
+			}
 			battle_ = BattleSession.Challenge(id, MySteamId, MyName(), peer, peerName, course, format, open, CheckBattleCar, BattleNow,
 				laps: laps, matchId: matchId, matchGame: matchGame, regulation: regulation, fun: fun);
 			battleLogged_ = false;
@@ -602,17 +605,13 @@ namespace TRC.TuneLoader {
 				pickedConsole_ = "";
 			}
 
-			List<Course> courses = courses_.ForMap(map_.Key).Where(c => c.Usable).ToList();
+			List<Course> courses = CoursesHere().Where(c => c.Usable).ToList();
 			GUILayout.Label("Course", Theme.SectionLabel);
 			if (courses.Count == 0) {
 				GUILayout.Label("No courses on this map yet: make one with the Course builder.", Theme.Small);
 			}
-			foreach (Course course in courses) {
-				string text = $"<b>{course.Name}</b>  <color={Theme.MutedHex}>{course.KindName} · {TimeAttackRun.Distance(course.Length)} · {course.SourceName}</color>";
-				if (GUILayout.Button(text, pickedCourse_ == course.Code ? Theme.RowSelected : Theme.Row)) {
-					pickedCourse_ = course.Code;
-				}
-			}
+			pickedCourse_ = PickCourse(battlePicker_, courses, pickedCourse_,
+				course => $"<b>{course.Name}</b>  <color={Theme.MutedHex}>{course.KindName} · {TimeAttackRun.Distance(course.Length)} · {course.SourceName}</color>");
 
 			GUILayout.Label("Format", Theme.SectionLabel);
 			pickedFormat_ = Choice(BattleFormats, pickedFormat_);

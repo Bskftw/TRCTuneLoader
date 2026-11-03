@@ -96,8 +96,14 @@ namespace TRC.TuneLoader {
 		public float? MinWeight;
 		public float? MaxWeight;
 
-		/// <summary>Power to weight: at least this many kg per hp.</summary>
+		/// <summary>Power to weight: at least this many kg per hp (the first way; still read, and kept on older regulations).</summary>
 		public float? MinKgPerHp;
+
+		/// <summary>
+		/// Power to weight, the way leagues write it (bskftw, Nov 3): at most this many hp per kg (0.22: a car can't go
+		/// over 0.22 hp for each kg).
+		/// </summary>
+		public float? MaxHpPerKg;
 
 		public bool EngineSwaps = true;
 		public bool DrivetrainChange = true;
@@ -166,6 +172,13 @@ namespace TRC.TuneLoader {
 					r.Unknown.Add("power to weight");
 				} else if (Under(car.Mass / car.Hp, MinKgPerHp.Value, Leeway(2, MinKgPerHp.Value))) {
 					r.Broken.Add($"{car.Mass / car.Hp:0.00} kg per hp: at least {MinKgPerHp.Value:0.00} kg per hp");
+				}
+			}
+			if (MaxHpPerKg.HasValue) {
+				if (car.Hp <= 0 || car.Mass <= 0) {
+					r.Unknown.Add("power to weight");
+				} else if (Over(car.Hp / car.Mass, MaxHpPerKg.Value, Leeway(3, MaxHpPerKg.Value))) {
+					r.Broken.Add($"{car.Hp / car.Mass:0.000} hp per kg: the most is {MaxHpPerKg.Value:0.000} hp per kg");
 				}
 			}
 			if (!EngineSwaps) {
@@ -277,6 +290,9 @@ namespace TRC.TuneLoader {
 			if (MinKgPerHp.HasValue) {
 				parts.Add($"≥{MinKgPerHp.Value:0.##} kg/hp");
 			}
+			if (MaxHpPerKg.HasValue) {
+				parts.Add($"≤{MaxHpPerKg.Value:0.###} hp/kg");
+			}
 			if (MinWeight.HasValue) {
 				parts.Add($"≥{MinWeight.Value:0} kg");
 			}
@@ -320,6 +336,10 @@ namespace TRC.TuneLoader {
 			text.Append("min_weight = ").Append(MinWeight.HasValue ? Number(MinWeight.Value) : "").Append('\n');
 			text.Append("max_weight = ").Append(MaxWeight.HasValue ? Number(MaxWeight.Value) : "").Append('\n');
 			text.Append("min_kg_per_hp = ").Append(MinKgPerHp.HasValue ? Number(MinKgPerHp.Value) : "").Append('\n');
+			// Only written when set, so regulations made before it keep their codes.
+			if (MaxHpPerKg.HasValue) {
+				text.Append("max_hp_per_kg = ").Append(Number(MaxHpPerKg.Value)).Append('\n');
+			}
 			text.Append("engine_swaps = ").Append(YesNo(EngineSwaps)).Append('\n');
 			text.Append("drivetrain_change = ").Append(YesNo(DrivetrainChange)).Append('\n');
 			text.Append("kino_swaps = ").Append(YesNo(OutsideSwaps)).Append('\n');
@@ -423,6 +443,7 @@ namespace TRC.TuneLoader {
 							case "min_weight": reg.MinWeight = Float(value); break;
 							case "max_weight": reg.MaxWeight = Float(value); break;
 							case "min_kg_per_hp": reg.MinKgPerHp = Float(value); break;
+							case "max_hp_per_kg": reg.MaxHpPerKg = Float(value); break;
 							case "engine_swaps": reg.EngineSwaps = Yes(value); break;
 							case "drivetrain_change": reg.DrivetrainChange = Yes(value); break;
 							case "kino_swaps": reg.OutsideSwaps = Yes(value); break;

@@ -142,6 +142,24 @@ namespace TRC.TuneLoader {
 		/// <summary>Map courses only: the map's "TRC &lt;course&gt; Grid N" spots, in number order. They win over everything else.</summary>
 		public List<GridSpot> GridObjects = new List<GridSpot>();
 
+		/// <summary>
+		/// How wide the road is at the start (metres), measured on the map when the course is used (0: not known).
+		/// Narrower than <see cref="SideBySideWidth"/>, races and battles line up single file. Not saved, not in the code.
+		/// </summary>
+		public float RoadWidth;
+
+		/// <summary>
+		/// bskftw, Nov 2: some roads (Yabitsu, Maze Pass) are too narrow for two cars side by side. Two cars about 1.9 m
+		/// wide, <see cref="SideBySideGap"/> apart centre to centre, need about this much road.
+		/// </summary>
+		public const float SideBySideWidth = 6f;
+
+		/// <summary>Side by side, cars' centres are this far apart (metres), either side of the middle: close together, whatever the line's width.</summary>
+		public const float SideBySideGap = 3f;
+
+		/// <summary>The road at the start is too narrow for side by side: everyone lines up single file, and each driver's clock starts at the line.</summary>
+		public bool SingleFile => RoadWidth > 0f && RoadWidth < SideBySideWidth;
+
 		/// <summary>Grid rows: the first car this far (metres) behind the start line, then one every <see cref="GridStep"/> (two-wide: alternating sides).</summary>
 		public const float GridFirst = 4f;
 		public const float GridStep = 4f;
@@ -170,8 +188,8 @@ namespace TRC.TuneLoader {
 				return spots;
 			}
 
-			List<Vector3> back = GridPath.Count >= 2 ? GridPath : new List<Vector3> { Start.Center, Start.Center - Start.Forward * 10f };
-			float side = Mathf.Clamp(Start.Width / 4f, 1.5f, 3f);
+			List<Vector3> back = GridLine();
+			float side = SideBySideGap / 2f;
 			for (int i = 0; i < count; i++) {
 				float behind = GridFirst + i * (shape == GridLayout.LineUp ? LineUpStep : GridStep);
 				CourseGeometry.AlongBack(back, behind, out Vector3 at, out Vector3 forward);
@@ -183,6 +201,94 @@ namespace TRC.TuneLoader {
 				spots.Add(new GridSpot { Position = at, Forward = forward });
 			}
 			return spots;
+		}
+
+		/// <summary>
+		/// The line the grid is laid along, from the start line backwards: the grid path; on a circuit without one, the
+		/// end of the lap leading up to the line; else straight back from the line.
+		/// </summary>
+		private List<Vector3> GridLine() {
+			if (GridPath.Count >= 2) {
+				return GridPath;
+			}
+			if (IsCircuit && Path.Count >= 2) {
+				var back = new List<Vector3> { Start.Center };
+				for (int i = Path.Count - 1; i >= 0; i--) {
+					back.Add(Path[i]);
+				}
+				return back;
+			}
+			return new List<Vector3> { Start.Center, Start.Center - Start.Forward * 10f };
+		}
+
+		/// <summary>A full grid, for the map maker's grid path check.</summary>
+		public const int FullGrid = 16;
+
+		/// <summary>How far (metres) the grid path runs back from the start line, or 0 without one.</summary>
+		public float GridPathLength {
+			get {
+				if (!ReferenceEquals(gridLengthOf_, GridPath) || gridLengthCount_ != GridPath.Count) {
+					gridLengthOf_ = GridPath;
+					gridLengthCount_ = GridPath.Count;
+					gridLength_ = 0f;
+					for (int i = 1; i < GridPath.Count; i++) {
+						gridLength_ += Vector3.Distance(GridPath[i - 1], GridPath[i]);
+					}
+				}
+				return gridLength_;
+			}
+		}
+
+		private List<Vector3> gridLengthOf_;
+		private int gridLengthCount_;
+		private float gridLength_;
+
+		/// <summary>How far back (metres) the last of <paramref name="cars"/> lines up, two-wide or single file.</summary>
+		public static float GridDepthFor(int cars, GridLayout shape) => GridFirst + Math.Max(0, cars - 1) * (shape == GridLayout.LineUp ? LineUpStep : GridStep);
+
+		/// <summary>
+		/// How many cars fit on the grid path (more line up straight back from its end, which may not follow the road).
+		/// No limit with the map's own grid spots, or without a grid path (the grid isn't laid along one then).
+		/// </summary>
+		public int GridRoom(GridLayout shape) {
+			if (GridObjects.Count > 0 || GridPath.Count < 2) {
+				return int.MaxValue;
+			}
+			float length = GridPathLength;
+			return length < GridFirst ? 0 : 1 + (int)((length - GridFirst) / (shape == GridLayout.LineUp ? LineUpStep : GridStep));
+		}
+
+		/// <summary>
+		/// bskftw, Nov 2: a map path that doesn't run far enough back from the start line for a full grid. Races still
+		/// use it (as many cars as fit, the rest straight back from its end) until the map maker runs it on further.
+		/// "" when it fits a full grid single file, or there's no grid path.
+		/// </summary>
+		public string GridWarning() {
+			int two = GridRoom(GridLayout.Grid), line = GridRoom(GridLayout.LineUp);
+			if (line >= FullGrid) {
+				return "";
+			}
+			return $"The path runs {GridPathLength:0} m back from the start line: room for {Math.Min(two, FullGrid)} cars two-wide and {line} single file. " +
+				$"Run it on to {GridDepthFor(FullGrid, GridLayout.Grid):0} m behind the line for a full grid of {FullGrid} ({GridDepthFor(FullGrid, GridLayout.LineUp):0} m single file, " +
+				"for narrow roads). Until then, more cars line up straight back from its end.";
+		}
+
+		/// <summary>The point <paramref name="distance"/> metres along the path, and the way the road goes there.</summary>
+		public void PointAt(float distance, out Vector3 at, out Vector3 forward) {
+			at = Path.Count > 0 ? Path[0] : Start.Center;
+			forward = Start.Forward;
+			for (int i = 1; i < Path.Count && i < Distances.Length; i++) {
+				if (Distances[i] >= distance || i == Path.Count - 1) {
+					float length = Distances[i] - Distances[i - 1];
+					float t = length > 1e-4f ? Mathf.Clamp01((distance - Distances[i - 1]) / length) : 0f;
+					at = Vector3.Lerp(Path[i - 1], Path[i], t);
+					Vector3 along = CourseGeometry.Level(Path[i] - Path[i - 1]);
+					if (along != Vector3.zero) {
+						forward = along;
+					}
+					return;
+				}
+			}
 		}
 
 		/// <summary>Distance along the path at each path point, in metres.</summary>

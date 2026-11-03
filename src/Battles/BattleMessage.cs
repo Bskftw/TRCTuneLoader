@@ -105,6 +105,9 @@ namespace TRC.TuneLoader {
 		public bool Fun;
 		public Regulation Regulation;
 
+		/// <summary>Side by side won't fit on the road at the start: the drivers line up one behind the other, each timed from the line.</summary>
+		public bool SingleFile;
+
 		// Answer, Abort and Leave
 		public bool Accept;
 		public string Reason = "";
@@ -178,6 +181,7 @@ namespace TRC.TuneLoader {
 						writer.Write(Fun);
 						string regulation = Regulation?.ToText() ?? "";
 						writer.Write(regulation.Length <= MaxRegulationText ? regulation : "");
+						writer.Write(SingleFile);
 						break;
 					case BattleKind.Answer:
 					case BattleKind.Leave:
@@ -273,6 +277,9 @@ namespace TRC.TuneLoader {
 								message.Fun = reader.ReadBoolean();
 								string regulation = reader.ReadString();
 								message.Regulation = regulation.Length > 0 && regulation.Length <= MaxRegulationText ? Regulation.Parse(regulation) : null;
+								if (reader.BaseStream.Position < reader.BaseStream.Length) {
+									message.SingleFile = reader.ReadBoolean();
+								}
 							}
 							if (protocol == RuleProtocol && message.Regulation == null) {
 								return null;

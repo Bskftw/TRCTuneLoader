@@ -44,6 +44,7 @@
     <Compile Include="..\..\src\Races\RatingSeal.cs" Link="src\Races\RatingSeal.cs" />
     <Compile Include="..\..\src\Regulations\Regulation.cs" Link="src\Regulations\Regulation.cs" />
     <Compile Include="..\..\src\Courses\Ghost.cs" Link="src\Courses\Ghost.cs" />
+    <Compile Include="..\..\src\Courses\SignPainter.cs" Link="src\Courses\SignPainter.cs" />
     <Compile Include="..\..\src\Suspension\SuspensionLog.cs" Link="src\Suspension\SuspensionLog.cs" />
     <Compile Include="..\..\src\Courses\CourseScanner.cs" Link="src\Courses\CourseScanner.cs" />
     <Compile Include="..\..\src\Courses\SpeedTrap.cs" Link="src\Courses\SpeedTrap.cs" />
@@ -61,6 +62,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="System.IO.Compression" />
+    <Reference Include="System.Drawing" />
     <Reference Include="UnityEngine.CoreModule">
       <HintPath>$(CarXPath)\Drift Racing Online_Data\Managed\UnityEngine.CoreModule.dll</HintPath>
     </Reference>

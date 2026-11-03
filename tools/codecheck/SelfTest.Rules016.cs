@@ -77,6 +77,7 @@ namespace TRC.TuneLoader.CodeCheck {
 			strong.Hp = 640;
 			RegulationResult over = r.Check(strong);
 			Expect(!over.Passes && over.Broken.Any(b => b.Contains("640 hp")) && over.Broken.Any(b => b.Contains("kg per hp")), $"too much power breaks the hp and power-to-weight rules ({string.Join("; ", over.Broken)})");
+			HpPerKgIsAMost();
 			CarFacts wrongSetup = GoodCar();
 			wrongSetup.Setup = "UltimatePro";
 			Expect(!r.Check(wrongSetup).Passes && r.Check(wrongSetup).Broken[0].Contains("Ultimate Pro"), "a setup that isn't allowed is named");
@@ -144,7 +145,7 @@ namespace TRC.TuneLoader.CodeCheck {
 			// A 0.15 lobby (nothing at the end) reads with the old defaults.
 			var old = new RaceMessage { Kind = RaceKind.Lobby, RaceId = 5, From = RaceHost, HostName = "Host", CourseCode = "CRS-1", Settings = new RaceSettings() };
 			byte[] bytes = old.Encode();
-			int trailing = 4 + 1 + 1 + 1 + 4 + 1 - 1; // fun, host drives, lights, no penalties; empty regulation; no consoles; recalls; empty name
+			int trailing = 4 + 1 + 1 + 1 + 4 + 1 - 1 + 1; // fun, host drives, lights, no penalties; empty regulation; no consoles; recalls; empty name; single file
 			RaceMessage fromOld = RaceMessage.Decode(bytes.Take(bytes.Length - trailing).ToArray());
 			Expect(fromOld != null && fromOld.Settings.Regulation == null && fromOld.Settings.HostDrives && !fromOld.Settings.Fun, "a lobby from 0.15 (without the new fields) still reads, as before");
 			Expect(RaceSession.IsConsoleId(RaceSession.ConsoleId("123|PS4")) && !RaceSession.IsConsoleId(76561198000000001) && RaceSession.ConsoleId("a") != RaceSession.ConsoleId("b"),
@@ -398,6 +399,22 @@ namespace TRC.TuneLoader.CodeCheck {
 			Expect(runItem?.Ghost != null && runItem.JustForMe && runItem.Ghost.Samples.Count == ghost.Samples.Count && runItem.Ghost.DriverId == SealOther && board.SharedRuns.Count == 1,
 				$"a run shared with one player arrives with its ghost ({run.Encode().Length} bytes)");
 			Expect(new RoomBoard().ReceiveItem(runBack, 0, SealOwner + 7) == null, "a run shared with one player doesn't show for anyone else");
+		}
+
+		/// <summary>bskftw, Nov 3: power to weight is written as a most, in hp per kg ("set to .22 then you cant go higher").</summary>
+		private static void HpPerKgIsAMost() {
+			var rule = new Regulation { Name = "PTW", MaxHpPerKg = 0.22f };
+			RegulationResult under = rule.Check(new CarFacts { Hp = 286f, Mass = 1300f });
+			RegulationResult over = rule.Check(new CarFacts { Hp = 330f, Mass = 1300f });
+			RegulationResult edge = rule.Check(new CarFacts { Hp = 286.4f, Mass = 1300f });
+			Expect(under.Passes && !over.Passes && over.Broken.Any(b => b.Contains("hp per kg")) && edge.Passes,
+				$"0.22 hp per kg is the most: 0.220 passes, 0.254 doesn't, and a hair over rounds back ({string.Join("; ", over.Broken)})");
+			var old = new Regulation { Name = "Old", MaxHp = 600 };
+			string code = old.Code;
+			Regulation back = Regulation.Parse(old.ToText());
+			Expect(back != null && back.Code == code && !old.ToText().Contains("max_hp_per_kg"), "regulations without it keep their codes");
+			Regulation copy = rule.Copy();
+			Expect(copy.MaxHpPerKg == 0.22f && copy.Code == rule.Code && copy.Code != new Regulation { Name = "PTW" }.Code, "it's saved, shared and part of the code");
 		}
 	}
 }

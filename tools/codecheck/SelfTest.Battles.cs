@@ -395,7 +395,7 @@ namespace TRC.TuneLoader.CodeCheck {
 			var host = BattleSession.Challenge(15, HostId, "Host", GuestId, "Guest", course, BattleFormat.Race, true, () => new BattleCar(), 0);
 			var guest = BattleSession.FromChallenge(BattleMessage.Decode(host.TakeOutbox()[0].Encode()), GuestId, "Guest", course, () => new BattleCar(), 0);
 			float apart = Vector3.Distance(host.MySpot(), guest.MySpot());
-			Expect(Math.Abs(apart - 4f) < 0.01f, $"race spots on a 12 m line are 4 m apart, 1 m closer each than before ({apart:0.00} m)");
+			Expect(Math.Abs(apart - Course.SideBySideGap) < 0.01f, $"race spots are {Course.SideBySideGap} m apart, whatever the line's width ({apart:0.00} m)");
 
 			guest.Accept(0);
 			Expect(guest.Run.GridFront == 0f || guest.Run.GridFront == 5f, "the guest's box is set when it accepts");

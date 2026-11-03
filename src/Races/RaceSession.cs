@@ -894,6 +894,7 @@ namespace TRC.TuneLoader {
 					KeepGoing = true,
 					OnJump = RunJumpRule(Settings.Jump),
 					Spot = MySpot(),
+					ClockFromLine = Settings.SingleFile,
 				};
 				myJumps_ = 0;
 				recallsSeen_ = Recalls;
@@ -1023,7 +1024,7 @@ namespace TRC.TuneLoader {
 			if (Course == null || me == null || me.Slot < 0) {
 				return null;
 			}
-			List<GridSpot> spots = Course.GridSpots(me.Slot + 1, Settings.PoleLeft, Settings.LayoutFromCourse ? (GridLayout?)null : Settings.Layout);
+			List<GridSpot> spots = Course.GridSpots(me.Slot + 1, Settings.PoleLeft, Settings.GridShape);
 			return spots[me.Slot];
 		}
 
@@ -1481,9 +1482,10 @@ namespace TRC.TuneLoader {
 					continue;
 				}
 				if (!consoleRuns_.TryGetValue(d.Id, out TimeAttackRun run)) {
-					List<GridSpot> spots = Course.GridSpots(d.Slot + 1, Settings.PoleLeft, Settings.LayoutFromCourse ? (GridLayout?)null : Settings.Layout);
+					List<GridSpot> spots = Course.GridSpots(d.Slot + 1, Settings.PoleLeft, Settings.GridShape);
 					run = new TimeAttackRun(Course, Settings.Laps) {
 						ExternalStart = true, AllowResets = true, KeepGoing = true, OnJump = RunJumpRule(Settings.Jump), Spot = spots[d.Slot],
+						ClockFromLine = Settings.SingleFile,
 					};
 					consoleRuns_[d.Id] = run;
 					consoleCountdowns_[d.Id] = 0;

@@ -87,9 +87,10 @@ namespace TRC.TuneLoader {
 				return;
 			}
 
-			foreach (var carSet in course.GroupBy(r => (r.CarId, r.TuneSet)).OrderBy(g => g.Min(r => r.TimeMs))) {
+			foreach (var carSet in course.GroupBy(r => (r.CarId, r.TuneSet, r.Rule)).OrderBy(g => g.Key.Rule.Length > 0 ? 1 : 0).ThenBy(g => g.Min(r => r.TimeMs))) {
 				TimeAttackRecord any = carSet.First();
-				string set = any.TuneSet.Length > 0 ? any.TuneSet : "no TRC tune set";
+				string set = (any.TuneSet.Length > 0 ? any.TuneSet : "no TRC tune set") +
+					(any.Rule == TimeAttackLog.OpenRule ? " · Open" : any.Rule.Length > 0 ? $" · {RuleName(any.Rule)}" : "");
 				var parts = new List<string>();
 				if (circuit) {
 					parts.Add(Part("Best lap", carSet, LapKind));
@@ -115,9 +116,10 @@ namespace TRC.TuneLoader {
 				GUILayout.FlexibleSpace();
 				int carId = any.CarId;
 				string tuneSet = any.TuneSet;
+				string rule = any.Rule;
 				string code = course.Key;
-				DeleteTimesButton($"car {code} {carId} {tuneSet}", "Delete these", $"{any.Car}'s times on {last.CourseName}",
-					r => r.CourseCode == code && r.CarId == carId && r.TuneSet == tuneSet);
+				DeleteTimesButton($"car {code} {carId} {tuneSet} {rule}", "Delete these", $"{any.Car}'s times on {last.CourseName}",
+					r => r.CourseCode == code && r.CarId == carId && r.TuneSet == tuneSet && r.Rule == rule);
 				GUILayout.EndHorizontal();
 				GUILayout.Label(string.Join("   ", parts), Theme.Small);
 				// The sectors of this car's best time (a circuit's best lap), coloured against every time on the course.

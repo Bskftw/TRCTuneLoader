@@ -19,7 +19,7 @@
     <LangVersion>9</LangVersion>
     <AssemblyName>TRCTuneLoader</AssemblyName>
     <RootNamespace>TRC.TuneLoader</RootNamespace>
-    <Version>0.16.0</Version>
+    <Version>0.16.1</Version>
     <Configurations>Debug;Release;Release_Encrypted</Configurations>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <Nullable>disable</Nullable>
@@ -71,6 +71,11 @@
       <HintPath>$(CarXManaged)\CarX.Plugins.Core.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <!-- CarX's async library: the map icons (CarXTuneAdapter's TrcMinimapItem) override a method that returns a UniTask. -->
+    <Reference Include="UniTask">
+      <HintPath>$(CarXManaged)\UniTask.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
   </ItemGroup>
 
   <ItemGroup>
@@ -79,6 +84,10 @@
     <EmbeddedResource Include="Resources\icon.png" />
     <EmbeddedResource Include="Resources\trc_logo.png" />
     <EmbeddedResource Include="Resources\speed_trap_sign.png" />
+    <EmbeddedResource Include="Resources\gantry_font.png" />
+    <EmbeddedResource Include="Resources\gantry_glow.png" />
+    <EmbeddedResource Include="Resources\gantry_font.txt" />
+    <EmbeddedResource Include="Resources\frog.png" />
     <!--
       The official TRC tunes (KINO .knd files) are built into the mod, so players can't see or edit them.
       They live in official_tunes/<set>/, which Git ignores: copy them from KINO's tunes folder.

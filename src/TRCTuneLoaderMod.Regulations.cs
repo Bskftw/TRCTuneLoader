@@ -171,6 +171,76 @@ namespace TRC.TuneLoader {
 			return mode == 1 ? picked : null;
 		}
 
+		// ---- Time attack rules (bskftw, Nov 3: "an option for time attack to be open trc spec or regulations") ----
+
+		private const string TimeAttackRulesPref = "time_attack_rules";
+		private const string TimeAttackRegulationPref = "time_attack_regulation";
+		private int timeAttackMode_ = -1;
+		private string timeAttackRule_ = "";
+
+		/// <summary>The rules the time attack running was started with (its record's <see cref="TimeAttackRecord.Rule"/>).</summary>
+		private string runRule_ = "";
+
+		/// <summary>What a new time attack is driven to: "" TRC spec, "open", or the picked regulation's code.</summary>
+		private string TimeAttackRule {
+			get {
+				LoadTimeAttackRules();
+				return timeAttackMode_ == 2 ? TimeAttackLog.OpenRule : timeAttackMode_ == 1 && RegulationByCode(timeAttackRule_) != null ? timeAttackRule_ : "";
+			}
+		}
+
+		private void LoadTimeAttackRules() {
+			if (timeAttackMode_ < 0) {
+				timeAttackMode_ = Mathf.Clamp(KSL.API.Kino.Prefs.Get(TimeAttackRulesPref, 0), 0, 2);
+				timeAttackRule_ = KSL.API.Kino.Prefs.Get(TimeAttackRegulationPref, "");
+			}
+		}
+
+		/// <summary>Tracks: what time attacks are driven to. TRC spec is what counts for TRC; the others have their own times.</summary>
+		private void DrawTimeAttackRules() {
+			LoadTimeAttackRules();
+			GUILayout.BeginHorizontal();
+			GUILayout.Label("Rules", Theme.SectionLabel, GUILayout.Width(60));
+			int mode = Choice(RuleModes, timeAttackMode_);
+			GUILayout.EndHorizontal();
+			if (mode != timeAttackMode_) {
+				timeAttackMode_ = mode;
+				SavePref(TimeAttackRulesPref, mode);
+			}
+			if (mode == 1) {
+				if (regulations_.Count == 0) {
+					GUILayout.Label("You have no regulations yet: make one or import one in the Regulations tab.", Theme.PillWarn);
+				} else {
+					if (RegulationByCode(timeAttackRule_) == null) {
+						timeAttackRule_ = regulations_[0].Code;
+					}
+					GUILayout.BeginHorizontal();
+					GUILayout.Space(64);
+					int index = regulations_.FindIndex(r => r.Code == timeAttackRule_);
+					int pick = Choice(regulations_.Select(r => r.Name).ToArray(), Math.Max(0, index), 4);
+					GUILayout.EndHorizontal();
+					if (pick != index) {
+						timeAttackRule_ = regulations_[pick].Code;
+						SavePref(TimeAttackRegulationPref, timeAttackRule_);
+					}
+				}
+			}
+			GUILayout.Label(mode == 0 ? "TRC spec: the times that count for TRC." : mode == 2 ? "Open: any setup. Open times are kept apart from TRC spec ones."
+				: "To a regulation: your car is checked against it at the start and finish, and its times are kept apart.", Theme.Small);
+		}
+
+		/// <summary>A regulation's name for its code (the code when it's not saved here).</summary>
+		private string RuleName(string code) => RegulationByCode(code)?.Name ?? code;
+
+		/// <summary>Puts the time attack's rules on its record, and for a regulation whether the car meets it now.</summary>
+		private void SetRules(TimeAttackRecord record) {
+			record.Rule = runRule_ ?? "";
+			if (record.Rule.Length > 0 && record.Rule != TimeAttackLog.OpenRule) {
+				RegulationResult result = RegulationByCode(record.Rule)?.Check(MyCarFacts());
+				record.RuleOk = result != null && result.Passes;
+			}
+		}
+
 		private static string RuleText(bool open, Regulation regulation, bool fun) =>
 			(regulation != null ? $"{regulation.Name} regulation" : open ? "Open" : "TRC spec") + (fun ? ", just for fun" : "");
 
@@ -274,7 +344,7 @@ namespace TRC.TuneLoader {
 			RegulationResult result = r.Check(mine);
 			string car = mine.CarName.Length > 0 ? $"{mine.CarName} ({Regulation.SetupLabel(mine.Setup)})" : "your car";
 			string power = mine.Hp > 0 ? $" · {mine.Hp:0} hp" : "";
-			string weight = mine.Mass > 0 ? $" · {mine.Mass:0} kg{(mine.Hp > 0 ? $" · {mine.Mass / mine.Hp:0.00} kg/hp" : "")}" : "";
+			string weight = mine.Mass > 0 ? $" · {mine.Mass:0} kg{(mine.Hp > 0 ? $" · {mine.Hp / mine.Mass:0.000} hp/kg" : "")}" : "";
 			GUILayout.Label($"{car}{power}{weight}", Theme.Small);
 			if (result.Passes) {
 				GUILayout.Label($"Your car meets {r.Name}.", Theme.PillGood);
@@ -406,6 +476,7 @@ namespace TRC.TuneLoader {
 			regulationFields_["min_weight"] = Num(r.MinWeight);
 			regulationFields_["max_weight"] = Num(r.MaxWeight);
 			regulationFields_["min_kg_per_hp"] = Num(r.MinKgPerHp);
+			regulationFields_["max_hp_per_kg"] = Num(r.MaxHpPerKg);
 			foreach (ValueLimit l in editingRegulation_.Limits) {
 				regulationFields_["min:" + l.Key] = Num(l.Min);
 				regulationFields_["max:" + l.Key] = Num(l.Max);
@@ -501,11 +572,20 @@ namespace TRC.TuneLoader {
 			GUILayout.FlexibleSpace();
 			GUILayout.EndHorizontal();
 			GUILayout.BeginHorizontal();
-			GUILayout.Label("Power to weight: least kg per hp", Theme.Body, GUILayout.Width(200));
-			r.MinKgPerHp = NumberField("min_kg_per_hp");
-			GUILayout.Label(mine.Mass > 0 && mine.Hp > 0 ? $"<color={Theme.MutedHex}>yours {mine.Mass / mine.Hp:0.00}</color>" : "", Theme.Small);
+			GUILayout.Label("Power to weight: most hp per kg", Theme.Body, GUILayout.Width(200));
+			r.MaxHpPerKg = NumberField("max_hp_per_kg");
+			GUILayout.Label(mine.Mass > 0 && mine.Hp > 0 ? $"<color={Theme.MutedHex}>yours {mine.Hp / mine.Mass:0.000} (e.g. 0.22: no more than 0.22 hp per kg)</color>" : "<color=" + Theme.MutedHex + ">e.g. 0.22: no more than 0.22 hp per kg</color>", Theme.Small);
 			GUILayout.FlexibleSpace();
 			GUILayout.EndHorizontal();
+			if (r.MinKgPerHp.HasValue) {
+				// Regulations made before Nov 3 used kg per hp (a least); kept so they still check the same.
+				GUILayout.BeginHorizontal();
+				GUILayout.Label("Older: least kg per hp", Theme.Body, GUILayout.Width(200));
+				r.MinKgPerHp = NumberField("min_kg_per_hp");
+				GUILayout.Label($"<color={Theme.MutedHex}>clear it to use hp per kg only</color>", Theme.Small);
+				GUILayout.FlexibleSpace();
+				GUILayout.EndHorizontal();
+			}
 			GUILayout.EndVertical();
 
 			GUILayout.Label("Allowed", Theme.SectionLabel);

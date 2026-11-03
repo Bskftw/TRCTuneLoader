@@ -28,7 +28,10 @@ namespace TRC.TuneLoader {
 	///                               "TRC Akina Downhill Sector 1" is that course's own. Without any, the course
 	///                               is split evenly.
 	///   TRC Start Tsukuba Circuit   a circuit: a loop whose start line is also its finish line, so it has no
-	///                               finish object. Its path comes from Record path (once round).
+	///                               finish object. Its path: "TRC Path Tsukuba Circuit" (a loop), or Record path
+	///                               (once round). A map with more layouts numbers them: "TRC Start Okutama Circuit 1",
+	///                               "TRC Path Okutama Circuit 2". A path named without "Circuit" is the circuit's
+	///                               only when no downhill or uphill on that road uses it.
 	///   TRC Akina Downhill Grid 1   optional: race grid spots, 1 (pole) to 16, each in the middle of where a car
 	///                               lines up, its blue (Z) arrow pointing the way the cars face.
 	///   TRC Akina Downhill Trap 1   optional: speed traps along the course, numbered in driving order, set up like a
@@ -78,7 +81,10 @@ namespace TRC.TuneLoader {
 		/// <summary>Every TRC course in the loaded map. <paramref name="summary"/> says what was found, for the log and the Courses tab.</summary>
 		public static List<Course> Scan(string mapKey, string mapName, out string summary) {
 			var timer = Stopwatch.StartNew();
+			stripCentres_.Clear();
+			pathTimer_.Reset();
 			SpeedTraps.Clear();
+			var trapCopies = new List<(string Name, int Copy, SpeedTrap Trap)>();
 			var found = new Dictionary<string, Parts>(StringComparer.Ordinal);
 			var roads = new Dictionary<string, HashSet<int>>(StringComparer.Ordinal);
 			var roadNames = new Dictionary<string, List<string>>(StringComparer.Ordinal);
@@ -102,7 +108,9 @@ namespace TRC.TuneLoader {
 				if (trcAt >= 0 && trcAt + 3 < words.Length && words[trcAt + 1] == "speed" && words[trcAt + 2] == TrapWord) {
 					float trapWidth = Mathf.Abs(transform.lossyScale.x);
 					if (CourseGate.TryMake(transform.position, transform.forward, trapWidth > 2f ? trapWidth : CourseGeometry.DefaultWidth, out CourseGate gate)) {
-						SpeedTraps.Add(new SpeedTrap { Name = DisplayName(bare, trcAt + 3) + (copy > 0 ? " " + (copy + 1) : ""), Gate = gate, MapKey = mapKey, Source = CourseSource.Map });
+						var trap = new SpeedTrap { Name = DisplayName(bare, trcAt + 3), Gate = gate, MapKey = mapKey, Source = CourseSource.Map };
+						SpeedTraps.Add(trap);
+						trapCopies.Add((trap.Name, copy, trap));
 					}
 					continue;
 				}
@@ -173,6 +181,7 @@ namespace TRC.TuneLoader {
 				Lines.Add($"{unmatched.Count} other object(s) with TRC in the name, not understood: {string.Join(", ", unmatched.Distinct().Take(40).Select(n => $"'{n}'"))}");
 			}
 
+			NumberCopies(trapCopies);
 			ShareUndirected(found);
 
 			var courses = new List<Course>();
@@ -196,7 +205,16 @@ namespace TRC.TuneLoader {
 				}
 			}
 
+			foreach (Course course in courses) {
+				string grid = course.GridWarning();
+				if (grid.Length > 0) {
+					course.Problems.Add(grid);
+				}
+			}
+
 			timer.Stop();
+			stripCentres_.Clear();
+			Lines.Add($"  Reading paths took {pathTimer_.ElapsedMilliseconds} ms of the {timer.ElapsedMilliseconds} ms.");
 			string others = unmatched.Count > 0 ? $" {unmatched.Count} other object(s) have TRC in the name but weren't understood (listed in the log)." : "";
 			summary = courses.Count == 0
 				? $"No TRC course objects in this map ({objects} objects looked at in {timer.ElapsedMilliseconds} ms).{others}"
@@ -215,8 +233,9 @@ namespace TRC.TuneLoader {
 			List<string> undirected = found.Where(p => p.Value.Start == null && p.Value.Finish == null && p.Value.Grid.Count == 0 && p.Value.Traps.Count == 0 &&
 				(p.Value.PathPieces.Count > 0 || p.Value.Sectors.Count > 0)).Select(p => p.Key).ToList();
 			var used = new HashSet<string>(StringComparer.Ordinal);
+			List<string> courseKeys = found.Where(p => p.Value.Start != null || p.Value.Finish != null).Select(p => p.Key).ToList();
 			foreach (var pair in found.Where(p => p.Value.Start != null || p.Value.Finish != null)) {
-				string key = SharedFor(pair.Key, undirected);
+				string key = SharedFor(pair.Key, undirected, courseKeys);
 				if (key == null) {
 					continue;
 				}
@@ -238,13 +257,50 @@ namespace TRC.TuneLoader {
 		}
 
 		/// <summary>
+		/// Free-roam speed traps that are copies of one ("TRC Speed Trap Akina Bridge", ".001", ".003") are numbered in
+		/// order, skipped numbers and all (bskftw, Nov 2: ".001 is 1 and .003 is 2"): the unnumbered one keeps the plain
+		/// name, the copies after it are 2, 3...; without an unnumbered one, the first copy is 1.
+		/// </summary>
+		public static void NumberCopies(List<(string Name, int Copy, SpeedTrap Trap)> traps) {
+			foreach (var group in traps.GroupBy(t => t.Name, StringComparer.OrdinalIgnoreCase)) {
+				var inOrder = group.OrderBy(t => t.Copy).ToList();
+				if (inOrder.Count == 1 && inOrder[0].Copy == 0) {
+					continue;
+				}
+				bool plainFirst = inOrder[0].Copy == 0;
+				for (int i = 0; i < inOrder.Count; i++) {
+					if (i == 0 && plainFirst) {
+						continue;
+					}
+					inOrder[i].Trap.Name = $"{inOrder[i].Name} {i + 1}";
+				}
+			}
+		}
+
+		/// <summary>
 		/// The undirected name whose pieces a course uses: the longest of <paramref name="keys"/> that the course's
 		/// name starts with ("akina lake" before "akina" for "akina lake downhill"), or null.
+		///
+		/// A circuit and a downhill on the same road don't share a path (bskftw, Nov 2: Okutama has a downhill and two
+		/// circuits, so "TRC Path Okutama" is the downhill's road, not the circuits'). So a circuit takes a name without
+		/// "circuit" only when no course in <paramref name="courses"/> that isn't a circuit uses it too (Lake Akina, only a
+		/// circuit: "TRC Path Lake Akina" is its loop); a course that isn't a circuit never takes one that says "circuit".
 		/// </summary>
-		public static string SharedFor(string courseKey, IEnumerable<string> keys) =>
-			keys.Where(k => k != courseKey && courseKey.StartsWith(k + " ", StringComparison.Ordinal))
+		public static string SharedFor(string courseKey, IEnumerable<string> keys, IEnumerable<string> courses = null) {
+			bool circuit = HasWord(courseKey, CircuitWord);
+			bool ForThisKind(string k) {
+				if (HasWord(k, CircuitWord)) {
+					return circuit;
+				}
+				return !circuit || courses == null ||
+					!courses.Any(c => c != courseKey && !HasWord(c, CircuitWord) && c.StartsWith(k + " ", StringComparison.Ordinal));
+			}
+			return keys.Where(k => k != courseKey && courseKey.StartsWith(k + " ", StringComparison.Ordinal) && ForThisKind(k))
 				.OrderByDescending(k => k.Length)
 				.FirstOrDefault();
+		}
+
+		private static bool HasWord(string key, string word) => (" " + key + " ").IndexOf(" " + word + " ", StringComparison.Ordinal) >= 0;
 
 		/// <summary>The map's free-roam speed traps ("TRC Speed Trap &lt;name&gt;") from the last scan.</summary>
 		public static List<SpeedTrap> SpeedTraps { get; } = new List<SpeedTrap>();
@@ -426,7 +482,23 @@ namespace TRC.TuneLoader {
 		/// The path's points in driving order: a LineRenderer's positions, a strip's middle, or child objects in order.
 		/// <paramref name="pieces"/> are "TRC Path Akina", "TRC Path Akina.001" and so on, the unnumbered one first.
 		/// </summary>
+		/// <summary>
+		/// Each path mesh's middle line (world space), read once per scan: a shared path ("TRC Path Akina") serves several
+		/// courses, and reading it again for each was most of a long scan (bskftw, Nov 3: 7.6 s on Project Dream).
+		/// </summary>
+		private static readonly Dictionary<MeshFilter, List<Vector3>> stripCentres_ = new Dictionary<MeshFilter, List<Vector3>>();
+		private static readonly Stopwatch pathTimer_ = new Stopwatch();
+
 		private static List<Vector3> ReadPath(IList<Transform> pieces, string name, Course course) {
+			pathTimer_.Start();
+			try {
+				return ReadPathTimed(pieces, name, course);
+			} finally {
+				pathTimer_.Stop();
+			}
+		}
+
+		private static List<Vector3> ReadPathTimed(IList<Transform> pieces, string name, Course course) {
 			Vector3 start = course.Start.Center;
 			Vector3 finish = course.Finish.Center;
 
@@ -454,12 +526,16 @@ namespace TRC.TuneLoader {
 					unreadable.Add(mesh.name);
 					continue;
 				}
-				Transform owner = filter.transform;
-				List<Vector3> world = mesh.vertices.Select(v => owner.TransformPoint(v)).ToList();
-				// The middle of the strip, whether it lies flat (the road's centre faces) or stands up (a line extruded up
-				// or down); a mesh with no faces joined up falls back to its vertices, merged by distance.
-				List<Vector3> centre = CourseGeometry.StripCentre(world, mesh.triangles);
-				vertices.AddRange(centre.Count >= 2 ? centre : world);
+				if (!stripCentres_.TryGetValue(filter, out List<Vector3> middle)) {
+					Transform owner = filter.transform;
+					List<Vector3> world = mesh.vertices.Select(v => owner.TransformPoint(v)).ToList();
+					// The middle of the strip, whether it lies flat (the road's centre faces) or stands up (a line extruded up or
+					// down); a mesh with no faces joined up falls back to its vertices, merged by distance.
+					List<Vector3> centre = CourseGeometry.StripCentre(world, mesh.triangles);
+					middle = centre.Count >= 2 ? centre : world;
+					stripCentres_[filter] = middle;
+				}
+				vertices.AddRange(middle);
 			}
 			if (unreadable.Count > 0) {
 				course.Problems.Add($"Can't read the path: turn on Read/Write in the import settings of its model ({string.Join(", ", unreadable)}).");

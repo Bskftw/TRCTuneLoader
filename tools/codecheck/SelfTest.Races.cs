@@ -205,7 +205,7 @@ namespace TRC.TuneLoader.CodeCheck {
 		private static void GridSpotsLineUp() {
 			Course course = RaceCourse();
 			List<GridSpot> grid = course.GridSpots(4, poleLeft: true, GridLayout.Grid);
-			float side = Mathf.Clamp(course.Start.Width / 4f, 1.5f, 3f);
+			float side = Course.SideBySideGap / 2f;
 			Expect(Math.Abs(grid[0].Position.z + 4f) < 0.01f && Math.Abs(grid[1].Position.z + 8f) < 0.01f && Math.Abs(grid[3].Position.z + 16f) < 0.01f,
 				"a two-wide grid staggers every 4 m behind the line");
 			Expect(grid[0].Position.x < 0 && grid[1].Position.x > 0 && grid[2].Position.x < 0 && Math.Abs(Math.Abs(grid[0].Position.x) - side) < 0.01f,

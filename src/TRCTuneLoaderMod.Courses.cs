@@ -115,7 +115,7 @@ namespace TRC.TuneLoader {
 
 		/// <summary>Time attack or the course builder is showing something over the track.</summary>
 		private bool CourseHudVisible => hasPose_ && (BattleOnTrack || run_ != null || pathRecorder_ != null || recorder_.State != CourseRecorder.Phase.Idle || invites_.Count > 0 ||
-			RaceHudVisible || RaceToShow() != null || gridRecorder_ != null || TrapFlashVisible);
+			RaceHudVisible || RaceToShow() != null || gridRecorder_ != null || TrapFlashVisible || SectorFlashVisible || FinishFlashVisible);
 
 		/// <summary>The car and its TRC spec state at the start or the finish of a run.</summary>
 		private sealed class RunCheck {
@@ -169,6 +169,10 @@ namespace TRC.TuneLoader {
 				}
 			}
 			UpdateCourseObjects();
+			UpdateMapIcons();
+			if (mapIcons_.Count > 0) {
+				adapter_.SizeMapIcons();
+			}
 			UpdateSpeedTraps();
 			UpdateBestLine();
 		}
@@ -191,7 +195,16 @@ namespace TRC.TuneLoader {
 				markersLogged_ = true;
 				TrcLog.Info($"Start and finish lines are drawn with {CourseMarkers.ShaderName}.");
 			}
-			markers_.Show(start, finish, course != null && startHasSign_, course != null && finishHasSign_);
+			// Gantries only for a course that's running (not the course builder), as wide as the road where it's known.
+			float span = course == null ? 0f : MeasureRoad(course).RoadWidth > 0f ? course.RoadWidth + 1.5f : course.Start.Width;
+			markers_.Show(start, finish, course != null && startHasSign_, course != null && finishHasSign_, span);
+			markers_.ShowCheckpoints(course, span, (at, right) => {
+				ICollection<int> road = course.RoadColliders.Count > 0 ? course.RoadColliders : new HashSet<int>(CoursesHere().SelectMany(c => c.RoadColliders));
+				return adapter_.TryMeasureRoadWidth(at, right, road, out float width) ? width + 1.5f : 0f;
+			});
+			if (course != null) {
+				UpdateGantrySigns(course, raceCourse != null ? race_.Run : battleCourse != null ? battle_.Run : run_ != null && run_.Course == course ? run_ : null);
+			}
 			Camera camera = HudCamera();
 			if (camera != null) {
 				markers_.UpdateVisibility(camera.transform.position);
@@ -364,6 +377,7 @@ namespace TRC.TuneLoader {
 			pathRecorder_ = null;
 			pathShownFor_ = null;
 			run_ = new TimeAttackRun(course, course.IsCircuit ? PickedLaps : 1, PickedFlying);
+			runRule_ = TimeAttackRule;
 			runStart_ = null;
 			runResultUntil_ = 0;
 			ResetRunExtras();
@@ -509,6 +523,7 @@ namespace TRC.TuneLoader {
 			record.Laps = run_.Laps;
 			record.TrapKmh = run_.TrapSpeeds.ToArray();
 			record.Ghost = GhostShowingFor(course);
+			SetRules(record);
 			LapTime only = !course.IsCircuit && run_.LapTimes.Count == 1 ? run_.LapTimes[0] : null;
 			if (only != null) {
 				record.SectorMs = only.Sectors.Select(s => (long)Math.Round(s * 1000.0, MidpointRounding.AwayFromZero)).ToArray();
@@ -518,6 +533,10 @@ namespace TRC.TuneLoader {
 			TimeKind kind = RunKind(run_);
 			TimeAttackRecord best = TimeAttackLog.BestFor(times_, course.Code, record.CarId, record.TuneSet, record.IsSpec, kind);
 			SaveRecord(record);
+			// For the finish gantry: this time's place among the car's times on the course, started the same way.
+			signRank_ = 1 + times_.Count(r => r != record && !r.IsLap && r.CourseCode == course.Code && r.CarId == record.CarId && r.TuneSet == record.TuneSet &&
+				r.Flying == record.Flying && r.Laps == record.Laps && r.Rule == record.Rule && r.TimeMs < record.TimeMs);
+			signBest_ = best == null || record.TimeMs < best.TimeMs;
 			if (only != null) {
 				string key = TimeAttackTraces.Key(course.Code, record.CarId, record.TuneSet, kind);
 				if (TimeAttackTraces.SaveIfFaster(TimesFolder, key, only.Trace, record.TimeMs)) {
@@ -528,7 +547,9 @@ namespace TRC.TuneLoader {
 			string compare = best == null ? $"first time in this car{(record.TuneSet.Length > 0 ? $" on {record.TuneSet}" : "")}"
 				: record.TimeMs < best.TimeMs ? $"new best by {TimeAttackRun.FormatTime((best.TimeMs - record.TimeMs) / 1000.0)}"
 				: $"+{TimeAttackRun.FormatTime((record.TimeMs - best.TimeMs) / 1000.0)} on your best";
-			string status = !record.IsSpec ? $"<color={Theme.BadHex}>{DoesntCount(record)}</color>"
+			string status = record.Rule == TimeAttackLog.OpenRule ? "Open (any setup)"
+				: record.Rule.Length > 0 ? (record.RuleOk ? $"<color={Theme.GoodHex}>{RuleName(record.Rule)}</color>" : $"<color={Theme.BadHex}>doesn't meet {RuleName(record.Rule)}</color>")
+				: !record.IsSpec ? $"<color={Theme.BadHex}>{DoesntCount(record)}</color>"
 				: course.Official ? $"<color={Theme.GoodHex}>{record.TuneSet} spec</color>"
 				: $"{record.TuneSet} spec · practice course";
 			string laps = LapSummary(run_);
@@ -645,6 +666,9 @@ namespace TRC.TuneLoader {
 			}
 		}
 
+		/// <summary>The course builder's random speed traps: 0 none, else an index into RandomTrapCounts plus one.</summary>
+		private int newCourseTraps_;
+
 		private void SaveCourse() {
 			string name = TuneRules.Trim(newCourseName_);
 			if (name.Length == 0) {
@@ -670,6 +694,11 @@ namespace TRC.TuneLoader {
 				newCourseName_ = "";
 				coursesView_ = 0;
 				courseResult_ = $"Saved {course.Name}: {TimeAttackRun.Distance(course.Length)}, code {course.Code}.{also} It's in Tracks.";
+				if (newCourseTraps_ > 0) {
+					string saved = courseResult_;
+					PlaceRandomTraps(course, RandomTrapCounts[newCourseTraps_ - 1]);
+					courseResult_ = $"{saved} {courseResult_}";
+				}
 			} catch (Exception e) {
 				courseResult_ = $"Couldn't save the course: {e.Message}";
 				TrcLog.Error(e);
@@ -705,7 +734,7 @@ namespace TRC.TuneLoader {
 				? "Drive onto a map to see its tracks and start a time attack. Your times are here too."
 				: $"Map: <b>{map_.Name}</b> <color={Theme.MutedHex}>({map_.Key}{(map_.UploadKey.Length > 0 ? $", upload {map_.UploadKey}" : "")})</color>", Theme.Body);
 			GUILayout.BeginHorizontal(GUILayout.ExpandHeight(true));
-			int tracks = map_ == null ? 0 : courses_.ForMap(map_.Key).Count;
+			int tracks = map_ == null ? 0 : CoursesHere().Count;
 			string building = recorder_.State != CourseRecorder.Phase.Idle ? "recording" : "";
 			int view = SideNav(CourseViews, coursesView_, new[] {
 				tracks > 0 ? tracks.ToString(CultureInfo.InvariantCulture) : "",
@@ -771,7 +800,7 @@ namespace TRC.TuneLoader {
 				return;
 			}
 
-			List<Course> here = courses_.ForMap(map_.Key);
+			List<Course> here = CoursesHere();
 			if (run_ == null && here.Count > 0) {
 				DrawStartOptions(here.Any(c => c.IsCircuit));
 				GUILayout.BeginHorizontal();
@@ -780,6 +809,7 @@ namespace TRC.TuneLoader {
 				GUILayout.EndHorizontal();
 			}
 			GUILayout.BeginVertical(Theme.Card, GUILayout.ExpandHeight(true));
+			float scrollY = coursesScroll_.y;
 			coursesScroll_ = GUILayout.BeginScrollView(coursesScroll_);
 			if (here.Count == 0) {
 				GUILayout.Label(scannedMapKey_ == map_.Key
@@ -805,11 +835,10 @@ namespace TRC.TuneLoader {
 			if (shown.Count == 0 && here.Count > 0) {
 				GUILayout.Label($"No track here has \"{filter}\" in its name.", Theme.Small);
 			}
-			foreach (Course course in shown) {
-				DrawCourseRow(course);
-			}
+			LongRows(tracksList_, shown, scrollY, c => c.Code, IsTrackOpen, DrawCourseRow);
 			DrawSharedRunsElsewhere();
 			GUILayout.EndScrollView();
+			EndLongList(tracksList_);
 			GUILayout.EndVertical();
 
 			GUILayout.BeginHorizontal();
@@ -827,6 +856,11 @@ namespace TRC.TuneLoader {
 		/// <summary>The tracks opened in the list (by course code), and the name filter.</summary>
 		private readonly HashSet<string> tracksOpen_ = new HashSet<string>(StringComparer.Ordinal);
 		private string trackFilter_ = "";
+		private readonly LongList tracksList_ = new LongList();
+
+		/// <summary>Opened in the list, or being driven, recorded or edited (those stay open).</summary>
+		private bool IsTrackOpen(Course course) =>
+			run_?.Course == course || pathRecorder_?.Course == course || gridRecorder_?.Course == course || editing_ == course || tracksOpen_.Contains(course.Code);
 
 		/// <summary>
 		/// A track: one line with its name, kind, length and your best, like My times; click it to open its buttons,
@@ -835,15 +869,18 @@ namespace TRC.TuneLoader {
 		private void DrawCourseRow(Course course) {
 			string length = course.Usable ? TimeAttackRun.Distance(course.Length) : "can't be used yet";
 			bool busy = run_?.Course == course || pathRecorder_?.Course == course || gridRecorder_?.Course == course || editing_ == course;
-			bool open = busy || tracksOpen_.Contains(course.Code);
-			TimeAttackRecord best = TimeAttackLog.BestSpec(times_, course.Code) ?? TimeAttackLog.Best(times_, course.Code);
+			bool open = IsTrackOpen(course);
+			TimeAttackRecord best = CourseBest(course.Code, true) ?? CourseBest(course.Code, false);
 			string bestText = best != null ? $"  {TimeAttackRun.FormatTime(best.Seconds)}" : "";
 			string flags = (course.Problems.Count > 0 ? $"  <color={Theme.WarnHex}>{course.Problems.Count} note(s)</color>" : "") +
 				(racingGhost_ != null && racingGhost_.CourseCode == course.Code ? $"  <color=#8FB8FF>ghost</color>" : "") +
 				(run_?.Course == course ? $"  <color={Theme.GoodHex}>driving</color>" : "");
 			string header = $"{(open ? "▾" : "▸")} <b>{course.Name}</b>  <color={Theme.MutedHex}>{course.KindName} · {length} · {course.SourceName}</color><b>{bestText}</b>{flags}";
 			if (GUILayout.Button(header, open ? Theme.RowSelected : Theme.Row) && !busy) {
-				if (!tracksOpen_.Remove(course.Code)) {
+				// bskftw, Nov 3: opening a track closes the others.
+				bool wasOpen = tracksOpen_.Contains(course.Code);
+				tracksOpen_.Clear();
+				if (!wasOpen) {
 					tracksOpen_.Add(course.Code);
 				}
 			}
@@ -902,11 +939,11 @@ namespace TRC.TuneLoader {
 		}
 
 		private string BestText(Course course) {
-			TimeAttackRecord spec = TimeAttackLog.BestSpec(times_, course.Code);
+			TimeAttackRecord spec = CourseBest(course.Code, true);
 			if (spec != null) {
 				return $" · your best: <color={Theme.GoodHex}>{TimeAttackRun.FormatTime(spec.Seconds)}</color> ({spec.Car}, {spec.TuneSet})";
 			}
-			TimeAttackRecord any = TimeAttackLog.Best(times_, course.Code);
+			TimeAttackRecord any = CourseBest(course.Code, false);
 			return any != null ? $" · your best: {TimeAttackRun.FormatTime(any.Seconds)} (not counted)" : "";
 		}
 
@@ -1007,6 +1044,8 @@ namespace TRC.TuneLoader {
 					GUILayout.Label("The other way", Theme.SectionLabel);
 					string typed = TuneRules.Trim(newCourseName_ ?? "");
 					newCourseReverse_ = Choice(new[] { $"Also make {(typed.Length > 0 ? ReverseName(typed) : "the reverse")}", "Just this one" }, newCourseReverse_ ? 0 : 1) == 0;
+					GUILayout.Label("Random speed traps", Theme.SectionLabel);
+					newCourseTraps_ = Choice(new[] { "None" }.Concat(RandomTrapCounts.Select(n => n.ToString(CultureInfo.InvariantCulture))).ToArray(), newCourseTraps_);
 					GUILayout.Space(4);
 					BuilderButtons("Save course", SaveCourse, startOver: true);
 					break;
@@ -1090,6 +1129,8 @@ namespace TRC.TuneLoader {
 				DrawRaceInviteHud(screenWidth, screenHeight);
 			}
 			DrawTrapFlash(screenWidth, screenHeight);
+			DrawSectorFlash(screenWidth, screenHeight);
+			DrawFinishFlash(screenWidth, screenHeight);
 		}
 
 		private void DrawRunHud(float screenWidth, float screenHeight) {
@@ -1290,6 +1331,324 @@ namespace TRC.TuneLoader {
 				}
 			}
 			return best;
+		}
+
+		// ---- The gantries' signs ----
+
+		private TimeAttackRun signRun_;
+		private TimeAttackRun.Phase signPhase_;
+		private float signTopKmh_;
+		private GantrySign? signClear_;
+
+		/// <summary>Set by FinishRun for the finish sign: the time's place among this car's times on the course, and whether it's a new best.</summary>
+		private int signRank_;
+		private bool signBest_;
+
+		/// <summary>This lap's sector splits, by sector, for the checkpoint signs.</summary>
+		private readonly Dictionary<int, SectorSplit> checkpointSplits_ = new Dictionary<int, SectorSplit>();
+		private int checkpointLap_;
+
+		/// <summary>
+		/// The start sign follows the countdown (lamps at 3, 2, 1, GO), a circuit's shows the lap, and the finish sign
+		/// shows STAGE CLEAR with the time, top speed and rank once this driver finishes, until the next go.
+		/// </summary>
+		private void UpdateGantrySigns(Course course, TimeAttackRun run) {
+			if (run != signRun_) {
+				signRun_ = run;
+				signPhase_ = run?.State ?? TimeAttackRun.Phase.Cancelled;
+				signClear_ = null;
+				signTopKmh_ = 0f;
+				checkpointSplits_.Clear();
+			}
+			if (run != null) {
+				// The checkpoints show this lap's splits: a new go or a new lap starts them again.
+				if (run.State != TimeAttackRun.Phase.Running && run.State != TimeAttackRun.Phase.Finished || run.Lap != checkpointLap_) {
+					if (run.State != TimeAttackRun.Phase.Finished) {
+						checkpointSplits_.Clear();
+					}
+					checkpointLap_ = run.Lap;
+				}
+				if (run.State == TimeAttackRun.Phase.Running && run.LastSplit is SectorSplit split && split.Lap == run.Lap) {
+					if (!checkpointSplits_.TryGetValue(split.Index, out SectorSplit seen) || seen.Time != split.Time) {
+						FlashSector(run, split);
+					}
+					checkpointSplits_[split.Index] = split;
+				}
+			}
+			markers_.ShowCheckpointSigns(CheckpointSign);
+			if (run != null) {
+				TimeAttackRun.Phase phase = run.State;
+				if (phase == TimeAttackRun.Phase.Countdown && signPhase_ != TimeAttackRun.Phase.Countdown) {
+					signClear_ = null;
+					signTopKmh_ = 0f;
+				}
+				if (phase == TimeAttackRun.Phase.Running && !run.BeforeLine && hasPose_) {
+					signTopKmh_ = Mathf.Max(signTopKmh_, Mathf.Abs(pose_.SpeedKmh));
+				}
+				if (signPhase_ == TimeAttackRun.Phase.Running && phase == TimeAttackRun.Phase.Finished) {
+					string rank = "";
+					bool best = false;
+					if (run == run_) {
+						rank = signRank_ > 0 ? $"#{signRank_}" : "";
+						best = signBest_;
+					} else if (InRace && run == race_.Run) {
+						RaceStanding me = race_.Standings(BattleNow).FirstOrDefault(s => s.Driver.Id == race_.Me);
+						rank = me != null ? $"#{me.Position}" : "";
+					}
+					signClear_ = new GantrySign {
+						Kind = GantrySign.Page.Clear, Text = TimeAttackRun.FormatTime(run.Result),
+						TopSpeed = signTopKmh_ > 0f ? $"{signTopKmh_:0} KM/H" : "", Rank = rank, PersonalBest = best,
+					};
+					// The same moment on screen: FINISH, big, like GO at the start (bskftw, Nov 3).
+					string place = InRace && run == race_.Run && rank.Length > 0 ? $"  ·  P{rank.TrimStart('#')}" : "";
+					finishFlash_ = $"<b>{TimeAttackRun.FormatTime(run.Result)}</b>{place}{(best ? $"  ·  <color={Theme.PurpleHex}><b>new PB</b></color>" : "")}";
+					finishFlashUntil_ = Time.unscaledTime + FinishFlashSeconds;
+				}
+				signPhase_ = phase;
+			}
+
+			var finishSign = signClear_ ?? new GantrySign { Kind = GantrySign.Page.Finish, Text = course.Name };
+			GantrySign startSign;
+			if (course.IsCircuit && signClear_ != null) {
+				startSign = signClear_.Value;
+			} else if (course.IsCircuit && run != null && run.State == TimeAttackRun.Phase.Running && !run.BeforeLine && (run.Flying || run.Elapsed >= 1.5)) {
+				LapTime last = run.LapTimes.Count > 0 ? run.LapTimes[run.LapTimes.Count - 1] : null;
+				startSign = new GantrySign { Kind = GantrySign.Page.Lap, Step = run.Lap, Laps = run.Laps, Text = last != null ? TimeAttackRun.FormatTime(last.Time) : "" };
+			} else {
+				int step = run == null ? SignPages.Idle
+					: run.State == TimeAttackRun.Phase.Countdown ? Mathf.Clamp(run.CountdownNumber, 0, 3)
+					: run.State == TimeAttackRun.Phase.Running && !run.Flying && run.Elapsed < 1.5 ? SignPages.Go
+					: SignPages.Idle;
+				startSign = new GantrySign { Kind = GantrySign.Page.Start, Step = step };
+			}
+			markers_.ShowSigns(startSign, finishSign);
+		}
+
+		/// <summary>
+		/// Called from OnGUI: each gantry's sign drawn over the screen exactly where its beam is, so trees and other signs
+		/// never hide it. Its corners follow the beam, so it's stuck to the gantry, turned and tilted with it (bskftw, Nov 3:
+		/// it turned to face the camera), and only seen from the side the cars come from. Fades out from
+		/// <see cref="GantrySignFade"/> to <see cref="GantrySignRange"/> metres away.
+		/// </summary>
+		private void DrawGantrySigns(float scale, float screenWidth) {
+			if (Event.current.type != EventType.Repaint) {
+				return;
+			}
+			Camera camera = HudCamera();
+			if (camera == null) {
+				return;
+			}
+			Color before = GUI.color;
+			Matrix4x4 matrix = GUI.matrix;
+			Vector3 eye = camera.transform.position;
+			foreach (Gantry gantry in markers_.VisibleGantries.OrderByDescending(g => (g.SignCentre - eye).sqrMagnitude)) {
+				// Only from the front: a car that's gone through sees the back of the gantry, not its sign.
+				if (Vector3.Dot(eye - gantry.SignCentre, gantry.Gate.Forward) > 0f) {
+					continue;
+				}
+				Vector3 centre = camera.WorldToScreenPoint(gantry.SignCentre);
+				Vector3 topLeft = camera.WorldToScreenPoint(gantry.SignTopLeft);
+				Vector3 topRight = camera.WorldToScreenPoint(gantry.SignTopRight);
+				Vector3 bottomLeft = camera.WorldToScreenPoint(gantry.SignBottomLeft);
+				if (centre.z > GantrySignRange || topLeft.z < 0.5f || topRight.z < 0.5f || bottomLeft.z < 0.5f) {
+					continue;
+				}
+				// Screen pixels, top down, as IMGUI counts them.
+				Vector2 tl = new Vector2(topLeft.x, Screen.height - topLeft.y);
+				Vector2 across = new Vector2(topRight.x, Screen.height - topRight.y) - tl;
+				Vector2 down = new Vector2(bottomLeft.x, Screen.height - bottomLeft.y) - tl;
+				if (across.magnitude < 24f) {
+					continue;
+				}
+				// The picture's square (100 x 100) mapped onto the sign's corners.
+				var onSign = Matrix4x4.identity;
+				onSign.SetColumn(0, new Vector4(across.x / 100f, across.y / 100f, 0f, 0f));
+				onSign.SetColumn(1, new Vector4(down.x / 100f, down.y / 100f, 0f, 0f));
+				onSign.SetColumn(3, new Vector4(tl.x, tl.y, 0f, 1f));
+				GUI.matrix = onSign;
+				GUI.color = new Color(1f, 1f, 1f, Mathf.Clamp01((GantrySignRange - centre.z) / (GantrySignRange - GantrySignFade)));
+				GUI.DrawTexture(new Rect(0f, 0f, 100f, 100f), gantry.Texture, ScaleMode.StretchToFill);
+			}
+			GUI.matrix = matrix;
+			GUI.color = before;
+		}
+
+		/// <summary>Gantry signs show within this many metres of the camera, fully from <see cref="GantrySignFade"/> in.</summary>
+		private const float GantrySignRange = 140f;
+		private const float GantrySignFade = 100f;
+
+		// ---- Icons on CarX's minimap and big map (bskftw, Nov 3) ----
+
+		private const string MapIconsPref = "map_icons";
+		private bool mapIconsOn_ = true;
+		private float mapIconsAt_;
+		private readonly List<MapIcon> mapIcons_ = new List<MapIcon>();
+
+		private static readonly Color MapStart = new Color(0.55f, 0.85f, 0.35f);
+		private static readonly Color MapFinish = new Color(0.83f, 0.33f, 0.49f);
+		private static readonly Color MapSector = new Color(0.75f, 1f, 0.16f);
+		private static readonly Color MapTrap = new Color(0.98f, 0.78f, 0.25f);
+
+		/// <summary>
+		/// Twice a second: the start, finish, sectors and course traps of the course being driven (or, in free roam, the
+		/// track opened in Tracks), and the map's free-roam speed traps, as icons on CarX's minimap and big map.
+		/// </summary>
+		private void UpdateMapIcons() {
+			if (Time.unscaledTime < mapIconsAt_) {
+				return;
+			}
+			mapIconsAt_ = Time.unscaledTime + 0.5f;
+			mapIcons_.Clear();
+			if (mapIconsOn_ && map_ != null && hasPose_) {
+				Course battleCourse = battle_ != null && battle_.Started && battle_.Active ? battle_.Course : null;
+				Course course = (InRace ? race_.Course : null) ?? battleCourse ?? run_?.Course;
+				if (course == null && tracksOpen_.Count == 1) {
+					string open = tracksOpen_.First();
+					course = CoursesHere().FirstOrDefault(c => c.Code == open);
+				}
+				if (course != null && course.MapKey == map_.Key && course.Start != null) {
+					mapIcons_.Add(new MapIcon { Position = course.Start.Center, Color = MapStart, Size = 22 });
+					if (!course.IsCircuit && course.Finish != null) {
+						mapIcons_.Add(new MapIcon { Position = course.Finish.Center, Color = MapFinish, Size = 22 });
+					}
+					if (course.HasPath) {
+						for (int i = 0; i < course.SectorEnds.Length - 1; i++) {
+							course.PointAt(course.SectorEnds[i], out Vector3 at, out _);
+							mapIcons_.Add(new MapIcon { Position = at, Color = MapSector, Size = 14 });
+						}
+					}
+					foreach (CourseGate trap in course.Traps) {
+						mapIcons_.Add(new MapIcon { Position = trap.Center, Color = MapTrap, Size = 12 });
+					}
+				}
+				if (freeRoamTraps_) {
+					foreach (SpeedTrap trap in mapTraps_) {
+						mapIcons_.Add(new MapIcon { Position = trap.Gate.Center, Color = MapTrap, Size = 12 });
+					}
+				}
+			}
+			adapter_.TryShowMapIcons(mapIcons_);
+		}
+
+		// ---- FINISH on screen ----
+
+		private string finishFlash_ = "";
+		private float finishFlashUntil_;
+		private const float FinishFlashSeconds = 3f;
+
+		private bool FinishFlashVisible => hasPose_ && Time.unscaledTime < finishFlashUntil_;
+
+		/// <summary>FINISH across the screen where GO was, with the time (and place in a race, and a new PB) under it.</summary>
+		private void DrawFinishFlash(float screenWidth, float screenHeight) {
+			if (!FinishFlashVisible || Event.current.type != EventType.Repaint) {
+				return;
+			}
+			GUI.Label(new Rect(0f, screenHeight * 0.3f, screenWidth, 160f), "FINISH", Theme.HudBig);
+			var content = new GUIContent(finishFlash_);
+			float width = Mathf.Min(360f, screenWidth - 2 * HudMargin);
+			float height = Theme.HudPill.CalcHeight(content, width);
+			GUI.Label(new Rect((screenWidth - width) / 2f, screenHeight * 0.3f + 150f, width, height), content, Theme.HudPill);
+		}
+
+		// ---- The sector pop-up (bskftw, Nov 3: like the speed trap one, with the sector's delta) ----
+
+		private string sectorFlash_ = "";
+		private float sectorFlashUntil_;
+		private const float SectorFlashSeconds = 3.5f;
+
+		private bool SectorFlashVisible => hasPose_ && Time.unscaledTime < sectorFlashUntil_;
+
+		/// <summary>A sector just ended: its time in its pace colour (time attacks) and how far ahead of or behind the PB the lap is there.</summary>
+		private void FlashSector(TimeAttackRun run, SectorSplit split) {
+			string colour = "#FFFFFF";
+			if (run == run_) {
+				long ms = (long)Math.Round(split.Time * 1000.0);
+				long? all = split.Index < sectorBestAll_.Length ? sectorBestAll_[split.Index] : null;
+				long? mine = split.Index < sectorBestMine_.Length ? sectorBestMine_[split.Index] : null;
+				colour = PaceColour(ms, all, mine);
+			}
+			string gap;
+			if (split.Delta is double delta) {
+				double rounded = Math.Round(delta, 3);
+				string amount = Math.Abs(rounded).ToString("0.000", CultureInfo.InvariantCulture);
+				gap = rounded < 0 ? $"<color={Theme.GoodHex}><b>-{amount}</b> ahead of PB</color>"
+					: rounded > 0 ? $"<color={Theme.WarnHex}><b>+{amount}</b> behind PB</color>"
+					: "level with PB";
+			} else {
+				gap = $"<color={Theme.MutedHex}>no PB to compare with yet</color>";
+			}
+			sectorFlash_ = $"<b>SECTOR {split.Index + 1}</b>  <color={colour}><b>{TimeAttackRun.FormatTime(split.Time)}</b></color>\n{gap}";
+			sectorFlashUntil_ = Time.unscaledTime + SectorFlashSeconds;
+		}
+
+		private void DrawSectorFlash(float screenWidth, float screenHeight) {
+			if (Time.unscaledTime >= sectorFlashUntil_ || sectorFlash_.Length == 0) {
+				return;
+			}
+			var content = new GUIContent(sectorFlash_);
+			float width = Mathf.Min(300f, screenWidth - 2 * HudMargin);
+			float height = Theme.HudPill.CalcHeight(content, width);
+			if (Event.current.type == EventType.Repaint) {
+				GUI.Label(SectorFlashRect(width, height, screenWidth, screenHeight), content, Theme.HudPill);
+			}
+		}
+
+		/// <summary>
+		/// Checkpoint <paramref name="index"/>'s sign: the gap to the PB when it was passed this lap (or the sector's time
+		/// without a PB to compare with, as in races and battles), else dashes.
+		/// </summary>
+		private GantrySign CheckpointSign(int index) {
+			var sign = new GantrySign { Kind = GantrySign.Page.Checkpoint, Step = index + 1, Text = "", Under = "" };
+			if (!checkpointSplits_.TryGetValue(index, out SectorSplit split)) {
+				return sign;
+			}
+			if (split.Delta is double delta) {
+				double rounded = Math.Round(delta, 3);
+				sign.Text = (rounded < 0 ? "-" : "+") + Math.Abs(rounded).ToString("0.000", CultureInfo.InvariantCulture);
+				sign.Under = rounded < 0 ? "AHEAD OF PB" : rounded > 0 ? "BEHIND PB" : "LEVEL WITH PB";
+				sign.Behind = rounded > 0;
+			} else {
+				sign.Text = TimeAttackRun.FormatTime(split.Time);
+				sign.Under = $"SECTOR {index + 1} TIME";
+			}
+			return sign;
+		}
+
+		/// <summary>Courses whose road was measured (or couldn't be): once each, since the race list asks every frame.</summary>
+		private readonly HashSet<Course> roadMeasured_ = new HashSet<Course>();
+
+		/// <summary>
+		/// Nov 2: how wide the road is where the cars line up (the start line and 5, 10 and 15 m behind it; the
+		/// narrowest counts), from the map's TRC road colliders, so races and battles know when side by side won't
+		/// fit. Without road colliders, the start object's X scale when the map maker set it. Only on the course's own map.
+		/// </summary>
+		private Course MeasureRoad(Course course) {
+			if (course == null || course.RoadWidth > 0f || map_ == null || course.MapKey != map_.Key || course.Start.Width <= 0f || !roadMeasured_.Add(course)) {
+				return course;
+			}
+			ICollection<int> road = course.RoadColliders.Count > 0 ? course.RoadColliders
+				: new HashSet<int>(courses_.ForMap(map_.Key).SelectMany(c => c.RoadColliders));
+			var back = course.GridPath.Count >= 2 ? course.GridPath : new List<Vector3> { course.Start.Center, course.Start.Center - course.Start.Forward * 20f };
+			float narrowest = float.MaxValue;
+			foreach (float behind in new[] { 0f, 5f, 10f, 15f }) {
+				CourseGeometry.AlongBack(back, behind, out Vector3 at, out Vector3 forward);
+				if (behind == 0f) {
+					at = course.Start.Center;
+					forward = course.Start.Forward;
+				}
+				if (adapter_.TryMeasureRoadWidth(at, new Vector3(forward.z, 0f, -forward.x), road, out float width)) {
+					narrowest = Mathf.Min(narrowest, width);
+				}
+			}
+			if (narrowest < float.MaxValue) {
+				course.RoadWidth = narrowest;
+			} else if (Mathf.Abs(course.Start.Width - CourseGeometry.DefaultWidth) > 0.05f) {
+				course.RoadWidth = course.Start.Width;
+			}
+			if (course.RoadWidth > 0f) {
+				TrcLog.Info($"{course.Name}: the road is {course.RoadWidth:0.0} m wide at the start{(course.SingleFile ? ", too narrow for side by side: single file" : "")}.");
+			}
+			return course;
 		}
 	}
 }

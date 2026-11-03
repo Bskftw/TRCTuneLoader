@@ -14,6 +14,7 @@ namespace TRC.TuneLoader {
 		private const string TrapFlashPositionPref = "trap_flash_position";
 		private const string NoticePositionPref = "notice_position";
 		private const string BadgePositionPref = "badge_position";
+		private const string SectorFlashPositionPref = "sector_flash_position";
 
 		/// <summary>Not moved yet: the box stays where it always was.</summary>
 		private static readonly Vector2 Unmoved = new Vector2(-1f, -1f);
@@ -22,6 +23,7 @@ namespace TRC.TuneLoader {
 		private Vector2 trapFlashPosition_ = Unmoved;
 		private Vector2 noticePosition_ = Unmoved;
 		private Vector2 badgePosition_ = Unmoved;
+		private Vector2 sectorFlashPosition_ = Unmoved;
 
 		private bool arranging_;
 		private int arrangeDrag_ = -1;
@@ -31,6 +33,7 @@ namespace TRC.TuneLoader {
 			trapFlashPosition_ = Kino.Prefs.Get(TrapFlashPositionPref, Unmoved);
 			noticePosition_ = Kino.Prefs.Get(NoticePositionPref, Unmoved);
 			badgePosition_ = Kino.Prefs.Get(BadgePositionPref, Unmoved);
+			sectorFlashPosition_ = Kino.Prefs.Get(SectorFlashPositionPref, Unmoved);
 		}
 
 		private void StartArranging() {
@@ -46,6 +49,7 @@ namespace TRC.TuneLoader {
 			SavePref(TrapFlashPositionPref, trapFlashPosition_);
 			SavePref(NoticePositionPref, noticePosition_);
 			SavePref(BadgePositionPref, badgePosition_);
+			SavePref(SectorFlashPositionPref, sectorFlashPosition_);
 			SavePref(SuspensionPositionPref, suspensionPosition_);
 		}
 
@@ -54,6 +58,7 @@ namespace TRC.TuneLoader {
 			trapFlashPosition_ = Unmoved;
 			noticePosition_ = Unmoved;
 			badgePosition_ = Unmoved;
+			sectorFlashPosition_ = Unmoved;
 			suspensionPosition_ = new Vector2(-1f, -1f);
 			StopArranging();
 			arranging_ = false;
@@ -74,6 +79,15 @@ namespace TRC.TuneLoader {
 			Rect timer = HudRect(screenWidth, screenHeight, 300f, 70f);
 			float y = Mathf.Min(screenHeight - height, timer.yMax + HudGap + 70f);
 			return new Rect((screenWidth - width) / 2f, y, width, height);
+		}
+
+		/// <summary>The sector pop-up: where it was put, or under the speed trap flash's spot.</summary>
+		private Rect SectorFlashRect(float width, float height, float screenWidth, float screenHeight) {
+			if (sectorFlashPosition_.x >= 0) {
+				return PlacedRect(sectorFlashPosition_, width, height, screenWidth, screenHeight);
+			}
+			Rect trap = TrapFlashRect(320f, 56f, screenWidth, screenHeight);
+			return new Rect((screenWidth - width) / 2f, Mathf.Min(screenHeight - height, trap.yMax + HudGap), width, height);
 		}
 
 		/// <summary>Pop-up notices: where they were put, or near the bottom in the middle (as before).</summary>
@@ -115,6 +129,12 @@ namespace TRC.TuneLoader {
 			boxes.Add(new ArrangeBox {
 				Name = "Speed trap flash", Sample = flash, Rect = TrapFlashRect(320f, flashHeight, screenWidth, screenHeight), Style = Theme.HudPill,
 				MoveTo = p => trapFlashPosition_ = new Vector2(Mathf.Clamp01((p.x + 160f) / screenWidth), Mathf.Clamp01(p.y / screenHeight)),
+			});
+			string sector = "<b>SECTOR 2</b>  <color=#C9A7FF><b>21.034</b></color>\n<color=#7FB843><b>-0.842</b> ahead of PB</color>";
+			float sectorHeight = Theme.HudPill.CalcHeight(new GUIContent(sector), 300f);
+			boxes.Add(new ArrangeBox {
+				Name = "Sector pop-up", Sample = sector, Rect = SectorFlashRect(300f, sectorHeight, screenWidth, screenHeight), Style = Theme.HudPill,
+				MoveTo = p => sectorFlashPosition_ = new Vector2(Mathf.Clamp01((p.x + 150f) / screenWidth), Mathf.Clamp01(p.y / screenHeight)),
 			});
 			string notice = "<b>Frog shared a course</b>\nAkina Downhill · open the window to save it";
 			float noticeHeight = Theme.HudPill.CalcHeight(new GUIContent(notice), 360f);

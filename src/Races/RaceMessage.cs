@@ -94,6 +94,15 @@ namespace TRC.TuneLoader {
 		/// <summary>Tournaments: no time penalties from the host (jump starts follow <see cref="Jump"/>).</summary>
 		public bool NoPenalties;
 
+		/// <summary>
+		/// The road at the start is too narrow for side by side (<see cref="Course.SingleFile"/>, measured by the host):
+		/// everyone lines up in a line and each driver's clock starts at the start line.
+		/// </summary>
+		public bool SingleFile;
+
+		/// <summary>The grid's shape: single file on a narrow road, else the host's pick (null: the course's own).</summary>
+		public GridLayout? GridShape => SingleFile ? GridLayout.LineUp : LayoutFromCourse ? (GridLayout?)null : Layout;
+
 		public bool IsTrcSpec => !Open && Regulation == null;
 
 		public void Write(BinaryWriter w) {
@@ -353,6 +362,7 @@ namespace TRC.TuneLoader {
 						}
 						w.Write(Recalls);
 						w.Write(Clip(BattleMessage.PlainName(RecallBy)));
+						w.Write(Settings.SingleFile);
 						break;
 					case RaceKind.Join:
 						w.Write(Clip(BattleMessage.PlainName(Name)));
@@ -530,6 +540,9 @@ namespace TRC.TuneLoader {
 								}
 								m.Recalls = r.ReadInt32();
 								m.RecallBy = Clip(r.ReadString());
+								if (r.BaseStream.Position < r.BaseStream.Length) {
+									m.Settings.SingleFile = r.ReadBoolean();
+								}
 							}
 							break;
 						}

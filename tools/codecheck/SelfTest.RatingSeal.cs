@@ -19,6 +19,14 @@ namespace TRC.TuneLoader.CodeCheck {
 			Expect(CourseScanner.SharedFor("akina lake downhill", keys) == "akina lake", "the longest matching name wins (Akina Lake before Akina)");
 			Expect(CourseScanner.SharedFor("akinasan downhill", keys) == null && CourseScanner.SharedFor("akina", keys) == null,
 				"only whole words match, and a name doesn't match itself");
+			var okutama = new[] { "okutama", "okutama circuit" };
+			var okutamaCourses = new[] { "okutama downhill", "okutama circuit 1", "okutama circuit 2" };
+			Expect(CourseScanner.SharedFor("okutama downhill", okutama, okutamaCourses) == "okutama" && CourseScanner.SharedFor("okutama circuit 1", okutama, okutamaCourses) == "okutama circuit"
+				&& CourseScanner.SharedFor("okutama circuit 2", new[] { "okutama" }, okutamaCourses) == null,
+				"on a road with a downhill too, a circuit never takes the downhill's path");
+			Expect(CourseScanner.SharedFor("lake akina circuit", new[] { "lake akina" }, new[] { "lake akina circuit" }) == "lake akina",
+				"a road with only a circuit: \"TRC Path Lake Akina\" is the circuit's loop (bskftw, Nov 3)");
+			Expect(CourseScanner.SharedFor("okutama downhill", new[] { "okutama circuit" }, okutamaCourses) == null, "a downhill never takes a circuit's path");
 		}
 
 		/// <summary>

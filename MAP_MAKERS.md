@@ -8,12 +8,12 @@ Everything here is plain Unity objects with the right names. There's no script o
 
 - Each name starts with `TRC`, then what the object is, then the course or road name: `TRC Start Akina Downhill`.
 - Capitals, spaces and underscores don't matter. `TRC_Start_Akina_Downhill`, `trc start akina downhill` and `TRC Start Akina Downhill` are all the same.
-- Copies Unity numbers, like `TRC Mainroad Akina (1)`, or Blender's `.001` and `.002`, are fine: they're the same object. The one without a number comes first, then `.001`, then `.002`.
+- Copies Unity numbers, like `TRC Mainroad Akina (1)`, or Blender's `.001` and `.002`, are fine: they're the same object. The one without a number comes first, then `.001`, then `.002`. Skipped numbers are fine: `.001` then `.003` is just the next piece.
   - A road or a path split into pieces: every piece is used.
   - Two starts or two finishes for one course: the one without a number is used (the mod's list says so).
   - Sector, grid and trap numbers aren't copy numbers: `TRC Akina Sector 2` is sector 2.
 - The course name is whatever comes after the word: `Akina Downhill`, `Tsukuba Circuit`, `Wangan Highway`.
-  - **"Circuit"** in the name makes it a circuit (a loop).
+  - **"Circuit"** in the name makes it a circuit (a loop). A map with more than one circuit layout numbers them: `Okutama Circuit 1`, `Okutama Circuit 2`.
   - **"Highway"** makes it a highway course.
   - Anything else is a touge course.
 
@@ -23,7 +23,7 @@ Starts, finishes and speed traps are lines across the road. Each one is an **emp
 
 1. Put it in the **middle of the road**, on the line.
 2. Turn it so its **blue arrow (Z)** points the way you drive.
-3. Set its **X scale** to the road width in metres, for example 14. Under 2 means the default, 12 m.
+3. Set its **X scale** to the road width in metres, for example 14. Under 2 means the default, 12 m. The start and finish gantries stand at the road's edges, so set it on narrow roads especially.
 
 An object that's turned off still counts, so you can use your own start and finish signs and hide them. The mod shows them while someone is running that course, and puts them back after.
 
@@ -46,6 +46,25 @@ An object that's turned off still counts, so you can use your own start and fini
 
 - **Downhill:** a course whose name ends in "Downhill" also gets its uphill twin. "Akina Downhill" makes "Akina Uphill", starting at the finish and ending at the start, with the path and sectors reversed. To make your own uphill instead, add `TRC Start Akina Uphill` and `TRC Finish Akina Uphill`: it uses the shared `TRC Path Akina` and sectors too.
 - **Circuits:** "Tsukuba Circuit" also gets "Tsukuba Circuit Reverse", driven the other way from the same line. Placed grid spots aren't flipped: the twin needs its own.
+
+### Circuits, and maps with several layouts
+
+A circuit has a start, no finish (its start line is the finish line) and its own path, a loop once round:
+
+```
+TRC Start Akina Circuit         (empty on the line, blue arrow the way you drive)
+TRC Path Akina Circuit          (the loop: a strip once round, like any path)
+```
+
+A map with a downhill and two circuits, like Okutama:
+
+```
+TRC Start Okutama Downhill      TRC Finish Okutama Downhill     TRC Path Okutama Downhill (or TRC Path Okutama)
+TRC Start Okutama Circuit 1     TRC Path Okutama Circuit 1
+TRC Start Okutama Circuit 2     TRC Path Okutama Circuit 2
+```
+
+Players get Okutama Downhill and Uphill, Okutama Circuit 1 and its Reverse, and Okutama Circuit 2 and its Reverse. On a road with a downhill too, a circuit only uses a path with "Circuit" in its name, so `TRC Path Okutama` stays the downhill's. On a road with only a circuit (like Lake Akina), `TRC Path Lake Akina` works for it too. Races on a circuit line up along the end of the lap, round the last corner, unless you place grid spots.
 
 ## The path
 
@@ -80,12 +99,17 @@ One path is enough for both directions: "Akina Uphill" uses it the other way rou
 Carry the path on **past the start line**, back down the road the cars come from, and races line up along it: no grid objects to place. Carry it on **past the finish line** too, and the other direction (Akina Uphill) lines up there. The course itself still starts and ends at the lines.
 
 - For 16 cars in a line, run it about **130 m** past the line. Two-wide needs about **70 m**.
+- Too short? The mod says so under the course in **Tracks** ("room for 7 cars two-wide..."), and until you fix it, races use as many spots as fit on the path and line the rest up straight back from its end, which may not follow the road.
 - Keep it down the middle of the road, the same as the rest of the path.
 - If you place `TRC ... Grid` objects for a course, those are used instead.
 
 **Another way:** an empty object named `TRC Path Akina` with **child objects in order along the road**, each an empty placed down the middle of the road. This is slower to place than a strip, but it needs no model.
 
 Line Renderers don't survive the map upload, so don't use one for the path.
+
+### Narrow roads
+
+Side by side, cars line up 3 m apart, either side of the middle. On roads too narrow for two cars (under about 6 m, like Yabitsu or Maze Pass), races and 1v1 battles line up **single file** by themselves, and each driver's clock starts when they cross the start line, so the cars further back lose nothing. The mod measures the road from your `TRC Mainroad` collider; without one, from the start object's X scale.
 
 ## A full example
 

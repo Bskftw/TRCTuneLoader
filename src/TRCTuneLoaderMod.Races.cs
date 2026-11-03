@@ -207,6 +207,7 @@ namespace TRC.TuneLoader {
 				PoleLeft = hostPole_ == 0,
 				LayoutFromCourse = hostLayout_ == 0,
 				Layout = hostLayout_ == 2 ? GridLayout.LineUp : GridLayout.Grid,
+				SingleFile = course != null && MeasureRoad(course).SingleFile,
 				Jump = JumpRuleValues[Math.Min(hostJump_, JumpRuleValues.Length - 1)],
 				Elimination = course != null && hostElimination_ && course.IsCircuit,
 				QualifyingMinutes = QualifyingMinuteChoices[hostQualMinutes_],
@@ -648,7 +649,7 @@ namespace TRC.TuneLoader {
 			if (games) {
 				GUILayout.Label("What to play", Theme.SectionLabel);
 				hostGame_ = Math.Max(1, hostGame_);
-				hostGame_ = Choice(RoomModeNames.Skip(1).ToArray(), hostGame_ - 1) + 1;
+				hostGame_ = Choice(RoomModeNames.Skip(1).ToArray(), hostGame_ - 1, 4) + 1;
 				DrawGameForm();
 				GUILayout.EndVertical();
 				return;
@@ -665,25 +666,31 @@ namespace TRC.TuneLoader {
 			GUILayout.Label(hostTrapScoring_
 				? "Like Need for Speed Most Wanted: the highest total of every speed trap on the course wins (on a circuit, every lap's). You have to finish for yours to count. The course's own traps count, or the free-roam traps along it."
 				: "The fastest to the finish wins.", Theme.Small);
-			List<Course> courses = courses_.ForMap(map_.Key).Where(c => c.Usable).ToList();
+			List<Course> courses = CoursesHere().Where(c => c.Usable).ToList();
 			if (courses.Count == 0) {
 				GUILayout.Label("No courses on this map yet: make one with the Course builder.", Theme.Small);
 				GUILayout.EndVertical();
 				return;
 			}
 			GUILayout.Label("Course", Theme.SectionLabel);
-			foreach (Course course in courses) {
+			// Only the picked course's road is measured (measuring all of them at once was a lag spike).
+			MeasureRoad(courses.FirstOrDefault(c => c.Code == hostCourse_));
+			hostCourse_ = PickCourse(racePicker_, courses, hostCourse_, course => {
 				string grid = course.GridObjects.Count > 0 ? "map grid" : course.GridPath.Count >= 2 ? "laid-out grid" : "grid straight back";
+				if (course.SingleFile) {
+					grid += $" · <color={Theme.WarnHex}>single file: the road is {course.RoadWidth:0.0} m wide</color>";
+				}
+				int room = course.GridRoom(course.SingleFile || hostLayout_ == 2 ? GridLayout.LineUp : GridLayout.Grid);
+				if (room < Course.FullGrid) {
+					grid += $" · <color={Theme.WarnHex}>its grid path fits {room} car(s), more line up straight back</color>";
+				}
 				string traps = "";
 				if (hostTrapScoring_) {
 					int count = RaceTrapCount(course);
 					traps = count == 0 ? $" · <color={Theme.WarnHex}>no speed traps on it</color>" : $" · {count} speed trap(s)";
 				}
-				string text = $"<b>{course.Name}</b>  <color={Theme.MutedHex}>{course.KindName} · {TimeAttackRun.Distance(course.Length)} · {grid}</color>{traps}";
-				if (GUILayout.Button(text, hostCourse_ == course.Code ? Theme.RowSelected : Theme.Row)) {
-					hostCourse_ = course.Code;
-				}
-			}
+				return $"<b>{course.Name}</b>  <color={Theme.MutedHex}>{course.KindName} · {TimeAttackRun.Distance(course.Length)} · {grid}</color>{traps}";
+			});
 			Course picked = courses.FirstOrDefault(c => c.Code == hostCourse_);
 			if (picked?.IsCircuit == true) {
 				GUILayout.Label("Laps", Theme.SectionLabel);

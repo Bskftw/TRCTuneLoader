@@ -67,6 +67,7 @@ namespace TRC.TuneLoader {
 		/// <summary>Standing or flying, and (for circuits) how many laps: above the list of courses.</summary>
 		private void DrawStartOptions(bool anyCircuit) {
 			LoadLapPrefs();
+			DrawTimeAttackRules();
 			GUILayout.BeginHorizontal();
 			GUILayout.Label("Start", Theme.SectionLabel, GUILayout.Width(60));
 			int start = Choice(StartChoices, pickedStart_);
@@ -112,11 +113,14 @@ namespace TRC.TuneLoader {
 		}
 
 		/// <summary>The kind of time a run's whole result is, and the kind its laps are (circuits).</summary>
-		private static TimeKind RunKind(TimeAttackRun run) => new TimeKind { Flying = run.Flying, Laps = run.Laps };
+		private TimeKind RunKind(TimeAttackRun run) => new TimeKind { Flying = run.Flying, Laps = run.Laps, Rule = runRule_ };
 		private static readonly TimeKind LapKind = new TimeKind { Lap = true, Flying = true };
 
+		/// <summary>A lap of the time attack running, compared only with laps driven to the same rules.</summary>
+		private TimeKind RunLapKind => new TimeKind { Lap = true, Flying = true, Rule = runRule_ };
+
 		/// <summary>The time the live delta and the splits compare with: on a circuit the flying lap, else the whole run.</summary>
-		private static TimeKind CompareKind(TimeAttackRun run) => run.Course.IsCircuit ? LapKind : RunKind(run);
+		private TimeKind CompareKind(TimeAttackRun run) => run.Course.IsCircuit ? RunLapKind : RunKind(run);
 
 		/// <summary>
 		/// Called after every tick of a time attack: loads what this run compares with once the car is known, and
@@ -206,17 +210,18 @@ namespace TRC.TuneLoader {
 				return;
 			}
 
-			TimeAttackRecord best = TimeAttackLog.BestFor(times_, run_.Course.Code, start.CarId, start.Set, specOnly: false, LapKind);
+			TimeAttackRecord best = TimeAttackLog.BestFor(times_, run_.Course.Code, start.CarId, start.Set, specOnly: false, RunLapKind);
 			if (!lap.Standing) {
 				// The car's state now is what the live check last saw; a full check here would cost a frame on the line.
 				SpecState now = carStatus_ != null ? StateOf(carStatus_) : start.State;
 				var record = RecordFor(start, now, ms);
 				record.Flying = true;
 				record.Laps = run_.Laps;
+				SetRules(record);
 				record.LapNumber = lap.Number;
 				record.SectorMs = lap.Sectors.Select(s => (long)Math.Round(s * 1000.0, MidpointRounding.AwayFromZero)).ToArray();
 				SaveRecord(record);
-				string key = TimeAttackTraces.Key(run_.Course.Code, start.CarId, start.Set, LapKind);
+				string key = TimeAttackTraces.Key(run_.Course.Code, start.CarId, start.Set, RunLapKind);
 				if (TimeAttackTraces.SaveIfFaster(TimesFolder, key, lap.Trace, ms)) {
 					run_.Reference = lap.Trace;
 					run_.SetReferenceLine(lap.Line, lap.LineKmh, lap.Time);

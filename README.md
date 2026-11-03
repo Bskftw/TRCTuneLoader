@@ -11,12 +11,12 @@ A KSL mod for CarX Drift Racing Online, made for TRC (Touge Racing Community). B
 | | |
 | --- | --- |
 | **Tunes & TRC spec** | Put the official TRC tunes on your car in one click, and check your car, and every car in the room, for anything that isn't TRC spec. Every tune has a code the TRC Discord bot uses to verify leaderboard runs. |
-| **Time attack & course builder** | Make your own courses on any map by driving them, or race the official ones. 3-2-1-GO or flying starts, circuits with laps, sectors in purple, green and amber, a live delta, and your best line drawn on the road. |
+| **Time attack & course builder** | Make your own courses on any map by driving them, or race the official ones. 3-2-1-GO or flying starts, circuits with laps, sectors in purple, green and amber, a live delta, and your best line drawn on the road. Gantries at the start, finish and every sector light up with the countdown and show your gap to your PB, and the course shows on CarX's minimap and map. Drive to TRC spec, Open or one of your regulations. |
 | **Battles, races & tournaments** | Challenge anyone in the room: side by side, cat and mouse, or a Tokyo Xtreme Racer style highway battle. Races with qualifying and grids (no driver limit), then points series, knockouts and heats. Console players can race too, timed by a PC host. |
 | **Regulations** | For communities that tune their own cars to rules: a most power, tyre widths per weight class, no swaps, one setup. Make one, share it, and run battles, races and tournaments to it, with its own Elo. |
 | **Suspension** | Data logging like a real race team: how far each wheel compresses, the tyre's load, when it leaves the road, packing down over bumps, bottoming, and a damper speed histogram, with a live overlay. Off unless you turn it on. |
 | **Ghosts & shared runs** | Your best time attacks are kept as ghosts. Race a ghost, yours or one someone shared, with the live delta and sectors against it. Ghosts have no physics, so no slipstream. |
-| **Speed traps, room games & ratings** | Speed traps in free roam and on courses with a floating SPEED CHECK sign, speed trap races, fun games (cops and runners, tag, infected, king of the hill, highway cut-up and more), and an Elo rating, Safety Rating and license (still being tested). |
+| **Speed traps, room games & ratings** | Speed traps in free roam and on courses with a floating SPEED CHECK sign, random traps on any track, speed trap races, fun games (cops and runners, tag, infected, king of the hill, highway cut-up and more), and an Elo rating, Safety Rating and license (still being tested). |
 
 ![The four parts of TRC Tune Loader](docs/images/overview.png)
 
@@ -379,5 +379,6 @@ The mod writes what it does to its own log, `kino\mods\TRCTuneLoader\TRCTuneLoad
 | Tracks / Speed traps / Battles layout, named speed traps with signs, speed trap races, colours and text size, delete times, reverse on save, new Safety Rating | 0.15 | Partly (Oct 29, with a second player): colours, speed trap races and the weight check were tried, and fixed in 0.15.1 |
 | Speed trap battles, live trap totals, races that keep going after resets, KINO weight check, second text colour | 0.15.1 | Not yet |
 | Sharing speed traps, sealed ratings file, map paths and grids from map objects | 0.16 | Not yet |
-| Regulations, just-for-fun events, console players and the headlight start, host-only races, recalled starts, no driver limit, ghosts and shared runs, suspension logging | 0.16 | Not yet |
+| Regulations, just-for-fun events, console players and the headlight start, host-only races, recalled starts, no driver limit, ghosts and shared runs, suspension logging | 0.16 | Partly: ghosts and the time attack window |
+| Start, finish and checkpoint gantries, FINISH on screen, map icons, time attack rules, sector pop-up, random speed traps, single file on narrow roads, path chevrons, smoother long lists | 0.16.1 | Partly: the gantries and signs, the tracks list, circuit paths |
 

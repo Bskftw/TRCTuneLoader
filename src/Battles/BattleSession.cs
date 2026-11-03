@@ -86,10 +86,6 @@ namespace TRC.TuneLoader {
 		public const float LeaderSpot = 2.5f;
 		public const float ChaserSpot = 10f;
 
-		/// <summary>A race's two spots are this far (metres) in from the middle of each half of the line (TRC: closer together).</summary>
-		private const float RaceSpotsCloser = 1f;
-		private const float MinRaceSpotSide = 1.2f;
-
 		private const int OffsetSamples = 15;
 
 		public uint Id { get; }
@@ -154,6 +150,14 @@ namespace TRC.TuneLoader {
 
 		/// <summary>0.16: just for fun: no ratings change.</summary>
 		public bool Fun { get; private set; }
+
+		/// <summary>
+		/// The road at the start is too narrow for side by side (the challenger's mod measured it): the challenger lines
+		/// up in front, the other driver behind, and each clock starts at the start line (cat and mouse is unchanged).
+		/// </summary>
+		public bool SingleFile { get; private set; }
+
+		private bool LinedUp => SingleFile && Format != BattleFormat.CatAndMouse && !IsHighway;
 
 		public bool IsTrcSpec => !Open && Regulation == null;
 
@@ -297,6 +301,7 @@ namespace TRC.TuneLoader {
 				MatchGame = matchGame,
 				Regulation = regulation,
 				Fun = fun,
+				SingleFile = course != null && course.SingleFile,
 			};
 			session.Counted = regulation != null || !open;
 			session.SendChallenge(now);
@@ -313,6 +318,7 @@ namespace TRC.TuneLoader {
 				MatchGame = challenge.MatchGame,
 				Regulation = challenge.Regulation,
 				Fun = challenge.Fun,
+				SingleFile = challenge.SingleFile,
 			};
 			session.Counted = challenge.Regulation != null || !challenge.Open;
 			session.Message = $"{session.PeerName} challenges you";
@@ -621,9 +627,12 @@ namespace TRC.TuneLoader {
 			if (Format == BattleFormat.CatAndMouse) {
 				return start.Center - start.Forward * (IAmLeader ? LeaderSpot : ChaserSpot);
 			}
-			// Race: the host on the left half, the guest on the right.
-			float side = Mathf.Max(MinRaceSpotSide, start.Width / 4f - RaceSpotsCloser);
-			return start.Center - start.Forward * FrontSpot + start.Right * side * (IsHost ? -1f : 1f);
+			if (LinedUp) {
+				// Single file: the challenger in front, the other driver one car length and a bit behind.
+				return start.Center - start.Forward * (IsHost ? FrontSpot : FrontSpot + Course.LineUpStep);
+			}
+			// Race: side by side, close together (bskftw, Nov 2: cars were too far apart), the host on the left.
+			return start.Center - start.Forward * FrontSpot + start.Right * (Course.SideBySideGap / 2f) * (IsHost ? -1f : 1f);
 		}
 
 		/// <summary>The course goes with the challenge (not official, so the other driver may not have it).</summary>
@@ -647,6 +656,7 @@ namespace TRC.TuneLoader {
 			}
 			challenge.Fun = Fun;
 			challenge.Regulation = Regulation;
+			challenge.SingleFile = SingleFile;
 			outbox_.Add(challenge);
 		}
 
@@ -665,12 +675,12 @@ namespace TRC.TuneLoader {
 				PeerSp = FullSp;
 			} else {
 				// A reset doesn't end a battle run: a driver who messes up can still win if the other does too.
-				Run = new TimeAttackRun(Course, Laps) { ExternalStart = true, AllowResets = true, KeepGoing = true };
+				Run = new TimeAttackRun(Course, Laps) { ExternalStart = true, AllowResets = true, KeepGoing = true, ClockFromLine = LinedUp };
 				if (Format == BattleFormat.CatAndMouse && !IAmLeader) {
 					Run.GridFront = ChaserBoxFront;
 					Run.GridBack = ChaserBoxBack;
 				} else {
-					Run.GridBack = Format == BattleFormat.CatAndMouse ? LeaderBoxBack : RaceBoxBack;
+					Run.GridBack = Format == BattleFormat.CatAndMouse ? LeaderBoxBack : LinedUp ? RaceBoxBack + Course.LineUpStep : RaceBoxBack;
 				}
 			}
 			myResult_ = null;

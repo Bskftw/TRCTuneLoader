@@ -20,7 +20,9 @@ namespace TRC.TuneLoader {
 		public static string Key(string courseCode, int carId, string tuneSet, TimeKind kind) {
 			string set = new string((tuneSet ?? "").Where(char.IsLetterOrDigit).ToArray());
 			string what = kind.Lap ? "lap" : $"{(kind.Flying ? "flying" : "standing")}{kind.Laps}";
-			return $"{courseCode}_{carId.ToString(CultureInfo.InvariantCulture)}_{(set.Length > 0 ? set : "none")}_{what}";
+			// Open and regulation times have their own best line and delta; TRC spec keeps the old names.
+			string rule = new string((kind.Rule ?? "").Where(char.IsLetterOrDigit).ToArray());
+			return $"{courseCode}_{carId.ToString(CultureInfo.InvariantCulture)}_{(set.Length > 0 ? set : "none")}_{what}{(rule.Length > 0 ? "_" + rule : "")}";
 		}
 
 		/// <summary>The saved trace and its time (milliseconds), or null.</summary>

@@ -47,9 +47,17 @@ namespace TRC.TuneLoader {
 
 		/// <summary>0.16: the ghost that was showing during the run ("" for none). Ghosts have no physics, so the time counts; it's noted for TRC.</summary>
 		public string Ghost = "";
+
+		/// <summary>
+		/// 0.16.1 (bskftw, Nov 3): the rules the time was driven to: "" for TRC spec (every time before), "open", or a
+		/// regulation's code. Each has its own bests. <see cref="RuleOk"/>: the car met the regulation at the start and finish.
+		/// </summary>
+		public string Rule = "";
+		public bool RuleOk;
 		public float TrapTotal => TrapKmh.Sum();
 
-		public bool IsSpec => Spec == TimeAttackLog.SpecWord && FlaggedMods == 0;
+		/// <summary>Counts for TRC: driven as TRC spec, TRC spec at both ends, nothing flagged.</summary>
+		public bool IsSpec => Spec == TimeAttackLog.SpecWord && FlaggedMods == 0 && Rule.Length == 0;
 		public bool IsLap => LapNumber > 0;
 		public double Seconds => TimeMs / 1000.0;
 	}
@@ -60,11 +68,14 @@ namespace TRC.TuneLoader {
 		public bool Flying;
 		public int Laps;
 
+		/// <summary>The rules (<see cref="TimeAttackRecord.Rule"/>) the times must have been driven to; null for any.</summary>
+		public string Rule;
+
 		public static TimeKind Of(TimeAttackRecord record) =>
-			record.IsLap ? new TimeKind { Lap = true, Flying = record.Flying } : new TimeKind { Flying = record.Flying, Laps = record.Laps };
+			record.IsLap ? new TimeKind { Lap = true, Flying = record.Flying, Rule = record.Rule } : new TimeKind { Flying = record.Flying, Laps = record.Laps, Rule = record.Rule };
 
 		public bool Matches(TimeAttackRecord record) =>
-			record.IsLap == Lap && record.Flying == Flying && (Lap || record.Laps == Laps);
+			record.IsLap == Lap && record.Flying == Flying && (Lap || record.Laps == Laps) && (Rule == null || record.Rule == Rule);
 	}
 
 	/// <summary>
@@ -74,12 +85,15 @@ namespace TRC.TuneLoader {
 	/// </summary>
 	public static class TimeAttackLog {
 		public const string SpecWord = "spec";
+
+		/// <summary>The rules word for an Open time attack (any setup).</summary>
+		public const string OpenRule = "open";
 		public const string FileName = "runs.csv";
 
 		private static readonly string[] Columns = {
 			"date", "course_code", "course", "map", "map_name", "official_course", "car_id", "car", "setup",
 			"tune_code", "tune_set", "spec", "flagged_mods", "time_ms", "loader_version",
-			"start", "laps", "lap", "sectors_ms", "traps_kmh", "ghost",
+			"start", "laps", "lap", "sectors_ms", "traps_kmh", "ghost", "rules", "meets_rules",
 		};
 
 		/// <summary>The first columns, which every line has (lines from before 0.11 have only these).</summary>
@@ -107,6 +121,8 @@ namespace TRC.TuneLoader {
 				string.Join("|", record.SectorMs.Select(ms => ms.ToString(CultureInfo.InvariantCulture))),
 				string.Join("|", record.TrapKmh.Select(k => k.ToString("0.0", CultureInfo.InvariantCulture))),
 				record.Ghost ?? "",
+				record.Rule ?? "",
+				record.Rule.Length > 0 && record.Rule != TimeAttackLog.OpenRule ? (record.RuleOk ? "yes" : "no") : "",
 			};
 			text.Append(string.Join(",", fields.Select(Quote))).Append('\n');
 			File.AppendAllText(path, text.ToString(), new UTF8Encoding(false));
@@ -214,6 +230,10 @@ namespace TRC.TuneLoader {
 				}
 				if (f.Count >= 21) {
 					record.Ghost = f[20];
+				}
+				if (f.Count >= 23) {
+					record.Rule = f[21];
+					record.RuleOk = f[22] == "yes";
 				}
 				return record;
 			}

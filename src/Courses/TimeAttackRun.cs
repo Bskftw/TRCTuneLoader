@@ -45,6 +45,9 @@ namespace TRC.TuneLoader {
 
 		/// <summary>Seconds for the sector itself.</summary>
 		public double Time;
+
+		/// <summary>The lap so far against the <see cref="TimeAttackRun.Reference"/> lap at the same point: negative ahead, positive behind; null without one.</summary>
+		public double? Delta;
 	}
 
 	/// <summary>
@@ -307,6 +310,12 @@ namespace TRC.TuneLoader {
 
 		/// <summary>What a jump start does (races pick penalty or disqualification).</summary>
 		public JumpRule OnJump { get; set; } = JumpRule.Restart;
+
+		/// <summary>
+		/// Single file on a narrow road (bskftw, Nov 2): the countdown and GO are shared, but each driver's clock starts
+		/// when their car crosses the start line, so lining up further back costs nothing. Results go by time.
+		/// </summary>
+		public bool ClockFromLine { get; set; }
 
 		/// <summary>The car hasn't crossed the start line since GO (it started behind it, like the back of a race grid).</summary>
 		public bool BeforeLine { get; private set; }
@@ -603,7 +612,7 @@ namespace TRC.TuneLoader {
 			Lap = 1;
 			BeginLap(0);
 			// Well behind the line (the back of a race grid): nothing counts until the car crosses it.
-			BeforeLine = !Flying && Course.Start.Ahead(position) < -GridDepth;
+			BeforeLine = !Flying && Course.Start.Ahead(position) < (ClockFromLine ? 0f : -GridDepth);
 			if (BeforeLine) {
 				lastProgress_ = Progress = 0f;
 				segment_ = 0;
@@ -639,14 +648,23 @@ namespace TRC.TuneLoader {
 			Elapsed = now - goTime_;
 
 			if (BeforeLine) {
-				if (CourseGeometry.Crossed(Course.Start, lastPosition_, position, out _)) {
+				if (CourseGeometry.Crossed(Course.Start, lastPosition_, position, out float lineFraction)) {
 					BeforeLine = false;
+					if (ClockFromLine) {
+						goTime_ = lastTime_ + lineFraction * dt;
+						Elapsed = now - goTime_;
+						Message = "";
+					}
 					PathPosition from = CourseGeometry.Project(Course.Path, Course.Distances, position, 0, LookAhead);
 					segment_ = from.Segment;
 					lastProgress_ = Progress = from.Progress;
 				} else if (Elapsed > MaxBeforeLineSeconds) {
 					Cancel("Never crossed the start line, so the run was stopped.");
 					return;
+				} else if (ClockFromLine) {
+					// Single file: the clock waits at 0 for this car to reach the line.
+					Elapsed = 0;
+					Message = "Single file: your clock starts at the start line";
 				}
 				lastPosition_ = position;
 				lastTime_ = now;
@@ -812,10 +830,24 @@ namespace TRC.TuneLoader {
 			}
 		}
 
+		/// <summary>The lap time so far against the reference lap's at the sector now ending, or null.</summary>
+		private double? ReferenceDelta(double lapSoFar) {
+			if (Reference == null || Reference.Length < 2 || Sector >= Course.SectorEnds.Length) {
+				return null;
+			}
+			float at = Course.SectorEnds[Sector] / TraceStep;
+			int i = Mathf.FloorToInt(at);
+			if (i < 0 || i >= Reference.Length) {
+				return null;
+			}
+			double then = i + 1 < Reference.Length ? Reference[i] + (Reference[i + 1] - Reference[i]) * (at - i) : Reference[i];
+			return lapSoFar - then;
+		}
+
 		private void Split(double at) {
 			double started = splits_.Count == 0 ? lapStart_ : splits_[splits_.Count - 1];
 			splits_.Add(at);
-			LastSplit = new SectorSplit { Index = Sector, Lap = Lap, Time = at - started };
+			LastSplit = new SectorSplit { Index = Sector, Lap = Lap, Time = at - started, Delta = ReferenceDelta(at - lapStart_) };
 			Sector++;
 		}
 

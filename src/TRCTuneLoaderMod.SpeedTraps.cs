@@ -231,7 +231,7 @@ namespace TRC.TuneLoader {
 			var record = new SpeedTrapRecord {
 				When = DateTime.Now, TrapKey = trap.Key, TrapName = trap.Name, MapName = map_?.Name ?? "", Kmh = kmh, CarId = pose_.CarId,
 				Car = car_?.CarName ?? "", TuneSet = carStatus_?.Matched == true ? carStatus_.Official.Name : "",
-				Spec = carStatus_ != null && StateOf(carStatus_) == SpecState.Spec && modCheck_.Flags.Count == 0, Context = context,
+				Spec = carStatus_ != null && StateOf(carStatus_) == SpecState.Spec && modCheck_.Flags.Count == 0, Context = context, Rule = TrapRule(),
 			};
 			trapRecords_.Add(record);
 			try {
@@ -324,7 +324,7 @@ namespace TRC.TuneLoader {
 				float fade = Mathf.Clamp01((SignRange - screen.z) / 80f);
 				GUI.color = new Color(1f, 1f, 1f, fade);
 				GUI.DrawTexture(new Rect(x, y, width, height), texture, ScaleMode.ScaleToFit);
-				string speed = trapSignMode_ == 1 ? FastestKmh(key)
+				string speed = trapSignMode_ == 2 ? FastestEverKmh(key) : trapSignMode_ == 1 ? FastestKmh(key)
 					: lastTrapKmh_.TryGetValue(key, out float kmh) ? kmh.ToString("0", CultureInfo.InvariantCulture) : LastSavedKmh(key);
 				signNumber_.fontSize = Mathf.Max(8, Mathf.RoundToInt(height * 0.34f));
 				GUI.Label(new Rect(x, y + height * 0.27f, width, height * 0.45f), speed, signNumber_);
@@ -336,8 +336,29 @@ namespace TRC.TuneLoader {
 			GUI.color = before;
 		}
 
-		/// <summary>Options: the signs show your last speed through each trap (0) or your fastest (1), in this car.</summary>
+		/// <summary>The rules a speed is caught under: the race's, the battle's or the time attack's; "" in free roam.</summary>
+		private string TrapRule() {
+			if (InRace) {
+				return race_.Settings.Regulation?.Code ?? (race_.Settings.Open ? TimeAttackLog.OpenRule : "");
+			}
+			if (battle_ != null && battle_.Active) {
+				return battle_.Regulation?.Code ?? (battle_.Open ? TimeAttackLog.OpenRule : "");
+			}
+			return run_ != null && run_.State == TimeAttackRun.Phase.Running ? runRule_ ?? "" : "";
+		}
+
+		/// <summary>The fastest speed ever saved at a trap, any car, or "---".</summary>
+		private string FastestEverKmh(string key) {
+			float best = trapRecords_.Where(r => r.TrapKey == key).Select(r => r.Kmh).DefaultIfEmpty(0f).Max();
+			if (lastTrapKmh_.TryGetValue(key, out float now)) {
+				best = Mathf.Max(best, now);
+			}
+			return best > 0 ? best.ToString("0", CultureInfo.InvariantCulture) : "---";
+		}
+
+		/// <summary>Options: the signs show your last speed through each trap (0), your fastest in this car (1), or your fastest ever (2).</summary>
 		private const string TrapSignPref = "trap_sign_speed";
+		private const string GantriesPref = "gantries";
 		private int trapSignMode_;
 
 		/// <summary>The fastest speed saved at a trap in this car (or this session's, if faster), or "---".</summary>
@@ -384,6 +405,7 @@ namespace TRC.TuneLoader {
 			if (placingTrap_) {
 				DrawPlaceTrap();
 			}
+			DrawRandomTraps();
 			DrawSharedTraps();
 			if (sharingTraps_) {
 				DrawShareTraps();
@@ -414,6 +436,23 @@ namespace TRC.TuneLoader {
 					}
 				}
 				if (open) {
+					if (group.Key.Length > 0 && traps.All(t => t.Source == CourseSource.Custom)) {
+						GUILayout.BeginHorizontal();
+						GUILayout.Space(18);
+						if (trapGroupDeletePending_ == title) {
+							GUILayout.Label($"Delete all {traps.Count} traps in {title}? Their speeds stay saved.", Theme.Small);
+							if (GUILayout.Button("Delete them", Theme.ButtonPrimary)) {
+								DeleteTrapGroup(title);
+							}
+							if (GUILayout.Button("Keep", Theme.Button)) {
+								trapGroupDeletePending_ = "";
+							}
+						} else if (GUILayout.Button("Delete this group", Theme.Button)) {
+							trapGroupDeletePending_ = title;
+						}
+						GUILayout.FlexibleSpace();
+						GUILayout.EndHorizontal();
+					}
 					GUILayout.BeginHorizontal();
 					GUILayout.Space(18);
 					GUILayout.BeginVertical();
@@ -700,6 +739,111 @@ namespace TRC.TuneLoader {
 			} catch (Exception e) {
 				courseResult_ = $"Couldn't save the speed trap: {e.Message}";
 				TrcLog.Error(e);
+			}
+		}
+
+		// ---- Random traps (bskftw, Nov 3: on a track, from the course builder or the map's own tracks, how many you like) ----
+
+		private static readonly int[] RandomTrapCounts = { 3, 5, 8, 10, 15 };
+		private bool randomTrapsOpen_;
+		private int randomTrapCount_ = 1;
+		private string randomTrapsCourse_ = "";
+		private readonly CoursePicker randomTrapsPicker_ = new CoursePicker();
+		private string trapGroupDeletePending_ = "";
+
+		private void DrawRandomTraps() {
+			if (!randomTrapsOpen_) {
+				GUILayout.BeginHorizontal();
+				bool enabled = GUI.enabled;
+				GUI.enabled = enabled && map_ != null && CoursesHere().Any(c => c.HasPath);
+				if (GUILayout.Button("Random traps on a track...", Theme.Button)) {
+					randomTrapsOpen_ = true;
+				}
+				GUI.enabled = enabled;
+				GUILayout.FlexibleSpace();
+				GUILayout.EndHorizontal();
+				return;
+			}
+			GUILayout.BeginVertical(Theme.Guide);
+			GUILayout.Label("Random speed traps on a track", Theme.Heading);
+			GUILayout.Label("Spread along the track at random, grouped as \"<track> Random\". Doing it again for the same track puts new ones in their place; " +
+				"Delete this group (open the group below) takes them all away.", Theme.Small);
+			// The buttons above the list, so a long list never pushes them out of the window (bskftw, Nov 3).
+			List<Course> withPaths = CoursesHere().Where(c => c.HasPath && c.Length > 300f).ToList();
+			GUILayout.BeginHorizontal();
+			GUILayout.Label("How many", Theme.SectionLabel, GUILayout.Width(80));
+			randomTrapCount_ = Choice(RandomTrapCounts.Select(n => n.ToString(CultureInfo.InvariantCulture)).ToArray(), randomTrapCount_);
+			GUILayout.EndHorizontal();
+			GUILayout.BeginHorizontal();
+			Course picked = withPaths.FirstOrDefault(c => c.Code == randomTrapsCourse_);
+			bool on = GUI.enabled;
+			GUI.enabled = on && picked != null;
+			if (GUILayout.Button("Place them", Theme.ButtonPrimary)) {
+				PlaceRandomTraps(picked, RandomTrapCounts[randomTrapCount_]);
+			}
+			GUI.enabled = on;
+			if (GUILayout.Button("Close", Theme.Button)) {
+				randomTrapsOpen_ = false;
+			}
+			GUILayout.FlexibleSpace();
+			GUILayout.EndHorizontal();
+			randomTrapsCourse_ = PickCourse(randomTrapsPicker_, withPaths, randomTrapsCourse_,
+				c => $"<b>{c.Name}</b>  <color={Theme.MutedHex}>{c.KindName} · {TimeAttackRun.Distance(c.Length)}</color>", 170f);
+			GUILayout.EndVertical();
+		}
+
+		/// <summary>The group name random traps on a course get.</summary>
+		private static string RandomGroup(Course course) => $"{course.Name} Random";
+
+		/// <summary>
+		/// Puts <paramref name="count"/> free-roam traps along the course's path at random: one in each equal stretch
+		/// (so they never bunch up), away from the start and finish, across the road the way it goes there. Earlier random
+		/// traps on this course are replaced.
+		/// </summary>
+		private void PlaceRandomTraps(Course course, int count) {
+			if (course == null || map_ == null || !course.HasPath || course.Length <= 0f) {
+				return;
+			}
+			try {
+				string group = RandomGroup(course);
+				List<SpeedTrap> mine = SpeedTrapFile.Load(TrapsFile, map_.Key);
+				mine.RemoveAll(t => string.Equals(t.Group, group, StringComparison.OrdinalIgnoreCase));
+				var random = new System.Random();
+				float margin = Mathf.Min(80f, course.Length * 0.1f);
+				float stretch = (course.Length - 2f * margin) / count;
+				ICollection<int> road = course.RoadColliders.Count > 0 ? course.RoadColliders : new HashSet<int>(CoursesHere().SelectMany(c => c.RoadColliders));
+				int placed = 0;
+				for (int i = 0; i < count; i++) {
+					float distance = margin + stretch * (i + 0.2f + 0.6f * (float)random.NextDouble());
+					course.PointAt(distance, out Vector3 at, out Vector3 forward);
+					Vector3 right = new Vector3(forward.z, 0f, -forward.x);
+					float width = adapter_.TryMeasureRoadWidth(at, right, road, out float measured) ? Mathf.Clamp(measured + 1f, 4f, 30f) : 12f;
+					if (CourseGate.TryMake(at, forward, width, out CourseGate gate)) {
+						mine.Add(new SpeedTrap { Name = $"{group} Speed Trap {++placed}", Gate = gate, MapKey = map_.Key, Source = CourseSource.Custom });
+					}
+				}
+				SpeedTrapFile.Save(TrapsFile, mine);
+				RefreshTraps();
+				trapGroupsOpen_.Add(group);
+				courseResult_ = $"Placed {placed} random speed trap(s) on {course.Name}, grouped as {group}.";
+				TrcLog.Info($"{placed} random speed trap(s) placed on {course.Name} ({course.Code}).");
+			} catch (Exception e) {
+				courseResult_ = $"Couldn't place them: {e.Message}";
+				TrcLog.Error(e);
+			}
+		}
+
+		private void DeleteTrapGroup(string group) {
+			trapGroupDeletePending_ = "";
+			try {
+				List<SpeedTrap> mine = SpeedTrapFile.Load(TrapsFile, map_.Key);
+				int removed = mine.RemoveAll(t => string.Equals(t.Group, group, StringComparison.OrdinalIgnoreCase));
+				SpeedTrapFile.Save(TrapsFile, mine);
+				RefreshTraps();
+				trapEditing_ = null;
+				courseResult_ = $"Deleted the {removed} speed trap(s) in {group}. Their speeds stay saved.";
+			} catch (Exception e) {
+				courseResult_ = $"Couldn't delete them: {e.Message}";
 			}
 		}
 

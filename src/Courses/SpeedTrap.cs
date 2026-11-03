@@ -174,12 +174,15 @@ namespace TRC.TuneLoader {
 
 		/// <summary>"freeroam", or the course code of the run it was caught in.</summary>
 		public string Context = "";
+
+		/// <summary>0.16.1: the rules of the run or event it was caught in: "" TRC spec (or free roam), "open", or a regulation's code.</summary>
+		public string Rule = "";
 	}
 
 	/// <summary>Every speed caught by a trap, one line each, only ever added to.</summary>
 	public static class SpeedTrapLog {
 		public const string FileName = "speedtraps.csv";
-		private const string Header = "date,trap_key,trap,map,kmh,car_id,car,tune_set,spec,context";
+		private const string Header = "date,trap_key,trap,map,kmh,car_id,car,tune_set,spec,context,rules";
 
 		public static void Append(string folder, SpeedTrapRecord r) {
 			Directory.CreateDirectory(folder);
@@ -192,7 +195,7 @@ namespace TRC.TuneLoader {
 			text.Append(string.Join(",", new[] {
 				r.When.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture), Q(r.TrapKey), Q(r.TrapName), Q(r.MapName),
 				r.Kmh.ToString("0.0", CultureInfo.InvariantCulture), r.CarId.ToString(CultureInfo.InvariantCulture), Q(r.Car), Q(r.TuneSet),
-				r.Spec ? "spec" : "no", Q(r.Context),
+				r.Spec ? "spec" : "no", Q(r.Context), Q(r.Rule),
 			})).Append('\n');
 			File.AppendAllText(path, text.ToString(), new UTF8Encoding(false));
 		}
@@ -212,6 +215,7 @@ namespace TRC.TuneLoader {
 				int.TryParse(f[5], NumberStyles.Integer, CultureInfo.InvariantCulture, out int car);
 				records.Add(new SpeedTrapRecord {
 					When = when, TrapKey = f[1], TrapName = f[2], MapName = f[3], Kmh = kmh, CarId = car, Car = f[6], TuneSet = f[7], Spec = f[8] == "spec", Context = f[9],
+					Rule = f.Count >= 11 ? f[10] : "",
 				});
 			}
 			return records;

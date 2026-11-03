@@ -111,11 +111,34 @@ namespace TRC.TuneLoader {
 			}
 		}
 		private static bool materialsTried_;
+		private static Material template_;
+		private static Shader shader_;
+		private static Material structureMaterial_;
+
+		/// <summary>Nov 2: gantries with signs at the start and finish (Options); off: the plain lines.</summary>
+		public static bool UseGantries = true;
+
+		/// <summary>Gantries can be seen from further away than the lines.</summary>
+		private const float GantryRange = 300f;
+
+		private static readonly Color StartNeon = new Color(0.25f, 0.67f, 1f, 1f);
+		private static readonly Color FinishNeon = new Color(0.24f, 0.94f, 0.59f, 1f);
+		private static readonly Color StructureColor = new Color(0.07f, 0.08f, 0.11f, 1f);
 
 		private GameObject start_;
 		private GameObject finish_;
 		private CourseGate startGate_;
 		private CourseGate finishGate_;
+		private Gantry startGantry_;
+		private Gantry finishGantry_;
+		private bool gantries_;
+
+		/// <summary>Nov 2: a checkpoint gantry where each sector ends (not the last: that's the finish), and what they were built for.</summary>
+		private readonly List<Gantry> checkpoints_ = new List<Gantry>();
+		private Course checkpointsFor_;
+		private float checkpointsSpan_;
+
+		private static readonly Color CheckpointNeon = new Color(0.75f, 1f, 0.16f, 1f);
 
 		/// <summary>False when no shader to draw with was found; the mod then draws the lines over the screen instead.</summary>
 		public static bool Available => MakeMaterials();
@@ -123,11 +146,20 @@ namespace TRC.TuneLoader {
 		/// <summary>Which shader the markers use, for the log.</summary>
 		public static string ShaderName { get; private set; } = "";
 
-		/// <summary>Shows these lines (and removes any others). Gates that are null, or that a sign already shows, get no marker.</summary>
-		public void Show(CourseGate start, CourseGate finish, bool startHasSign, bool finishHasSign) {
+		/// <summary>
+		/// Shows these lines (and removes any others). Gates that are null, or that a sign already shows, get no marker.
+		/// With <see cref="UseGantries"/> (and a course running), each gets a gantry <paramref name="span"/> metres wide
+		/// instead; a circuit, whose finish is its start line, gets one.
+		/// </summary>
+		public void Show(CourseGate start, CourseGate finish, bool startHasSign, bool finishHasSign, float span = 0f) {
 			CourseGate wantStart = startHasSign ? null : start;
 			CourseGate wantFinish = finishHasSign ? null : finish;
-			if (wantStart == startGate_ && wantFinish == finishGate_ && (startGate_ == null || start_ != null) && (finishGate_ == null || finish_ != null)) {
+			bool gantries = UseGantries && span > 0f;
+			if (gantries && wantStart != null && wantFinish != null && SameLine(wantStart, wantFinish)) {
+				wantFinish = null;
+			}
+			bool built = (startGate_ == null || start_ != null || startGantry_ != null) && (finishGate_ == null || finish_ != null || finishGantry_ != null);
+			if (wantStart == startGate_ && wantFinish == finishGate_ && gantries == gantries_ && built) {
 				return;
 			}
 			Clear();
@@ -136,21 +168,106 @@ namespace TRC.TuneLoader {
 			}
 			startGate_ = wantStart;
 			finishGate_ = wantFinish;
+			gantries_ = gantries;
 			if (startGate_ != null) {
-				start_ = BuildGate(startGate_, "TRC start line", startMaterial_);
+				startGantry_ = gantries ? Gantry.Build(startGate_, span, "TRC start gantry", StartNeon, structureMaterial_, MarkerMaterial) : null;
+				start_ = startGantry_ != null ? startGantry_.Root : BuildGate(startGate_, "TRC start line", startMaterial_);
 			}
 			if (finishGate_ != null) {
-				finish_ = BuildGate(finishGate_, "TRC finish line", finishMaterial_);
+				finishGantry_ = gantries ? Gantry.Build(finishGate_, span, "TRC finish gantry", FinishNeon, structureMaterial_, MarkerMaterial) : null;
+				finish_ = finishGantry_ != null ? finishGantry_.Root : BuildGate(finishGate_, "TRC finish line", finishMaterial_);
 			}
 		}
 
+		/// <summary>The gantries shown right now (within range of the camera), for drawing their signs over the screen.</summary>
+		public IEnumerable<Gantry> VisibleGantries {
+			get {
+				if (startGantry_ != null && startGantry_.Root.activeSelf) {
+					yield return startGantry_;
+				}
+				if (finishGantry_ != null && finishGantry_.Root.activeSelf) {
+					yield return finishGantry_;
+				}
+				foreach (Gantry checkpoint in checkpoints_) {
+					if (checkpoint.Root.activeSelf) {
+						yield return checkpoint;
+					}
+				}
+			}
+		}
+
+		public bool HasVisibleGantries => (startGantry_ != null && startGantry_.Root.activeSelf) || (finishGantry_ != null && finishGantry_.Root.activeSelf) ||
+			checkpoints_.Exists(c => c.Root.activeSelf);
+
+		/// <summary>
+		/// The checkpoint gantries of this course (null: none), one where each sector ends but the last, each across the
+		/// road the way it goes there, as wide as <paramref name="widthAt"/> says the road is there (else
+		/// <paramref name="span"/>). Built once per course.
+		/// </summary>
+		public void ShowCheckpoints(Course course, float span, System.Func<Vector3, Vector3, float> widthAt = null) {
+			if (!UseGantries || course == null || !course.HasPath || course.SectorEnds.Length < 2) {
+				course = null;
+			}
+			if (course == checkpointsFor_ && Mathf.Approximately(span, checkpointsSpan_)) {
+				return;
+			}
+			ClearCheckpoints();
+			checkpointsFor_ = course;
+			checkpointsSpan_ = span;
+			if (course == null || !MakeMaterials()) {
+				return;
+			}
+			for (int i = 0; i < course.SectorEnds.Length - 1; i++) {
+				course.PointAt(course.SectorEnds[i], out Vector3 at, out Vector3 forward);
+				float width = widthAt?.Invoke(at, new Vector3(forward.z, 0f, -forward.x)) ?? 0f;
+				float here = width > 2f ? width : span;
+				if (!CourseGate.TryMake(at, forward, here, out CourseGate gate)) {
+					continue;
+				}
+				Gantry checkpoint = Gantry.Build(gate, here, $"TRC checkpoint {i + 1}", CheckpointNeon, structureMaterial_, MarkerMaterial, $"SECTOR {i + 2}");
+				if (checkpoint != null) {
+					checkpoints_.Add(checkpoint);
+				}
+			}
+		}
+
+		/// <summary>What each checkpoint's sign shows, in order.</summary>
+		public void ShowCheckpointSigns(System.Func<int, GantrySign> sign) {
+			for (int i = 0; i < checkpoints_.Count; i++) {
+				checkpoints_[i].Show(sign(i));
+			}
+		}
+
+		private void ClearCheckpoints() {
+			foreach (Gantry checkpoint in checkpoints_) {
+				checkpoint.Destroy();
+			}
+			checkpoints_.Clear();
+			checkpointsFor_ = null;
+		}
+
+		/// <summary>What the start and finish gantries' signs show (no gantries: nothing happens).</summary>
+		public void ShowSigns(GantrySign start, GantrySign finish) {
+			startGantry_?.Show(start);
+			finishGantry_?.Show(finish);
+		}
+
+		private static bool SameLine(CourseGate a, CourseGate b) => a == b || (Vector3.Distance(a.Center, b.Center) < 1f && Vector3.Dot(a.Forward, b.Forward) > 0.9f);
+
 		public void Clear() {
-			if (start_ != null) {
+			if (startGantry_ != null) {
+				startGantry_.Destroy();
+			} else if (start_ != null) {
 				Object.Destroy(start_);
 			}
-			if (finish_ != null) {
+			if (finishGantry_ != null) {
+				finishGantry_.Destroy();
+			} else if (finish_ != null) {
 				Object.Destroy(finish_);
 			}
+			startGantry_ = null;
+			finishGantry_ = null;
+			ClearCheckpoints();
 			start_ = null;
 			finish_ = null;
 			startGate_ = null;
@@ -159,15 +276,18 @@ namespace TRC.TuneLoader {
 
 		/// <summary>Called every frame: shows each marker only within <see cref="Range"/> of the camera.</summary>
 		public void UpdateVisibility(Vector3 camera) {
-			SetVisible(start_, startGate_, camera);
-			SetVisible(finish_, finishGate_, camera);
+			SetVisible(start_, startGate_, camera, startGantry_ != null ? GantryRange : Range);
+			SetVisible(finish_, finishGate_, camera, finishGantry_ != null ? GantryRange : Range);
+			foreach (Gantry checkpoint in checkpoints_) {
+				SetVisible(checkpoint.Root, checkpoint.Gate, camera, GantryRange);
+			}
 		}
 
-		private static void SetVisible(GameObject marker, CourseGate gate, Vector3 camera) {
+		private static void SetVisible(GameObject marker, CourseGate gate, Vector3 camera, float range) {
 			if (marker == null || gate == null) {
 				return;
 			}
-			bool near = (gate.Center - camera).sqrMagnitude <= Range * Range;
+			bool near = (gate.Center - camera).sqrMagnitude <= range * range;
 			if (marker.activeSelf != near) {
 				marker.SetActive(near);
 			}
@@ -253,12 +373,31 @@ namespace TRC.TuneLoader {
 				return false;
 			}
 
+			template_ = template;
+			shader_ = shader;
+			structureMaterial_ = Make(template, shader, StructureColor);
 			startMaterial_ = Make(template, shader, StartColor);
 			finishMaterial_ = Make(template, shader, FinishColor);
 			DotMaterial = Make(template, shader, DotColor);
 			TrapMaterial = Make(template, shader, TrapColor);
 			ShaderName = template != null ? "HDRP/Unlit (copied from the game)" : shader.name;
 			return true;
+		}
+
+		/// <summary>A new marker material in this colour, showing <paramref name="texture"/> when given (for the gantries' signs).</summary>
+		internal static Material MarkerMaterial(Color color, Texture texture) {
+			if (!MakeMaterials()) {
+				return null;
+			}
+			Material material = Make(template_, shader_, color);
+			if (texture != null) {
+				foreach (string property in new[] { "_UnlitColorMap", "_BaseColorMap", "_MainTex" }) {
+					if (material.HasProperty(property)) {
+						material.SetTexture(property, texture);
+					}
+				}
+			}
+			return material;
 		}
 
 		private static Material Make(Material template, Shader shader, Color color) {
@@ -280,24 +419,18 @@ namespace TRC.TuneLoader {
 	}
 
 	/// <summary>
-	/// The best line: small squares on the road where the car drove on its best run or lap, near the camera only,
-	/// in one colour or coloured by speed (red where it was slowest on the line, through amber and green to cyan
-	/// where it was fastest).
+	/// The best line: chevrons on the road where the car drove on its best run or lap, in one colour or coloured by
+	/// speed (red where it was slowest on the line, through amber and green to cyan where it was fastest).
 	/// </summary>
 	public sealed class SpeedLine {
-		private const float Range = 70f;
-		private const int Every = 2;
-		private const float Size = 0.3f;
-		private const float Lift = 0.06f;
 		private static readonly Color[] Ramp = {
 			new Color(0.9f, 0.25f, 0.25f), new Color(0.95f, 0.55f, 0.2f), new Color(0.95f, 0.85f, 0.3f),
 			new Color(0.55f, 0.85f, 0.35f), new Color(0.3f, 0.85f, 0.6f), new Color(0.35f, 0.8f, 0.95f),
 		};
 		private static Material[] materials_;
 
-		private readonly List<GameObject> pool_ = new List<GameObject>();
-		private readonly Dictionary<int, Vector3> ground_ = new Dictionary<int, Vector3>();
-		private IList<Vector3> shown_;
+		private readonly ChevronLine line_ = new ChevronLine("TRC best line");
+		private IList<float> kmh_;
 		private float min_;
 		private float max_;
 
@@ -307,48 +440,24 @@ namespace TRC.TuneLoader {
 				Clear();
 				return;
 			}
-			if (!ReferenceEquals(line, shown_)) {
-				ground_.Clear();
-				shown_ = line;
+			if (!ReferenceEquals(kmh, kmh_)) {
+				kmh_ = kmh;
 				min_ = kmh.Count > 0 ? kmh.Min() : 0f;
 				max_ = kmh.Count > 0 ? kmh.Max() : 1f;
 			}
-			int used = 0;
-			for (int i = 0; i < line.Count; i += Every) {
-				if ((line[i] - camera).sqrMagnitude > Range * Range) {
-					continue;
-				}
-				if (!ground_.TryGetValue(i, out Vector3 on)) {
-					ground_[i] = on = CourseMarkers.Ground(line[i]) + Vector3.up * Lift;
-				}
-				GameObject dot = Dot(used++);
-				dot.transform.position = on;
-				float share = max_ - min_ > 1f && i < kmh.Count ? (kmh[i] - min_) / (max_ - min_) : 1f;
-				Material material = coloured ? materials_[Mathf.Clamp(Mathf.FloorToInt(share * Ramp.Length), 0, Ramp.Length - 1)] : CourseMarkers.DotMaterial;
-				MeshRenderer renderer = dot.GetComponent<MeshRenderer>();
-				if (renderer.sharedMaterial != material) {
-					renderer.sharedMaterial = material;
-				}
-				if (!dot.activeSelf) {
-					dot.SetActive(true);
-				}
-			}
-			for (int i = used; i < pool_.Count; i++) {
-				if (pool_[i].activeSelf) {
-					pool_[i].SetActive(false);
-				}
+			if (coloured) {
+				line_.Show(line, camera, materials_, i => {
+					float share = max_ - min_ > 1f && i < kmh_.Count ? (kmh_[i] - min_) / (max_ - min_) : 1f;
+					return Mathf.Clamp(Mathf.FloorToInt(share * Ramp.Length), 0, Ramp.Length - 1);
+				});
+			} else {
+				line_.Show(line, camera, new[] { CourseMarkers.DotMaterial }, i => 0);
 			}
 		}
 
 		public void Clear() {
-			foreach (GameObject dot in pool_) {
-				if (dot != null) {
-					Object.Destroy(dot);
-				}
-			}
-			pool_.Clear();
-			ground_.Clear();
-			shown_ = null;
+			line_.Clear();
+			kmh_ = null;
 		}
 
 		private static bool MakeMaterials() {
@@ -369,21 +478,120 @@ namespace TRC.TuneLoader {
 			}).ToArray();
 			return true;
 		}
+	}
 
-		private GameObject Dot(int index) {
-			while (pool_.Count <= index) {
-				GameObject dot = GameObject.CreatePrimitive(PrimitiveType.Quad);
-				Object.DestroyImmediate(dot.GetComponent<Collider>());
-				dot.name = "TRC best line";
-				dot.hideFlags = HideFlags.DontSave;
-				dot.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
-				dot.transform.localScale = new Vector3(Size, Size, 1f);
-				MeshRenderer renderer = dot.GetComponent<MeshRenderer>();
-				renderer.shadowCastingMode = ShadowCastingMode.Off;
-				renderer.receiveShadows = false;
-				pool_.Add(dot);
+	/// <summary>
+	/// A line of chevrons on the road pointing the way you drive (bskftw, Nov 3: the flat squares were hard to see, and
+	/// sank out of sight on slopes). Each lies along the road's slope a little above it, so it shows uphill too. All of
+	/// them are one low-poly mesh (a submesh per colour), built again only when the camera has moved a few metres.
+	/// </summary>
+	public sealed class ChevronLine {
+		private const float Range = 150f;
+		private const int Every = 2;
+		private const float Lift = 0.1f;
+		private const float Rebuild = 6f;
+
+		private readonly string name_;
+		private GameObject object_;
+		private Mesh mesh_;
+		private MeshRenderer renderer_;
+		private IList<Vector3> builtFor_;
+		private Material[] builtWith_;
+		private Vector3 builtAt_;
+		private readonly Dictionary<int, Vector3> ground_ = new Dictionary<int, Vector3>();
+
+		public ChevronLine(string name) {
+			name_ = name;
+		}
+
+		/// <summary>
+		/// Shows the points near the camera as chevrons, each in <paramref name="materials"/>[<paramref name="colourOf"/>(i)].
+		/// </summary>
+		public void Show(IList<Vector3> points, Vector3 camera, Material[] materials, System.Func<int, int> colourOf) {
+			if (points == null || points.Count < 2) {
+				Clear();
+				return;
 			}
-			return pool_[index];
+			if (!ReferenceEquals(points, builtFor_)) {
+				ground_.Clear();
+			}
+			if (ReferenceEquals(points, builtFor_) && ReferenceEquals(materials, builtWith_) && (camera - builtAt_).sqrMagnitude < Rebuild * Rebuild && object_ != null) {
+				return;
+			}
+			builtFor_ = points;
+			builtWith_ = materials;
+			builtAt_ = camera;
+			if (object_ == null) {
+				object_ = new GameObject(name_) { hideFlags = HideFlags.DontSave };
+				object_.AddComponent<MeshFilter>().sharedMesh = mesh_ = new Mesh { name = name_, hideFlags = HideFlags.DontSave };
+				renderer_ = object_.AddComponent<MeshRenderer>();
+				renderer_.shadowCastingMode = ShadowCastingMode.Off;
+				renderer_.receiveShadows = false;
+			}
+
+			var vertices = new List<Vector3>();
+			var triangles = new List<int>[materials.Length];
+			for (int m = 0; m < materials.Length; m++) {
+				triangles[m] = new List<int>();
+			}
+			for (int i = Every; i + Every < points.Count; i += Every) {
+				if ((points[i] - camera).sqrMagnitude > Range * Range) {
+					continue;
+				}
+				Vector3 at = GroundAt(points, i);
+				Vector3 along = GroundAt(points, i + Every) - GroundAt(points, i - Every);
+				Vector3 level = new Vector3(along.x, 0f, along.z);
+				if (level.sqrMagnitude < 1e-4f) {
+					continue;
+				}
+				Vector3 forward = along.normalized;
+				Vector3 right = new Vector3(level.z, 0f, -level.x).normalized;
+				Vector3 up = Vector3.Cross(forward, right);
+				Vector3 centre = at + up * Lift;
+				// A chevron: two arms meeting at a tip ahead, each a thin quad.
+				Vector3 tip = centre + forward * 0.45f;
+				int sub = Mathf.Clamp(colourOf(i), 0, materials.Length - 1);
+				foreach (float side in new[] { -1f, 1f }) {
+					Vector3 back = centre - forward * 0.35f + right * side * 0.55f;
+					int a = vertices.Count;
+					vertices.Add(back);
+					vertices.Add(back - forward * 0.22f);
+					vertices.Add(tip - forward * 0.22f);
+					vertices.Add(tip);
+					// Both faces, so it shows whichever way the triangles turn.
+					triangles[sub].AddRange(new[] { a, a + 1, a + 2, a, a + 2, a + 3, a, a + 2, a + 1, a, a + 3, a + 2 });
+				}
+			}
+			mesh_.Clear();
+			mesh_.SetVertices(vertices);
+			mesh_.subMeshCount = materials.Length;
+			for (int m = 0; m < materials.Length; m++) {
+				mesh_.SetTriangles(triangles[m], m);
+			}
+			mesh_.RecalculateBounds();
+			renderer_.sharedMaterials = materials;
+			if (!object_.activeSelf) {
+				object_.SetActive(true);
+			}
+		}
+
+		private Vector3 GroundAt(IList<Vector3> points, int i) {
+			if (!ground_.TryGetValue(i, out Vector3 on)) {
+				ground_[i] = on = CourseMarkers.Ground(points[i]);
+			}
+			return on;
+		}
+
+		public void Clear() {
+			if (object_ != null) {
+				Object.Destroy(object_);
+				Object.Destroy(mesh_);
+			}
+			object_ = null;
+			mesh_ = null;
+			builtFor_ = null;
+			builtWith_ = null;
+			ground_.Clear();
 		}
 	}
 
@@ -432,21 +640,13 @@ namespace TRC.TuneLoader {
 	}
 
 	/// <summary>
-	/// A course's path shown as small light-blue squares on the road, every few metres, only near the camera:
-	/// while the course builder or Record path records it (so you see what you drove), and for a course you look
-	/// at. No colliders, like the lines.
+	/// A course's path shown as light-blue chevrons on the road pointing the way you drive, near the camera only:
+	/// while the course builder or Record path records it (so you see what you drove), and for a course you look at.
+	/// No colliders, like the lines.
 	/// </summary>
 	public sealed class PathDots {
-		private const float Range = 60f;
-
-		/// <summary>Every this many path points (about 2 m apart) gets a square.</summary>
-		private const int Every = 2;
-		private const float Size = 0.35f;
-		private const float Lift = 0.05f;
-
-		private readonly List<GameObject> pool_ = new List<GameObject>();
-		private readonly Dictionary<int, Vector3> ground_ = new Dictionary<int, Vector3>();
-		private IList<Vector3> shown_;
+		private readonly ChevronLine line_ = new ChevronLine("TRC path");
+		private Material[] materials_;
 
 		/// <summary>Called every frame with the path to show (null for none) and where the camera is.</summary>
 		public void Show(IList<Vector3> points, Vector3 camera) {
@@ -454,58 +654,12 @@ namespace TRC.TuneLoader {
 				Clear();
 				return;
 			}
-			if (!ReferenceEquals(points, shown_)) {
-				ground_.Clear();
-				shown_ = points;
+			if (materials_ == null || materials_[0] != CourseMarkers.DotMaterial) {
+				materials_ = new[] { CourseMarkers.DotMaterial };
 			}
-			int used = 0;
-			for (int i = 0; i < points.Count; i += Every) {
-				Vector3 point = points[i];
-				if ((point - camera).sqrMagnitude > Range * Range) {
-					continue;
-				}
-				if (!ground_.TryGetValue(i, out Vector3 on)) {
-					ground_[i] = on = CourseMarkers.Ground(point) + Vector3.up * Lift;
-				}
-				GameObject dot = Dot(used++);
-				dot.transform.position = on;
-				if (!dot.activeSelf) {
-					dot.SetActive(true);
-				}
-			}
-			for (int i = used; i < pool_.Count; i++) {
-				if (pool_[i].activeSelf) {
-					pool_[i].SetActive(false);
-				}
-			}
+			line_.Show(points, camera, materials_, i => 0);
 		}
 
-		public void Clear() {
-			foreach (GameObject dot in pool_) {
-				if (dot != null) {
-					Object.Destroy(dot);
-				}
-			}
-			pool_.Clear();
-			ground_.Clear();
-			shown_ = null;
-		}
-
-		private GameObject Dot(int index) {
-			while (pool_.Count <= index) {
-				GameObject dot = GameObject.CreatePrimitive(PrimitiveType.Quad);
-				Object.DestroyImmediate(dot.GetComponent<Collider>());
-				dot.name = "TRC path dot";
-				dot.hideFlags = HideFlags.DontSave;
-				dot.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
-				dot.transform.localScale = new Vector3(Size, Size, 1f);
-				MeshRenderer renderer = dot.GetComponent<MeshRenderer>();
-				renderer.sharedMaterial = CourseMarkers.DotMaterial;
-				renderer.shadowCastingMode = ShadowCastingMode.Off;
-				renderer.receiveShadows = false;
-				pool_.Add(dot);
-			}
-			return pool_[index];
-		}
+		public void Clear() => line_.Clear();
 	}
 }

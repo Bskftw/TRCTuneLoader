@@ -15,21 +15,42 @@ namespace TRC.TuneLoader {
 	/// ledger (EventLedger) fed from runs, battles and races.
 	/// </summary>
 	public partial class TRCTuneLoaderMod {
+		/// <summary>Home's Go to: the tools row's colour (teal, like the suspension logger).</summary>
+		private const string ToolsHex = "#40BAC4";
+
+		/// <summary>One group of Home's Go to: the part's name in its colour, its buttons under it (so it never needs to scroll sideways).</summary>
+		private static void GoToRow(string name, string hex, params (string Label, Action Go)[] buttons) {
+			GUILayout.Label($"<b><color={hex}>{name}</color></b>", Theme.Body);
+			GUILayout.BeginHorizontal();
+			GUILayout.Space(10);
+			foreach (var (label, go) in buttons) {
+				if (GUILayout.Button(label, Theme.Button)) {
+					go();
+				}
+			}
+			GUILayout.FlexibleSpace();
+			GUILayout.EndHorizontal();
+		}
+
+		private void OpenTab(int tab) {
+			tab_ = tab;
+			OnTabOpened(tab);
+		}
+
 		private const string WhatsNewPref = "whats_new_seen";
 		private const string WheelActionPref = "wheel_action";
 		private const string WheelWindowPref = "wheel_window";
 
 		/// <summary>Raise with each version that has news worth a pop-up.</summary>
-		private const string WhatsNewVersion = "0.16.0";
+		private const string WhatsNewVersion = "0.16.1";
 
 		private static readonly string[] WhatsNewLines = {
-			"<b>Regulations</b> (new tab): for communities that tune their own cars to rules, like a most power, tyre widths, no swaps or one setup. Make one, check your car, share it, and run 1v1 battles, races and tournaments to it. Each regulation has its own Elo.",
-			"<b>Just for fun</b>: any battle, race or tournament can be set to change nobody's ratings, TRC spec ones too.",
-			"<b>Console players</b>: a PC host can add PlayStation, Xbox and Switch players to a race or a 1v1. The host's mod times them, and the host's headlights show them the start. The host can also run a race without driving in it.",
-			"<b>Races and Tournaments</b> are separate sections now. Jump starts can recall the start (everyone lines up again) or go unpunished, and tournaments can have no penalties.",
-			"<b>Bigger lobbies</b>: no 16-driver limit any more, for custom servers with bigger rooms.",
-			"<b>Suspension</b> (new tab): data logging like a real race team, with a live overlay of your car from above: each tyre's compression, load and damper speed, packing down over bumps, tyres leaving the road, bottoming, and notes on what to change. Off unless you turn it on.",
-			"<b>Ghosts and shared runs</b>: your best time attacks are kept as ghosts. Race a ghost (yours or one someone shared) with the live delta and sectors against it. Ghosts have no physics: no pushing, towing or slipstream.",
+			"<b>Gantries</b> at the start, finish and every sector: the start's lamps light with 3, 2, 1, GO, checkpoints show how far ahead of or behind your PB you are, and the finish shows STAGE CLEAR with your time, top speed and rank. FINISH shows on screen too.",
+			"<b>Map icons</b>: the start, finish, sectors and speed traps on CarX's minimap and map, for the course you're driving or the track open in Tracks.",
+			"<b>Time attack rules</b>: TRC spec, Open or one of your regulations, each with its own times. A <b>sector pop-up</b> shows each sector's time and gap to your PB.",
+			"<b>Random speed traps</b> on any track (pick how many), signs that can show your fastest ever, and every catch saved with the car and the rules.",
+			"<b>Single file</b> on narrow roads (each clock starts at the line), cars closer together side by side, and circuit races line up round the last corner.",
+			"<b>Smoother</b> on maps with lots of tracks: Tracks, Races and 1v1 no longer lag, and the path shows as chevrons you can see uphill. Regulations' power to weight is now a most in hp per kg.",
 		};
 
 		private readonly RoomSync roomSync_ = new RoomSync();
@@ -637,7 +658,8 @@ namespace TRC.TuneLoader {
 		private void DrawHomeTab() {
 			RefreshCarIfDue();
 			RefreshPlayersIfDue();
-			homeScroll_ = GUILayout.BeginScrollView(homeScroll_);
+			// Up and down only (bskftw, Nov 3: no sideways scroll bar on Home).
+			homeScroll_ = GUILayout.BeginScrollView(homeScroll_, false, false, GUIStyle.none, GUI.skin.verticalScrollbar);
 			DrawOtherCopies();
 			DrawNewerVersion();
 			if (whatsNewPending_) {
@@ -666,65 +688,31 @@ namespace TRC.TuneLoader {
 			GUILayout.Label(map_ == null ? "Not on a map." : $"On <b>{map_.Name}</b>{(car_ != null ? $" in the {car_.CarName}" : "")}", Theme.Body);
 			DrawStatusPill(carStatus_);
 
-			// The four parts of the mod, in their colours.
+			// The parts of the mod, in their colours, and the tools (bskftw, Nov 3: with everything new, organised).
 			GUILayout.Label("Go to", Theme.SectionLabel);
 			GUILayout.BeginVertical(Theme.Card);
-			for (int pillar = 0; pillar < Theme.Pillars.Length; pillar++) {
-				GUILayout.BeginHorizontal();
-				GUILayout.Label($"<b><color={Theme.PillarHex[pillar]}>{Theme.Pillars[pillar]}</color></b>", Theme.Body, GUILayout.Width(250));
-				switch (pillar) {
-					case 0:
-						if (GUILayout.Button("Put a TRC tune on", Theme.Button)) {
-							tab_ = MyCarTab;
-							OnTabOpened(MyCarTab);
-						}
-						if (GUILayout.Button("Tune sets", Theme.Button)) {
-							tab_ = TuneSetsTab;
-							OnTabOpened(TuneSetsTab);
-						}
-						if (GUILayout.Button("Players here", Theme.Button)) {
-							tab_ = PlayersTab;
-							OnTabOpened(PlayersTab);
-						}
-						break;
-					case 1:
-						if (GUILayout.Button("Tracks", Theme.Button)) {
-							GoToTimeAttack(0);
-						}
-						if (GUILayout.Button("Make a course", Theme.Button)) {
-							GoToTimeAttack(3);
-						}
-						if (GUILayout.Button("My times", Theme.Button)) {
-							timesView_ = 0;
-							GoToTimeAttack(2);
-						}
-						break;
-					case 2:
-						if (GUILayout.Button("Challenge someone", Theme.Button)) {
-							GoToBattle(0);
-						}
-						if (GUILayout.Button("Races", Theme.Button)) {
-							GoToBattle(RacesSection);
-						}
-						if (GUILayout.Button("Tournaments", Theme.Button)) {
-							GoToBattle(TournamentsSection);
-						}
-						if (GUILayout.Button("Fun games", Theme.Button)) {
-							GoToBattle(GamesSection);
-						}
-						break;
-					default:
-						if (GUILayout.Button("Speed traps", Theme.Button)) {
-							GoToTimeAttack(1);
-						}
-						if (GUILayout.Button("My ratings", Theme.Button)) {
-							GoToBattle(RatingsSection);
-						}
-						break;
-				}
-				GUILayout.FlexibleSpace();
-				GUILayout.EndHorizontal();
-			}
+			GoToRow(Theme.Pillars[0], Theme.PillarHex[0],
+				("Put a TRC tune on", () => OpenTab(MyCarTab)),
+				("Tune sets", () => OpenTab(TuneSetsTab)),
+				("Regulations", () => OpenTab(RegulationsTab)),
+				("Players here", () => OpenTab(PlayersTab)));
+			GoToRow(Theme.Pillars[1], Theme.PillarHex[1],
+				("Tracks", () => GoToTimeAttack(0)),
+				("My times", () => { timesView_ = 0; GoToTimeAttack(2); }),
+				("Make a course", () => GoToTimeAttack(3)));
+			GoToRow(Theme.Pillars[2], Theme.PillarHex[2],
+				("1v1 battle", () => GoToBattle(0)),
+				("Races", () => GoToBattle(RacesSection)),
+				("Tournaments", () => GoToBattle(TournamentsSection)));
+			GoToRow(Theme.Pillars[3], Theme.PillarHex[3],
+				("Speed traps", () => GoToTimeAttack(1)),
+				("Fun games", () => GoToBattle(GamesSection)),
+				("My ratings", () => GoToBattle(RatingsSection)));
+			GoToRow("Tools & settings", ToolsHex,
+				("Suspension logger", () => OpenTab(SuspensionTab)),
+				("Mod check", () => OpenTab(ModCheckTab)),
+				("Arrange the screen", StartArranging),
+				("Options", () => OpenTab(OptionsTab)));
 			GUILayout.EndVertical();
 
 			// What's waiting: challenges and open races.

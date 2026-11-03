@@ -28,6 +28,8 @@ namespace TRC.TuneLoader.CodeCheck {
 			PathFromFacesAndCopies();
 			Version016Tests();
 			SuspensionTests();
+			StartTests016();
+			GantryTests();
 		}
 
 		private static void SpeedTrapsCatchSpeed() {

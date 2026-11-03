@@ -98,7 +98,10 @@ namespace TRC.TuneLoader {
 				ghostOpacity_ = Mathf.Clamp(Kino.Prefs.Get(GhostOpacityPref, 1), 0, GhostOpacities.Length - 1);
 				CourseMarkers.SetGhostOpacity(GhostOpacityValues[ghostOpacity_]);
 				LoadLayout();
-				trapSignMode_ = Mathf.Clamp(Kino.Prefs.Get(TrapSignPref, 0), 0, 1);
+				trapSignMode_ = Mathf.Clamp(Kino.Prefs.Get(TrapSignPref, 0), 0, 2);
+				CourseMarkers.UseGantries = Kino.Prefs.Get(GantriesPref, true);
+				mapIconsOn_ = Kino.Prefs.Get(MapIconsPref, true);
+				LoadFrog();
 				shareValues_ = Kino.Prefs.Get(ShareValuesPref, false);
 				LoadLook();
 				Vector2 timer = Kino.Prefs.Get(HudPositionPref, DefaultHudPosition);
@@ -383,8 +386,22 @@ namespace TRC.TuneLoader {
 				CourseMarkers.SetGhostOpacity(GhostOpacityValues[ghostOpacity_]);
 			}
 			GUILayout.Space(8);
+			GUILayout.Label("<b>Start and finish</b>: gantries with signs that light up for 3, 2, 1, GO and show your time at the finish, or plain lines on the road.", Theme.Body);
+			int lines = Choice(new[] { "Gantries", "Plain lines" }, CourseMarkers.UseGantries ? 0 : 1);
+			if ((lines == 0) != CourseMarkers.UseGantries) {
+				CourseMarkers.UseGantries = lines == 0;
+				SavePref(GantriesPref, CourseMarkers.UseGantries);
+			}
+			GUILayout.Space(8);
+			GUILayout.Label("<b>Map icons</b>: the course's start (green), finish (pink), sectors (lime) and speed traps (amber) on CarX's minimap and map, for the course you're driving or the track open in Tracks.", Theme.Body);
+			bool icons = OnOff(mapIconsOn_);
+			if (icons != mapIconsOn_) {
+				mapIconsOn_ = icons;
+				SavePref(MapIconsPref, icons);
+			}
+			GUILayout.Space(8);
 			GUILayout.Label("<b>Speed trap signs</b> show the speed you went through each trap at:", Theme.Body);
-			int signMode = Choice(new[] { "Your last speed", "Your fastest" }, trapSignMode_);
+			int signMode = Choice(new[] { "Your last speed", "Fastest in this car", "Fastest ever" }, trapSignMode_);
 			if (signMode != trapSignMode_) {
 				trapSignMode_ = signMode;
 				SavePref(TrapSignPref, trapSignMode_);
@@ -469,6 +486,21 @@ namespace TRC.TuneLoader {
 			}
 			GUILayout.FlexibleSpace();
 			GUILayout.EndHorizontal();
+			return picked;
+		}
+
+		/// <summary>The same, <paramref name="perRow"/> to a row, for long lists (bskftw, Nov 3: "Highway cut-up" was cut off).</summary>
+		private static int Choice(string[] labels, int picked, int perRow) {
+			for (int start = 0; start < labels.Length; start += perRow) {
+				GUILayout.BeginHorizontal();
+				for (int i = start; i < labels.Length && i < start + perRow; i++) {
+					if (GUILayout.Button(labels[i], i == picked ? Theme.ChipActive : Theme.Chip)) {
+						picked = i;
+					}
+				}
+				GUILayout.FlexibleSpace();
+				GUILayout.EndHorizontal();
+			}
 			return picked;
 		}
 

@@ -2,6 +2,39 @@
 
 All versions of TRC Tune Loader, newest first. "Not tested in game yet" means the version builds and its automatic tests pass, but nobody has tried it in CarX yet.
 
+## 0.16.1 (Nov 3 2026)
+
+Partly tested in game (the gantries, signs, tracks list and Lake Akina); the rest builds and passes its automatic tests.
+
+**New**
+- **Start and finish gantries.** The start has a STAGE START sign whose four lamps light up with the countdown (red at 3 and 2, amber at 1, green at GO). The finish has a sign that shows **STAGE CLEAR** with your time, top speed and rank, and **NEW PERSONAL BEST** when it is one. A circuit has one gantry, showing the lap you're on. The signs show in front of trees and other signs, fixed on the gantry, from about 140 m away. Options can switch back to the plain lines.
+- **Time attack rules:** TRC spec (what counts for TRC), Open (any setup) or to one of your regulations. Each keeps its own times, bests and best line, and My times shows them apart.
+- **Icons on CarX's minimap and map:** the start (green), finish (pink), sectors (lime) and speed traps (amber) of the course you're driving, or of the track you have open in Tracks, and the map's free-roam speed traps. Options can turn them off.
+- **FINISH on screen** when you cross the finish line of a time attack, race, battle or circuit, big like GO at the start, with your time under it (and your place in a race, and "new PB" when it is one).
+- **Sector pop-up:** at each sector, a pop-up like the speed trap one shows the sector's time in its colour and how far ahead of or behind your PB you are. Move it with Arrange the screen.
+- **Random speed traps** on any track with a path, the map's own included: pick how many, and they're spread along it as a group of their own ("Akina Downhill Random"). The Course builder can add them when you save. Delete this group takes a whole group away.
+- **Regulations: power to weight is a most, in hp per kg.** Set 0.22 and no car may go over 0.22 hp for each kg (with the same small leeway as the other limits). Regulations made with the old "least kg per hp" still check the same and keep their codes.
+- **Speed trap signs** can show your fastest ever too, and every speed caught is saved with the rules it was driven to (TRC spec, Open or a regulation) as well as the car.
+- **Checkpoint gantries** where each sector ends, in lime green, with SECTOR banners up the towers. When you pass one, its sign shows how far ahead of or behind your PB you are there ("-0.842 AHEAD OF PB"), or the sector's time in races and battles.
+- **Single file on narrow roads.** Where two cars won't fit side by side (Yabitsu, Maze Pass), races and 1v1 battles line up one behind the other by themselves. Each driver's clock starts when they cross the start line, so lining up further back costs nothing. The race list says when a course is single file.
+
+**Changed**
+- **Side by side, cars line up closer together:** 3 m apart, whatever the width of the start line.
+- **Circuit races line up along the end of the lap**, round the last corner, instead of straight back from the line.
+- **Opening a track closes the one you had open** in Tracks.
+- **The path is easier to see:** chevrons pointing the way to drive, lying along the slope, out to 150 m (the flat squares sank out of sight going uphill). The best line uses them too.
+- **Home's Go to** has everything: Regulations, the suspension logger, mod check, Arrange the screen and Options, in five groups.
+
+**Fixed**
+- **Lag in Tracks, Races and 1v1** on maps with lots of tracks (Project Dream's 107): only the rows you can see are drawn, best times are worked out once, and Races measures only the road you pick. The Races and 1v1 course lists have a Find box.
+- **Fun games**: the last game (Highway cut-up) was cut off; the games now wrap onto two rows.
+- **Faster map scans**: a path shared by several courses is read once.
+
+**For map makers**
+- Circuits are named like the rest: `TRC Start Akina Circuit` and `TRC Path Akina Circuit`, and a map with several layouts numbers them (`Okutama Circuit 1`, `Okutama Circuit 2`). On a road with a downhill too, a circuit uses only a path named with "Circuit"; on a road with just a circuit, the plain path works. See [MAP_MAKERS.md](https://github.com/Bskftw/TRCTuneLoader/blob/main/MAP_MAKERS.md).
+- Copies that skip a number (`.001`, then `.003`) are taken in order. Speed traps copied that way are listed as 1, 2, 3 in order.
+- A path that doesn't run far enough back from the start for a full grid gets a note under the course in Tracks, saying how far to run it on. Races use what fits meanwhile.
+
 ## 0.16.0 (Nov 1 2026)
 
 Not tested in game yet. (0.15.2 was never released: its changes are in here too.)
