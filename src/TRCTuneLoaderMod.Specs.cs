@@ -46,29 +46,6 @@ namespace TRC.TuneLoader {
 
 		private PlayerSpec SpecByTitle(string title) => specs_.FirstOrDefault(s => string.Equals(s.Title, title, StringComparison.OrdinalIgnoreCase));
 
-		/// <summary>The titles of the player specs whose tune for this car and setup is the one on it.</summary>
-		private List<string> MySpecs() {
-			if (Time.unscaledTime < mySpecsUntil_) {
-				return mySpecs_;
-			}
-			mySpecsUntil_ = Time.unscaledTime + 2f;
-			var found = new List<string>();
-			try {
-				if (specs_.Count > 0 && RefreshCar() && adapter_.TryReadCurrentTune(car_, out var current, out _) &&
-					adapter_.TryGetDefaults(car_.SlotId, out var defaults, out _)) {
-					foreach (PlayerSpec spec in specs_) {
-						TuneFile tune = spec.For(car_.CarId, car_.SlotId);
-						if (tune != null && TuneCheck.Compare(car_.CarIdText, car_.SlotIdText, tune.Fingerprint, tune.Values, current, defaults).Matches) {
-							found.Add(spec.Title);
-						}
-					}
-				}
-			} catch (Exception e) {
-				TrcLog.Warning($"Spec check: {e.Message}");
-			}
-			return mySpecs_ = found;
-		}
-
 		/// <summary>Specs: the player's specs down the left, the picked one's tunes and buttons on the right.</summary>
 		private void DrawSpecsPage() {
 			RefreshCarIfDue();
@@ -186,7 +163,20 @@ namespace TRC.TuneLoader {
 			} else if (forCar == null) {
 				GUILayout.Label($"No tune for the {car_.CarName} ({car_.SlotName}) in this spec yet.", Theme.PillNeutral);
 			} else {
-				GUILayout.Label(carOnIt ? $"Your {car_.CarName} is on {spec.Title}." : $"Your {car_.CarName} isn't on {spec.Title}'s tune.", carOnIt ? Theme.PillGood : Theme.PillWarn);
+				mySpecChecks_.TryGetValue(spec.Title, out OwnCheck check);
+				var (text, pill, _) = SpecVerdict(spec.Title, check);
+				GUILayout.Label(text, pill);
+				List<string> different = SpecDifferences(check);
+				if (different.Count > 0) {
+					GUILayout.BeginVertical(Theme.Card);
+					foreach (string line in different.Take(20)) {
+						GUILayout.Label(line, Theme.Small);
+					}
+					if (different.Count > 20) {
+						GUILayout.Label($"... and {different.Count - 20} more", Theme.Small);
+					}
+					GUILayout.EndVertical();
+				}
 			}
 
 			GUILayout.BeginHorizontal();
@@ -202,7 +192,7 @@ namespace TRC.TuneLoader {
 			GUI.enabled = enabled;
 			GUILayout.FlexibleSpace();
 			GUILayout.EndHorizontal();
-			GUILayout.Label("Putting a tune on backs your own up first (My car, Backups), like the TRC tunes.", Theme.Small);
+			GUILayout.Label("Putting a tune on backs your own up first (TRC Tunes, Backups), like the TRC tunes.", Theme.Small);
 
 			GUILayout.Label("Cars", Theme.SectionLabel);
 			GUILayout.BeginVertical(Theme.Card);

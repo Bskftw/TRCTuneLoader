@@ -107,6 +107,9 @@ namespace TRC.TuneLoader {
 			if (UnknownWorkshop(player) && player.StanceDifferences.Count == 0) {
 				facts.Stance = null;
 			}
+			// Their spec, worked out here from their shared setup, for the specs this PC has.
+			facts.Specs = PlayerSpecsOn(player);
+			facts.KnownSpecs = specs_.Select(s => s.Title).ToList();
 			return facts;
 		}
 
@@ -690,6 +693,37 @@ namespace TRC.TuneLoader {
 			if (r.Limits.Count == 0) {
 				GUILayout.Label("None yet: add one below, like rear tyre width at most 285.", Theme.Small);
 			}
+			// An old least/most limit on the diff type becomes the named types in its range.
+			ValueLimit oldDiff = r.Limits.FirstOrDefault(l => l.Key == Regulation.DiffTypeKey);
+			if (oldDiff != null) {
+				r.Limits.Remove(oldDiff);
+				for (int type = 0; type < Regulation.DiffTypeNames.Length; type++) {
+					if ((!oldDiff.Min.HasValue || type >= oldDiff.Min.Value - 0.5f) && (!oldDiff.Max.HasValue || type <= oldDiff.Max.Value + 0.5f) && !r.DiffTypes.Contains(type)) {
+						r.DiffTypes.Add(type);
+					}
+				}
+			}
+			if (r.DiffTypes.Count > 0) {
+				// Diff type: named types to allow, not a number (bskftw, Nov 3).
+				GUILayout.BeginHorizontal();
+				GUILayout.Label("Diff type allowed", Theme.Body, GUILayout.Width(200));
+				for (int type = 0; type < Regulation.DiffTypeNames.Length; type++) {
+					bool allowed = r.DiffTypes.Contains(type);
+					if (NavButton(Regulation.DiffTypeNames[type], allowed ? Theme.ChipActive : Theme.Chip)) {
+						if (allowed && r.DiffTypes.Count > 1) {
+							r.DiffTypes.Remove(type);
+						} else if (!allowed) {
+							r.DiffTypes.Add(type);
+						}
+					}
+				}
+				GUILayout.Label(mine.Numbers.TryGetValue(Regulation.DiffTypeKey, out float diff) ? $"<color={Theme.MutedHex}>yours {Regulation.DiffTypeName(Mathf.RoundToInt(diff))}</color>" : "", Theme.Small);
+				GUILayout.FlexibleSpace();
+				if (NavButton("Remove", Theme.Button)) {
+					r.DiffTypes.Clear();
+				}
+				GUILayout.EndHorizontal();
+			}
 			foreach (ValueLimit limit in r.Limits.ToList()) {
 				GUILayout.BeginHorizontal();
 				GUILayout.Label(TuneLabels.Label(limit.Key), Theme.Body, GUILayout.Width(200));
@@ -721,12 +755,18 @@ namespace TRC.TuneLoader {
 			}
 			if (limitGroup_.Length > 0) {
 				GUILayout.BeginVertical(Theme.Guide);
-				var left = TuneLabels.Settings.Where(s => s.Group == limitGroup_ && r.Limits.All(l => l.Key != s.Key)).ToList();
+				var left = TuneLabels.Settings.Where(s => s.Group == limitGroup_ && r.Limits.All(l => l.Key != s.Key) &&
+					!(s.Key == Regulation.DiffTypeKey && r.DiffTypes.Count > 0)).ToList();
 				GUILayout.Label(left.Count == 0 ? $"{limitGroup_}: every setting here has a limit already." : $"{limitGroup_}: click a setting to add a limit for it", Theme.Small);
 				GUILayout.BeginHorizontal();
 				int inRow = 0;
 				foreach (TuneLabels.Setting setting in left) {
 					if (NavButton("+ " + setting.Label, Theme.Chip)) {
+						if (setting.Key == Regulation.DiffTypeKey) {
+							// Starts with every type allowed; click the ones to take away.
+							r.DiffTypes = Enumerable.Range(0, Regulation.DiffTypeNames.Length).ToList();
+							continue;
+						}
 						r.Limits.Add(new ValueLimit { Key = setting.Key });
 						regulationFields_["min:" + setting.Key] = "";
 						regulationFields_["max:" + setting.Key] = mine.Numbers.TryGetValue(setting.Key, out float v) ? Regulation.Number(v) : "";

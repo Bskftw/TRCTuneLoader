@@ -571,8 +571,8 @@ namespace TRC.TuneLoader {
 				Tab = HomeTab,
 			},
 			new TourStep {
-				Title = "My car: the status bar",
-				Text = "My car shows the car you're in and its setup. The coloured bar says whether it's TRC spec right now: " +
+				Title = "TRC Tunes: the status bar",
+				Text = "TRC Tunes shows the car you're in and its setup. The coloured bar says whether it's TRC spec right now: " +
 					"green is spec, amber means it hasn't been fully checked yet, and red means something isn't spec.",
 				Tab = MyCarTab,
 			},
@@ -594,7 +594,7 @@ namespace TRC.TuneLoader {
 			new TourStep {
 				Title = "Tune sets, Players, Mod check",
 				Text = "Tune sets lists every official set built into the mod. Players checks every car in an online room. " +
-					"Mod check (in Tools) lists the mods KSL has loaded. Your own tunes are kept in Backups, beside the tune sets in My car, whenever a TRC tune replaces one.",
+					"Mod check (in Tools) lists the mods KSL has loaded. Your own tunes are kept in Backups, beside the tune sets in TRC Tunes, whenever a TRC tune replaces one.",
 				Tab = PlayersTab,
 			},
 			new TourStep {

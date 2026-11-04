@@ -21,9 +21,9 @@ A KSL mod for CarX Drift Racing Online, made for TRC (Touge Racing Community). B
 
 ![The four parts of TRC Tune Loader](docs/images/overview.png)
 
-**Version 0.15.0** (Oct 29 2026). What changed in each version: [CHANGELOG.md](CHANGELOG.md).
+**Version 0.17.1** (Nov 3 2026). What changed in each version: [CHANGELOG.md](CHANGELOG.md).
 
-**Still in testing.** The mod is new and still being tested, so bugs will happen, especially in the newest features (see "Tested in game" below). If something goes wrong, press **Report a bug** (Home or Options) and send bskftw the zip it puts on your Desktop.
+**Still in testing.** The mod is new and still being tested, so bugs will happen, especially in the newest features (see "Tested in game" below). If something goes wrong, press **Report a bug** (Home, bottom right) and send bskftw the zip it puts on your Desktop.
 
 ## Installing
 
@@ -62,7 +62,7 @@ The window opens on Home:
 - **Courses shared with the room:** courses other players sent, with **Save** to keep them as your own (speed traps and grid included).
 - **Report a bug:** write what happened (optional) and press **Make a bug report**. A zip lands on your Desktop with the mod's logs, a summary of what you were doing, your options and your mods. It has the names of players you raced, and no one's tune values. Send it to bskftw.
 
-### My car
+### TRC Tunes
 
 - **Status bar**: a coloured line that always says whether your car is TRC spec right now. Green means spec, amber means not checked yet, red means not spec.
 - **Tune set picker**: choose which official set to use for your car. TRC Revival is the default.
@@ -248,7 +248,7 @@ Circuits can also run as an **elimination race**: the last car each lap is out. 
 
 **Moving the timer:** while a time attack runs, open the window and drag the timer anywhere on the screen. It stays there; Options can put it back at the top.
 
-A time counts as **TRC spec** when your car is TRC spec at the start and at the finish (the same check as My car) and no mod is flagged. Other times are kept too, marked as not counted.
+A time counts as **TRC spec** when your car is TRC spec at the start and at the finish (the same check as TRC Tunes) and no mod is flagged. Other times are kept too, marked as not counted.
 
 **My times** (in Time attack) has three views:
 
@@ -289,6 +289,8 @@ Your own specs, for spec racing with your friends or league: a tune for each car
 - **New spec:** give it a name and a version (like v1).
 - **Save my car's tune to it:** tune a car the way the spec should have it, pick the spec, and save. Do that for each car. Saving again replaces that car's tune.
 - **Put its tune on:** your own tune is backed up first, like the TRC tunes. In CarX's tuning screen it loads into the dyno.
+- **Check my car** (in Specs): like TRC Tunes, but for your specs and regulations. Pick a spec to see whether your car is on it, checked as strictly as TRC spec (the saved setup, the live car, the stance, engine or drivetrain swaps), with anything different listed, and **Put it on** from there. Below it, each regulation: met, or what breaks it.
+- **Players** (in Specs): everyone in the room against your specs and regulations, checked from what CarX shares of their car, so it doesn't rest on what their mod says. Their mod's own claims show beside it, and a claim that doesn't hold up shows in red. A spec you don't have can't be checked: install it first.
 - **Share:** **Make a zip to share** puts a zip on your Desktop. To install someone's spec, drop their zip (or the spec's folder) in your `specs` folder (**Open specs folder**) and press **Look again**.
 - **Race to it:** a regulation can require a spec (Regulations, Spec), so every driver has to run that spec's tune for their car. They need the spec installed, and 0.17.0 or newer.
 - **Time attack to it:** pick **Player spec** in Time attack's rules. Those times are kept apart.
@@ -408,4 +410,5 @@ The mod writes what it does to its own log, `kino\mods\TRCTuneLoader\TRCTuneLoad
 | Regulations, just-for-fun events, console players and the headlight start, host-only races, recalled starts, no driver limit, ghosts and shared runs, suspension logging | 0.16 | Partly: ghosts and the time attack window |
 | Start, finish and checkpoint gantries, FINISH on screen, map icons, time attack rules, sector pop-up, random speed traps, single file on narrow roads, path chevrons, smoother long lists | 0.16.1 | Partly: the gantries and signs, the tracks list, circuit paths |
 | New menu (Home cards, parts and pages), controller in the menu, player specs, manual sectors, start key | 0.17.0 | Partly: the menu, Home, Look, gantry signs, My times |
+| Specs: Check my car and Players (specs checked like TRC spec), My car renamed TRC Tunes, diff types by name | 0.17.1 | Partly: the Specs pages, Home, diff types |
 

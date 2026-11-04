@@ -16,6 +16,24 @@ namespace TRC.TuneLoader.CodeCheck {
 			SectorsCodeRoundTrip();
 			PlayerSpecFolders();
 			RegulationCanNeedASpec();
+			DiffTypesByName();
+		}
+
+		/// <summary>bskftw, Nov 3: the diff type is a named type (Open, Welded, Viscous, Clutch type), not a number to keep between two values.</summary>
+		private static void DiffTypesByName() {
+			var plain = new Regulation { Name = "Grip", MaxHp = 500 };
+			string before = plain.Code;
+			var reg = Regulation.Parse(plain.ToText());
+			reg.DiffTypes = new List<int> { 0, 3 };
+			Regulation back = Regulation.Parse(reg.ToText());
+			Expect(back.DiffTypes.Count == 2 && back.DiffTypes.Contains(0) && back.DiffTypes.Contains(3) && back.Code != before && Regulation.Parse(plain.ToText()).Code == before,
+				"allowed diff types are saved by type, and a regulation without them keeps its code");
+			var welded = new CarFacts { CarId = 7, Numbers = new Dictionary<string, float> { [Regulation.DiffTypeKey] = 1f } };
+			RegulationResult result = back.Check(welded);
+			Expect(result.Broken.Count == 1 && result.Broken[0].Contains("Welded") && result.Broken[0].Contains("Open, Clutch type"), "a welded diff breaks a regulation allowing open and clutch type, named in the message");
+			var clutch = new CarFacts { CarId = 7, Numbers = new Dictionary<string, float> { [Regulation.DiffTypeKey] = 3f } };
+			Expect(back.Check(clutch).Passes, "a clutch type diff meets it");
+			Expect(back.Summary().Contains("Open/Clutch type diff"), "the regulation's summary names the diff types");
 		}
 
 		private static void ManualSectorsReplaceAutomatic() {
@@ -122,6 +140,11 @@ namespace TRC.TuneLoader.CodeCheck {
 			Expect(!back.Check(new CarFacts { CarId = 7, Specs = new List<string>() }).Passes, "a car that isn't on the spec doesn't meet it");
 			Expect(back.Check(new CarFacts { CarId = 7, Specs = new List<string> { "drift kings v2" } }).Broken.Count == 0, "a car on the spec meets that rule");
 			Expect(back.Check(new CarFacts { CarId = 7 }).Unknown.Contains("spec"), "another player's car (spec not known) is unknown, not failed");
+			// Another player's car, checked on a PC that has the spec: judged; on a PC that doesn't: unknown, never failed.
+			var theirs = new CarFacts { CarId = 7, Specs = new List<string>(), KnownSpecs = new List<string> { "Drift Kings v2" } };
+			Expect(back.Check(theirs).Broken.Count == 1, "with the spec installed here, another player off the spec breaks the regulation");
+			theirs.KnownSpecs = new List<string> { "Some other spec" };
+			Expect(back.Check(theirs).Broken.Count == 0 && back.Check(theirs).Unknown.Contains("spec"), "without the spec installed here, it can't be judged, so it isn't failed");
 		}
 	}
 }

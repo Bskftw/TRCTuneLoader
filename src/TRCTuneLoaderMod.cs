@@ -23,7 +23,7 @@ namespace TRC.TuneLoader {
 	/// </summary>
 	[KSLMeta("TRCTuneLoader", Version, "bskftw")]
 	public partial class TRCTuneLoaderMod : BaseMod {
-		public const string Version = "0.17.0";
+		public const string Version = "0.17.1";
 
 		private const string BackupsFolderName = "Backups";
 		private const float CarRefreshSeconds = 1.0f;
@@ -77,6 +77,12 @@ namespace TRC.TuneLoader {
 			public TuneCheck.Result Setup;
 			public string SetupText = "";
 			public TrcSync.Report Report;
+
+			/// <summary>This PC's specs that have a tune for their car, checked against what CarX shares of their setup.</summary>
+			public List<(PlayerSpec Spec, TuneCheck.Result Result, bool On)> Specs = new List<(PlayerSpec, TuneCheck.Result, bool)>();
+
+			/// <summary>This PC's regulations, checked against their car as CarX shares it.</summary>
+			public List<(Regulation Regulation, RegulationResult Result)> Regulations = new List<(Regulation, RegulationResult)>();
 		}
 
 		/// <summary>The result of checking the player's own car.</summary>
@@ -420,11 +426,19 @@ namespace TRC.TuneLoader {
 		/// Checks the saved setup against the official tunes, then the live car against the reference CarX
 		/// produced for it. In the garage, with an official saved setup, the reference is (re)recorded first.
 		/// </summary>
-		private OwnCheck CheckOwnCar(bool recordInGarage) {
+		private OwnCheck CheckOwnCar(bool recordInGarage) =>
+			CheckCarAgainst(official_.ForCar(car_.CarId, car_.SlotId), chosenSet_, recordInGarage,
+				$"There's no TRC tune for this car on its {car_.SlotName} setup. The Tune sets tab lists the cars that have one.");
+
+		/// <summary>
+		/// The full check of the player's own car against these tunes (TRC's sets, or a player spec's tune for this car):
+		/// the saved setup, stance, Workshop bodies, engine and drivetrain, and the live car against a reference recorded
+		/// for the matching tune. The same check whichever it is, so a player spec is checked as strictly as TRC spec.
+		/// </summary>
+		private OwnCheck CheckCarAgainst(List<TuneFile> tunes, string preferredSet, bool recordInGarage, string noTune) {
 			var check = new OwnCheck();
-			List<TuneFile> tunes = official_.ForCar(car_.CarId, car_.SlotId);
 			if (tunes.Count == 0) {
-				check.Error = $"There's no TRC tune for this car on its {car_.SlotName} setup. The Tune sets tab lists the cars that have one.";
+				check.Error = noTune;
 				return check;
 			}
 
@@ -448,7 +462,7 @@ namespace TRC.TuneLoader {
 				}
 			}
 			if (!check.Matched) {
-				check.Official = tunes.Find(t => t.SetId == chosenSet_) ?? tunes[0];
+				check.Official = tunes.Find(t => t.SetId == preferredSet) ?? tunes[0];
 				check.Saved = compare(check.Official);
 			}
 
@@ -507,7 +521,7 @@ namespace TRC.TuneLoader {
 			if (!adapter_.TryReadCurrentTune(car_, out var current, out _)) {
 				return;
 			}
-			TuneFile official = MatchingOfficial(current);
+			TuneFile official = MatchingOfficial(current) ?? MatchingSpecTune(current);
 			if (official == null || adapter_.HasReference(car_, official.Fingerprint)) {
 				return;
 			}
@@ -678,6 +692,7 @@ namespace TRC.TuneLoader {
 				row.SetupText = "Setup couldn't be checked";
 			}
 
+			CheckPlayerRules(row);
 			if (DrivetrainChanged(player)) {
 				row.SetupText += " · engine, gearbox or suspension changed outside CarX";
 			}
@@ -742,6 +757,10 @@ namespace TRC.TuneLoader {
 					}
 				}
 				report.ShareValues = shareValues_;
+				report.Specs = MySpecs().Take(TrcSync.MaxRules).ToList();
+				CarFacts facts = MyCarFacts();
+				report.Regulations = regulations_.Take(TrcSync.MaxRules)
+					.Select(r => new TrcSync.RuleClaim { Code = r.Code, Name = r.Name, Ok = r.Check(facts).Passes }).ToList();
 				if (ratings_ != null) {
 					report.EloTouge = (float)ratings_.Elo[0];
 					report.EloHighway = (float)ratings_.Elo[1];

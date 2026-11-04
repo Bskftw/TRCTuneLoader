@@ -19,7 +19,7 @@ namespace TRC.TuneLoader {
 		private static float WindowHeight => Mathf.Round(680f * (1f + (Theme.TextScale - 1f) * 0.4f));
 		private const float StatusRefreshSeconds = 2.0f;
 		/// <summary>The main tabs. Since 0.15.0 Backups is part of My car, and Battles has its own tab (it was inside Time attack). 0.16: Regulations and Suspension.</summary>
-		private static readonly string[] TabNames = { "Home", "My car", "Tune sets", "Players", "Mod check", "Time attack", "Battles", "Regulations", "Suspension", "Options", "About" };
+		private static readonly string[] TabNames = { "Home", "TRC Tunes", "Tune sets", "Players", "Mod check", "Time attack", "Battles", "Regulations", "Suspension", "Options", "About" };
 
 		// UGUI's EventSystem lives in UnityEngine.UI; found by name so the mod doesn't need that DLL.
 		private static readonly PropertyInfo CurrentEventSystem =
@@ -272,6 +272,8 @@ namespace TRC.TuneLoader {
 				case SuspensionTab: DrawSuspensionTab(); break;
 				case OptionsTab: DrawOptionsTab(); break;
 				case SpecsTab: DrawSpecsPage(); break;
+				case SpecCarTab: DrawSpecCarPage(); break;
+				case SpecPlayersTab: DrawSpecPlayersPage(); break;
 				case BugTab: DrawBugTab(); break;
 				default: DrawAboutTab(); break;
 			}
@@ -281,7 +283,12 @@ namespace TRC.TuneLoader {
 			switch (tab) {
 				case HomeTab: nextStatusRefresh_ = 0; nextPlayersRefresh_ = 0; break;
 				case MyCarTab: nextStatusRefresh_ = 0; backupResult_ = ""; RefreshBackups(); break;
-				case PlayersTab: nextPlayersRefresh_ = 0; nextReportRequest_ = 0; break;
+				case PlayersTab:
+				case SpecPlayersTab:
+					nextPlayersRefresh_ = 0;
+					nextReportRequest_ = 0;
+					break;
+				case SpecCarTab: mySpecsUntil_ = 0; break;
 				case ModCheckTab: modCheck_.Refresh(); break;
 				case CoursesTab: deletePending_ = null; break;
 			}

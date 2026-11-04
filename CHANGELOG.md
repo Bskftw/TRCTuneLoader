@@ -2,6 +2,18 @@
 
 All versions of TRC Tune Loader, newest first. "Not tested in game yet" means the version builds and its automatic tests pass, but nobody has tried it in CarX yet.
 
+## 0.17.1 (Nov 3 2026)
+
+Partly tested in game: the Specs pages, the Home cards and the diff type picker. Checking other players against your specs and regulations needs two players and passes its automatic tests.
+
+**New**
+- **Specs → Check my car.** Like TRC Tunes, but for your specs and regulations. Pick a spec to see whether your car is on it, checked the same way as TRC spec (the saved setup, the live car, the stance, engine or drivetrain swaps), with anything different listed, and put it on from there. Below it, each regulation: met, or what breaks it.
+- **Specs → Players.** Everyone in the room against your specs and regulations, checked from what CarX shares of their car, so it doesn't rest on what their mod says. Their mod also says which spec and regulations it's on, and a claim your check disagrees with shows in red. A spec you don't have can't be checked, so install it first.
+
+**Changed**
+- **My car is now called TRC Tunes**, and stays just for the TRC tunes.
+- **Regulations: the diff type is picked by name.** Allow Open, Welded, Viscous or Clutch type by clicking them, instead of a least and a most number. A broken rule says, for example, "Diff type Welded isn't allowed (only Open, Clutch type)". An older regulation with a number limit on the diff type turns into the named types when you edit it.
+
 ## 0.17.0 (Nov 3 2026)
 
 Partly tested in game: the new menu and Home, Look, the gantry signs, My times, the best line, and keeping clicks off the game. The controller, specs, manual sectors and the start key build and pass their automatic tests.

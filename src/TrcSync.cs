@@ -64,10 +64,27 @@ namespace TRC.TuneLoader {
 			public float Safety;
 			public byte License;
 
+			/// <summary>
+			/// 0.17: the player specs their car is fully on (titles), and their regulations with whether the car meets each.
+			/// Self-reported, like the rest: the Players page checks them itself where it has the same spec or regulation.
+			/// </summary>
+			public List<string> Specs = new List<string>();
+			public List<RuleClaim> Regulations = new List<RuleClaim>();
+
 			public bool HasRatings => EloTouge > 0;
 			public float EloFor(CourseKind kind) => kind == CourseKind.Highway ? EloHighway : kind == CourseKind.Circuit ? EloCircuit : EloTouge;
 			public string Badge => HasRatings ? $"{RatingBook.LicenseName((License)License)} {Safety:0.00}" : "";
 		}
+
+		/// <summary>One of a player's regulations in their report: its code, name, and whether their car meets it.</summary>
+		public sealed class RuleClaim {
+			public string Code = "";
+			public string Name = "";
+			public bool Ok;
+		}
+
+		/// <summary>The most specs and regulations a report carries.</summary>
+		public const int MaxRules = 16;
 
 		// 2: added the matched tune set. 3: added the stance check. 4: added the engine & drivetrain check.
 		// Players on different protocol versions don't see each other's reports.
@@ -218,6 +235,18 @@ namespace TRC.TuneLoader {
 			packet.WriteFloat(own.EloCircuit);
 			packet.WriteFloat(own.Safety);
 			packet.WriteByte(own.License);
+			int specs = Math.Min(own.Specs.Count, MaxRules);
+			packet.WriteInt32(specs);
+			for (int i = 0; i < specs; i++) {
+				packet.WriteString(Clip(own.Specs[i]));
+			}
+			int rules = Math.Min(own.Regulations.Count, MaxRules);
+			packet.WriteInt32(rules);
+			for (int i = 0; i < rules; i++) {
+				packet.WriteString(Clip(own.Regulations[i].Code));
+				packet.WriteString(Clip(own.Regulations[i].Name));
+				packet.WriteBool(own.Regulations[i].Ok);
+			}
 
 			Kino.Sync.SendToAll(packet);
 			lastSent_ = DateTime.UtcNow;
@@ -270,6 +299,18 @@ namespace TRC.TuneLoader {
 					report.License = packet.ReadByte();
 				} catch (Exception) {
 					// A report from an older version: whatever it didn't have stays at none.
+				}
+				try {
+					int specs = packet.ReadInt32();
+					for (int i = 0; i < specs && i < MaxRules; i++) {
+						report.Specs.Add(Clip(packet.ReadString()));
+					}
+					int rules = packet.ReadInt32();
+					for (int i = 0; i < rules && i < MaxRules; i++) {
+						report.Regulations.Add(new RuleClaim { Code = Clip(packet.ReadString()), Name = Clip(packet.ReadString()), Ok = packet.ReadBool() });
+					}
+				} catch (Exception) {
+					// Before 0.17: no specs or regulations in the report.
 				}
 
 				if (report.SteamId != 0) {

@@ -53,8 +53,11 @@ namespace TRC.TuneLoader {
 		/// <summary>How the body moves the wheels (widebody kits, Workshop bodies), null when unknown.</summary>
 		public List<string> Stance;
 
-		/// <summary>The player specs (their titles) whose tune is on the car, null when unknown (another player's car).</summary>
+		/// <summary>The player specs (their titles) whose tune is on the car, null when unknown.</summary>
 		public List<string> Specs;
+
+		/// <summary>The specs whoever is checking has (titles): a spec not among them can't be checked here. Null: all of them.</summary>
+		public List<string> KnownSpecs;
 	}
 
 	/// <summary>What a car does against a regulation: the rules it breaks, and the ones that couldn't be checked.</summary>
@@ -113,6 +116,18 @@ namespace TRC.TuneLoader {
 		/// spec's tune for their car (bskftw, Nov 3: spec racing with players' own specs). Drivers need the spec installed.
 		/// </summary>
 		public string Spec = "";
+
+		/// <summary>CarX's diff types, by the number its tuning keeps (CarX.DiffType): what the tuning screen shows.</summary>
+		public static readonly string[] DiffTypeNames = { "Open", "Welded", "Viscous", "Clutch type" };
+		public const string DiffTypeKey = "diff_type";
+
+		/// <summary>
+		/// The diff types allowed, by number (empty: any). bskftw, Nov 3: a limit on the diff type was a least and a most of a
+		/// number, but each number is a named type, so it's a list of the types allowed, picked by name.
+		/// </summary>
+		public List<int> DiffTypes = new List<int>();
+
+		public static string DiffTypeName(int type) => type >= 0 && type < DiffTypeNames.Length ? DiffTypeNames[type] : $"type {type}";
 
 		public bool EngineSwaps = true;
 		public bool DrivetrainChange = true;
@@ -191,7 +206,7 @@ namespace TRC.TuneLoader {
 				}
 			}
 			if (Spec.Length > 0) {
-				if (car.Specs == null) {
+				if (car.Specs == null || car.KnownSpecs != null && !car.KnownSpecs.Any(s => string.Equals(s, Spec, StringComparison.OrdinalIgnoreCase))) {
 					r.Unknown.Add("spec");
 				} else if (!car.Specs.Any(s => string.Equals(s, Spec, StringComparison.OrdinalIgnoreCase))) {
 					r.Broken.Add($"Not on the {Spec} spec: put on its tune for this car (Specs), or install the spec if you don't have it");
@@ -234,6 +249,13 @@ namespace TRC.TuneLoader {
 					r.Broken.Add("Body kits that move the wheels (widebody) aren't allowed");
 				}
 			}
+			if (DiffTypes.Count > 0) {
+				if (!car.Numbers.TryGetValue(DiffTypeKey, out float diff)) {
+					r.Unknown.Add("diff type");
+				} else if (!DiffTypes.Contains((int)Math.Round(diff))) {
+					r.Broken.Add($"Diff type {DiffTypeName((int)Math.Round(diff))} isn't allowed (only {string.Join(", ", DiffTypes.OrderBy(d => d).Select(DiffTypeName))})");
+				}
+			}
 			foreach (ValueLimit limit in Limits) {
 				if (!car.Numbers.TryGetValue(limit.Key, out float value)) {
 					r.Unknown.Add(TuneLabels.Label(limit.Key).ToLowerInvariant());
@@ -260,6 +282,9 @@ namespace TRC.TuneLoader {
 
 		/// <summary>A value the way CarX shows it (10.3 with no decimals: "10.3, shown as 10"), so a player sees why it's out.</summary>
 		private static string Shown(CarFacts car, string key, float value) {
+			if (key == DiffTypeKey) {
+				return DiffTypeName((int)Math.Round(value));
+			}
 			int? decimals = DecimalsFor(car, key);
 			if (!decimals.HasValue) {
 				return Number(value);
@@ -299,6 +324,9 @@ namespace TRC.TuneLoader {
 			var parts = new List<string>();
 			if (Spec.Length > 0) {
 				parts.Add($"{Spec} spec");
+			}
+			if (DiffTypes.Count > 0) {
+				parts.Add($"{string.Join("/", DiffTypes.OrderBy(d => d).Select(DiffTypeName))} diff");
 			}
 			if (Setups.Count > 0) {
 				parts.Add(string.Join("/", Setups.Select(SetupLabel)));
@@ -358,6 +386,10 @@ namespace TRC.TuneLoader {
 			// Only written when set, so regulations made before it keep their codes.
 			if (MaxHpPerKg.HasValue) {
 				text.Append("max_hp_per_kg = ").Append(Number(MaxHpPerKg.Value)).Append('\n');
+			}
+			// Only written when set, so regulations made before it keep their codes.
+			if (DiffTypes.Count > 0) {
+				text.Append("diff_types = ").Append(string.Join(", ", DiffTypes.Distinct().OrderBy(d => d).Select(d => d.ToString(CultureInfo.InvariantCulture)))).Append('\n');
 			}
 			if (Spec.Length > 0) {
 				text.Append("spec = ").Append(Spec.Replace("#", "").Replace("\n", " ").Trim()).Append('\n');
@@ -467,6 +499,13 @@ namespace TRC.TuneLoader {
 							case "min_kg_per_hp": reg.MinKgPerHp = Float(value); break;
 							case "max_hp_per_kg": reg.MaxHpPerKg = Float(value); break;
 							case "spec": reg.Spec = value.Trim(); break;
+							case "diff_types":
+								foreach (string d in value.Split(',')) {
+									if (int.TryParse(d.Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out int type) && type < DiffTypeNames.Length && !reg.DiffTypes.Contains(type)) {
+										reg.DiffTypes.Add(type);
+									}
+								}
+								break;
 							case "engine_swaps": reg.EngineSwaps = Yes(value); break;
 							case "drivetrain_change": reg.DrivetrainChange = Yes(value); break;
 							case "kino_swaps": reg.OutsideSwaps = Yes(value); break;

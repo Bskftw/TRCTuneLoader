@@ -19,6 +19,10 @@ namespace TRC.TuneLoader {
 		private const int SpecsTab = 11;
 		private const int BugTab = 12;
 
+		/// <summary>Specs' own pages (bskftw, Nov 3): your car against your specs and regulations, and the room against them.</summary>
+		private const int SpecCarTab = 13;
+		private const int SpecPlayersTab = 14;
+
 		private sealed class NavPage {
 			public string Name;
 			public int Tab;
@@ -50,12 +54,14 @@ namespace TRC.TuneLoader {
 				string Count(int n) => n > 0 ? n.ToString(CultureInfo.InvariantCulture) : "";
 				categories_ = new[] {
 					new NavCategory { Name = "TRC spec", Part = 0, Pages = new[] {
-						new NavPage { Name = "My car", Tab = MyCarTab },
+						new NavPage { Name = "TRC Tunes", Tab = MyCarTab },
 						new NavPage { Name = "Tune sets", Tab = TuneSetsTab },
 						new NavPage { Name = "Players", Tab = PlayersTab, Note = () => Count(players_.Count) },
 					} },
 					new NavCategory { Name = "Specs", Part = 1, Pages = new[] {
 						new NavPage { Name = "My specs", Tab = SpecsTab, Note = () => Count(specs_.Count) },
+						new NavPage { Name = "Check my car", Tab = SpecCarTab, Note = () => MySpecs().Count > 0 ? "on a spec" : "" },
+						new NavPage { Name = "Players", Tab = SpecPlayersTab, Note = () => Count(players_.Count(RulesProblem)) },
 						new NavPage { Name = "Regulations", Tab = RegulationsTab, View = 0, Note = () => Count(regulations_.Count) },
 						new NavPage { Name = "Make or edit", Tab = RegulationsTab, View = 1, Note = () => editingRegulation_ != null ? "editing" : "" },
 						new NavPage { Name = "Shared with you", Tab = RegulationsTab, View = 2 },
@@ -421,6 +427,10 @@ namespace TRC.TuneLoader {
 			float inside = WindowWidth - ContentArea.padding.horizontal - 14f;
 			float card = Mathf.Floor((inside - CardGap) / 2f);
 			float tall = Mathf.Round(150f * (1f + (Theme.TextScale - 1f) * 0.5f));
+			// Tall enough for the title, the line and two rows of page buttons (Specs' wrap onto a second row), all four the same.
+			float chipRow = Theme.Chip.CalcSize(new GUIContent("Ag")).y + Theme.Chip.margin.vertical;
+			float lineHigh = Theme.Body.CalcSize(new GUIContent("Ag")).y + Theme.Body.margin.vertical;
+			tall = Mathf.Max(tall, Mathf.Ceil(30f + cardTitle_.CalcSize(new GUIContent("Ag")).y + 4f + lineHigh + 8f + chipRow * 2f));
 			DrawHomeCard(all[0], 0, TrcCardLine(), card * 2f + CardGap, Mathf.Round(tall * 0.72f));
 			GUILayout.Space(CardGap);
 			GUILayout.BeginHorizontal();
@@ -455,8 +465,21 @@ namespace TRC.TuneLoader {
 			GUILayout.EndHorizontal();
 			GUILayout.Label(line, look[4]);
 			GUILayout.FlexibleSpace();
+			// The page buttons wrap onto another row when they don't fit, so the card keeps its size (bskftw, Nov 3: Specs'
+			// six pages stretched its card and pushed Time attack off the window).
+			GUIStyle style = CardStyle(category.Hex, width, height);
+			float room = width - style.padding.horizontal;
+			float used = 0f;
 			GUILayout.BeginHorizontal();
 			foreach (NavPage page in category.Pages) {
+				float wide = Theme.Chip.CalcSize(new GUIContent(page.Name)).x + Theme.Chip.margin.horizontal;
+				if (used > 0f && used + wide > room) {
+					GUILayout.FlexibleSpace();
+					GUILayout.EndHorizontal();
+					GUILayout.BeginHorizontal();
+					used = 0f;
+				}
+				used += wide;
 				if (NavButton(page.Name, Theme.Chip)) {
 					OpenPage(page);
 				}
@@ -608,8 +631,8 @@ namespace TRC.TuneLoader {
 				timesView_ = Choice(TimesViews, timesView_);
 				GUILayout.Space(10);
 				timesFilter_ = Choice(TimesFilters, timesFilter_);
-			} else if (page.Tab == PlayersTab) {
-				List<PlayerRow> problems = players_.Where(HasProblem).ToList();
+			} else if (page.Tab == PlayersTab || page.Tab == SpecPlayersTab) {
+				List<PlayerRow> problems = players_.Where(page.Tab == PlayersTab ? (Func<PlayerRow, bool>)HasProblem : RulesProblem).ToList();
 				int filter = Choice(new[] { $"Everyone ({players_.Count})", $"Only problems ({problems.Count})" }, problemsOnly_ ? 1 : 0);
 				if ((filter == 1) != problemsOnly_) {
 					problemsOnly_ = filter == 1;

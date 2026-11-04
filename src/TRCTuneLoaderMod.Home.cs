@@ -25,15 +25,13 @@ namespace TRC.TuneLoader {
 		private const string WheelWindowPref = "wheel_window";
 
 		/// <summary>Raise with each version that has news worth a pop-up.</summary>
-		private const string WhatsNewVersion = "0.17.0";
+		private const string WhatsNewVersion = "0.17.1";
 
 		private static readonly string[] WhatsNewLines = {
-			"<b>A new menu</b>: Home is a card for each part (TRC spec, Specs, Time attack, Battles, Free roam). Inside, the parts are across the top and their pages down the left; the logo brings you back.",
-			"<b>Controller</b>: the D-pad moves between buttons, A presses, B goes back, LB and RB change part, and the car keeps still while the menu has the pad.",
-			"<b>Specs</b>: make your own spec, a tune for each car like TRC's V1, V2, V3 and Revival. Share it as a zip, install other players' specs, race to one with a regulation, or drive time attacks to it.",
-			"<b>Manual sectors</b>: set where each sector ends on any sprint or circuit (Tracks, Sectors). They replace the automatic ones and go with your course when you share it.",
-			"<b>Start key</b> (Ctrl + G): starts a time attack on the track open in Tracks and puts you on its line. An open track shows its best, theoretical best and runs.",
-			"<b>Fixes</b>: gantry signs don't stretch up close, circuits don't get a wrong path note, and on the map the start and finish are lines and speed traps a camera.",
+			"<b>Specs, Check my car</b>: your car against your specs, checked as strictly as TRC spec (saved setup, live car, stance, swaps), and against each regulation: met, or what breaks it.",
+			"<b>Specs, Players</b>: everyone in the room against your specs and regulations, checked from what CarX shares of their car. A player whose mod claims a spec or regulation they're not on shows in red.",
+			"<b>My car is now TRC Tunes</b>, just for the TRC tunes. Regulations pick the <b>diff type</b> by name (Open, Welded, Viscous, Clutch type).",
+			"New in 0.17: a new menu, controller support, your own specs, manual sectors and the Ctrl + G start key. See the changelog for all of it.",
 		};
 
 		private readonly RoomSync roomSync_ = new RoomSync();
