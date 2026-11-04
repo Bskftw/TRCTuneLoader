@@ -94,10 +94,19 @@ namespace TRC.TuneLoader {
 			}
 		}
 
-		/// <summary>Called every frame: your best line on the road while a time attack is on (not in races or battles).</summary>
+		/// <summary>The best line shows within this many metres of the start line while a run waits to start.</summary>
+		private const float BestLineNearStart = 300f;
+
+		/// <summary>
+		/// Called every frame: your best line on the road while a time attack is on (not in races or battles): during the
+		/// countdown and the run, or on the way to the start line. Not while a finished or armed run just sits there
+		/// (bskftw, Nov 3: after a flying-start time attack, the line stayed on the road wherever they drove).
+		/// </summary>
 		private void UpdateBestLine() {
 			Camera camera = HudCamera();
-			bool show = hasPose_ && run_ != null && bestLineMode_ != 2 && bestLine_ != null && camera != null;
+			bool driving = run_ != null && (run_.State == TimeAttackRun.Phase.Countdown || run_.State == TimeAttackRun.Phase.Running ||
+				run_.State == TimeAttackRun.Phase.ToStart && hasPose_ && (pose_.Position - run_.Course.Start.Center).sqrMagnitude < BestLineNearStart * BestLineNearStart);
+			bool show = hasPose_ && driving && bestLineMode_ != 2 && bestLine_ != null && camera != null;
 			speedLine_.Show(show ? bestLine_ : null, bestLineKmh_, bestLineMode_ == 0, show ? camera.transform.position : Vector3.zero);
 		}
 

@@ -73,7 +73,7 @@ namespace TRC.TuneLoader {
 				GUILayout.FlexibleSpace();
 				bool enabled = GUI.enabled;
 				GUI.enabled = enabled && r.Drivers.Count < r.Settings.MaxPlayers;
-				if (GUILayout.Button("Add", Theme.ButtonPrimary)) {
+				if (NavButton("Add", Theme.ButtonPrimary)) {
 					AddConsoleRacer(r, c.Player);
 				}
 				GUI.enabled = enabled;

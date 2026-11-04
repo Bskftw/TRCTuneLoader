@@ -500,7 +500,8 @@ namespace TRC.TuneLoader {
 
 		private static List<Vector3> ReadPathTimed(IList<Transform> pieces, string name, Course course) {
 			Vector3 start = course.Start.Center;
-			Vector3 finish = course.Finish.Center;
+			// A circuit's finish is its start line (its Finish is only filled in by Build, after this).
+			Vector3 finish = course.IsCircuit ? start : course.Finish.Center;
 
 			var linePoints = new List<Vector3>();
 			foreach (Transform piece in pieces) {
@@ -553,7 +554,13 @@ namespace TRC.TuneLoader {
 				if (unused > ordered.Count / 10 + 2) {
 					course.Problems.Add($"{unused} of the path's points weren't used: check the strip has no gaps over {MaxPathGap:0} m and nothing else in 'TRC Path {name}'.");
 				}
-				if (ordered.Count >= 2 && !ordered.Any(p => Vector3.Distance(p, finish) <= MaxPathGap)) {
+				if (course.IsCircuit) {
+					// A loop: it should come back round to the start line (bskftw, Nov 3: every circuit said it stopped 8 km short).
+					float gap = ordered.Count >= 2 ? Vector3.Distance(ordered[ordered.Count - 1], start) : 0f;
+					if (gap > MaxPathGap) {
+						course.Problems.Add($"The path's loop stops {gap:0} m before it gets back to the start line: it may have a gap over {MaxPathGap:0} m.");
+					}
+				} else if (ordered.Count >= 2 && !ordered.Any(p => Vector3.Distance(p, finish) <= MaxPathGap)) {
 					course.Problems.Add($"The path stops {Vector3.Distance(ordered[ordered.Count - 1], finish):0} m before the finish: it may have a gap over {MaxPathGap:0} m.");
 				}
 				return ordered;

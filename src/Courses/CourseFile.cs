@@ -33,6 +33,9 @@ namespace TRC.TuneLoader {
 	///                                  once round, back to the start line)
 	///   ...
 	///
+	///   [sectors]                     (optional: where the player set each sector to end)
+	///   12.3, 45.6, -78.9
+	///
 	///   [traps]                       (optional: speed traps along the course, in order)
 	///   12.3, 45.6, -78.9, 0.6, -0.8, 12   (position, direction x and z, width)
 	///
@@ -83,6 +86,14 @@ namespace TRC.TuneLoader {
 						course.Traps.Add(trap);
 					} else {
 						course.Problems.Add($"Line {lineNumber}: a speed trap should be six numbers: position, direction (x and z) and width");
+					}
+					continue;
+				}
+				if (section == "sectors") {
+					if (TryParseVector(line, 3, out Vector3 point)) {
+						course.ManualSectors.Add(point);
+					} else {
+						course.Problems.Add($"Line {lineNumber}: a sector point should be three numbers, like 12.3, 45.6, -78.9");
 					}
 					continue;
 				}
@@ -184,6 +195,12 @@ namespace TRC.TuneLoader {
 			if (course.HasPath) {
 				text.Append("\n[path]\n");
 				foreach (Vector3 point in course.Path) {
+					text.Append(Number(point.x, 2)).Append(", ").Append(Number(point.y, 2)).Append(", ").Append(Number(point.z, 2)).Append('\n');
+				}
+			}
+			if (course.ManualSectors.Count > 0) {
+				text.Append("\n[sectors]\n");
+				foreach (Vector3 point in course.ManualSectors) {
 					text.Append(Number(point.x, 2)).Append(", ").Append(Number(point.y, 2)).Append(", ").Append(Number(point.z, 2)).Append('\n');
 				}
 			}

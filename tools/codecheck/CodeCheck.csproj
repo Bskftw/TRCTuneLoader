@@ -27,6 +27,7 @@
     <Compile Include="..\..\src\Courses\Course.cs" Link="src\Courses\Course.cs" />
     <Compile Include="..\..\src\Courses\CourseGeometry.cs" Link="src\Courses\CourseGeometry.cs" />
     <Compile Include="..\..\src\Courses\CourseFile.cs" Link="src\Courses\CourseFile.cs" />
+    <Compile Include="..\..\src\Courses\SectorOverlay.cs" Link="src\Courses\SectorOverlay.cs" />
     <Compile Include="..\..\src\Courses\CourseLibrary.cs" Link="src\Courses\CourseLibrary.cs" />
     <Compile Include="..\..\src\Courses\CourseRecorder.cs" Link="src\Courses\CourseRecorder.cs" />
     <Compile Include="..\..\src\Courses\TimeAttackRun.cs" Link="src\Courses\TimeAttackRun.cs" />
@@ -54,6 +55,7 @@
     <Compile Include="..\..\src\BugReport.cs" Link="src\BugReport.cs" />
     <Compile Include="..\..\src\DataFolder.cs" Link="src\DataFolder.cs" />
     <Compile Include="..\..\src\TuneBackups.cs" Link="src\TuneBackups.cs" />
+    <Compile Include="..\..\src\PlayerSpecs.cs" Link="src\PlayerSpecs.cs" />
     <Compile Include="..\..\src\ICarTuneAdapter.cs" Link="src\ICarTuneAdapter.cs" />
   </ItemGroup>
 

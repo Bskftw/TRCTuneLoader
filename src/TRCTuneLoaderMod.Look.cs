@@ -5,18 +5,53 @@ using UnityEngine;
 
 namespace TRC.TuneLoader {
 	/// <summary>
-	/// Options > Look (0.15.0): the window's colours and text size, for players who find the dark window hard to
-	/// read. Ready-made looks, or the player's own background, accent and text colours, saved in Kino.Prefs. The
-	/// change goes through in Update, so the window isn't rebuilt halfway through drawing.
+	/// Options > Look, rebuilt for the 0.17 menu (bskftw, Nov 3: "the colour customization is a bit buggy... lets just
+	/// redo the menu customization entirely"). One list of colours, each saved in Kino.Prefs as hex:
+	///   Window: background, text, second text (Auto: worked out from the text).
+	///   Highlights: accent (page titles, notes, lines), buttons (Auto: the accent).
+	///   Parts: the six parts of the menu (their names across the top, their Home cards).
+	/// Ready-made looks set the window and highlight colours; Reset all puts every colour back. A change is applied in
+	/// Update (not halfway through drawing), bumps <see cref="Theme.Version"/>, and every style is made again from it.
 	/// </summary>
 	public partial class TRCTuneLoaderMod {
-		private const string LookBackgroundPref = "ui_background";
-		private const string LookAccentPref = "ui_accent";
-		private const string LookTextPref = "ui_text";
 		private const string LookTextSizePref = "ui_text_size";
-		private const string LookMutedPref = "ui_text_muted";
-
 		private static readonly float[] TextSizes = { 0.9f, 1f, 1.15f, 1.3f, 1.5f };
+
+		/// <summary>One colour the player can set.</summary>
+		private sealed class LookColour {
+			public string Key;
+			public string Label;
+			public string Note;
+			public Color Default;
+
+			/// <summary>Auto colours follow something else until the player picks one (null Own).</summary>
+			public bool CanBeAuto;
+			public Color? Own;
+
+			public string Pref => "ui_" + Key;
+		}
+
+		private const string BackgroundKey = "background", TextKey = "text", MutedKey = "text_muted", AccentKey = "accent", ButtonKey = "button";
+
+		/// <summary>The parts' colours, in the order of the menu's categories (TRC spec, Specs, Time attack, Battles, Free roam, Tools).</summary>
+		private static readonly string[] PartKeys = { "part_trc", "part_specs", "part_time", "part_battles", "part_free", "part_tools" };
+
+		private readonly LookColour[] lookColours_ = {
+			new LookColour { Key = BackgroundKey, Label = "Background", Note = "the window", Default = Theme.DefaultBackground },
+			new LookColour { Key = TextKey, Label = "Text", Note = "the main text", Default = Theme.DefaultText },
+			new LookColour { Key = MutedKey, Label = "Second text", Note = "notes, labels, choices not picked", CanBeAuto = true },
+			new LookColour { Key = AccentKey, Label = "Accent", Note = "page titles, note boxes, lines", Default = Theme.DefaultAccent },
+			new LookColour { Key = ButtonKey, Label = "Buttons", Note = "main buttons, picked choices and rows", CanBeAuto = true },
+			new LookColour { Key = PartKeys[0], Label = "TRC spec", Default = Rgb(0xF4C0D1) },
+			new LookColour { Key = PartKeys[1], Label = "Specs", Default = Rgb(0x8FB8FF) },
+			new LookColour { Key = PartKeys[2], Label = "Time attack", Default = Rgb(0xC9A7FF) },
+			new LookColour { Key = PartKeys[3], Label = "Battles", Default = Rgb(0xFAC775) },
+			new LookColour { Key = PartKeys[4], Label = "Free roam", Default = Rgb(0xC0DD97) },
+			new LookColour { Key = PartKeys[5], Label = "Tools", Default = Rgb(0x40BAC4) },
+		};
+
+		/// <summary>The parts' colours as hex, for the menu (set whenever the look is applied).</summary>
+		private static readonly string[] partHex_ = { "#F4C0D1", "#8FB8FF", "#C9A7FF", "#FAC775", "#C0DD97", "#40BAC4" };
 
 		private sealed class Look {
 			public string Name;
@@ -39,45 +74,53 @@ namespace TRC.TuneLoader {
 			Rgb(0x4FA3E0), Rgb(0x3D63E8), Rgb(0x9B7BEA), Rgb(0xFFFFFF), Rgb(0x9A9AA3), Rgb(0x000000),
 		};
 
-		private Color lookBackground_ = Theme.DefaultBackground;
-		private Color lookAccent_ = Theme.DefaultAccent;
-		private Color lookText_ = Theme.DefaultText;
 		private float lookTextSize_ = 1f;
-
-		/// <summary>The second text colour (the grey notes and labels), or null to follow the text colour.</summary>
-		private Color? lookMuted_;
 		private bool lookPending_;
 
-		/// <summary>Which colour has its sliders open (0 none, 1 background, 2 accent, 3 text, 4 second text).</summary>
-		private int lookEditing_;
+		/// <summary>The colour with its sliders open ("" none), and the hex being typed for it.</summary>
+		private string lookEditing_ = "";
+		private string lookHexTyped_ = "";
 
-		private void LoadLook() {
-			if (Theme.TryHex(KSL.API.Kino.Prefs.Get(LookBackgroundPref, ""), out Color background)) {
-				lookBackground_ = background;
-			}
-			if (Theme.TryHex(KSL.API.Kino.Prefs.Get(LookAccentPref, ""), out Color accent)) {
-				lookAccent_ = accent;
-			}
-			if (Theme.TryHex(KSL.API.Kino.Prefs.Get(LookTextPref, ""), out Color text)) {
-				lookText_ = text;
-			}
-			lookMuted_ = Theme.TryHex(KSL.API.Kino.Prefs.Get(LookMutedPref, ""), out Color muted) ? muted : (Color?)null;
-			float size = KSL.API.Kino.Prefs.Get(LookTextSizePref, 1f);
-			lookTextSize_ = TextSizes.OrderBy(s => Math.Abs(s - size)).First();
-			Theme.Configure(lookBackground_, lookAccent_, lookText_, lookTextSize_, lookMuted_);
+		private LookColour LookOf(string key) => lookColours_.First(c => c.Key == key);
+
+		/// <summary>The colour in use: the player's own, or the default (null for an Auto colour left on Auto).</summary>
+		private Color? LookValue(string key) {
+			LookColour c = LookOf(key);
+			return c.Own ?? (c.CanBeAuto ? (Color?)null : c.Default);
 		}
 
-		/// <summary>Called from Update: a changed look goes through here, between frames.</summary>
+		/// <summary>What an Auto colour shows while on Auto: the second text from the text, buttons from the accent.</summary>
+		private Color Shown(LookColour c) =>
+			c.Own ?? (c.Key == MutedKey ? Color.Lerp(LookValue(TextKey).Value, LookValue(BackgroundKey).Value, 0.38f)
+				: c.Key == ButtonKey ? LookValue(AccentKey).Value
+				: c.Default);
+
+		private void LoadLook() {
+			foreach (LookColour c in lookColours_) {
+				c.Own = Theme.TryHex(KSL.API.Kino.Prefs.Get(c.Pref, ""), out Color own) ? own : (Color?)null;
+			}
+			float size = KSL.API.Kino.Prefs.Get(LookTextSizePref, 1f);
+			lookTextSize_ = TextSizes.OrderBy(s => Math.Abs(s - size)).First();
+			ApplyLook();
+		}
+
+		private void ApplyLook() {
+			Theme.Configure(LookValue(BackgroundKey).Value, LookValue(AccentKey).Value, LookValue(TextKey).Value, lookTextSize_, LookValue(MutedKey), LookValue(ButtonKey));
+			for (int i = 0; i < PartKeys.Length; i++) {
+				partHex_[i] = Theme.ToHex(LookValue(PartKeys[i]).Value);
+			}
+		}
+
+		/// <summary>Called from Update: a changed look goes through here, between frames, and is saved.</summary>
 		private void UpdateLook() {
 			if (!lookPending_) {
 				return;
 			}
 			lookPending_ = false;
-			Theme.Configure(lookBackground_, lookAccent_, lookText_, lookTextSize_, lookMuted_);
-			SavePref(LookBackgroundPref, Theme.ToHex(lookBackground_));
-			SavePref(LookMutedPref, lookMuted_ is Color muted ? Theme.ToHex(muted) : "");
-			SavePref(LookAccentPref, Theme.ToHex(lookAccent_));
-			SavePref(LookTextPref, Theme.ToHex(lookText_));
+			ApplyLook();
+			foreach (LookColour c in lookColours_) {
+				SavePref(c.Pref, c.Own is Color own ? Theme.ToHex(own) : "");
+			}
 			SavePref(LookTextSizePref, lookTextSize_);
 		}
 
@@ -90,79 +133,113 @@ namespace TRC.TuneLoader {
 				lookPending_ = true;
 			}
 
-			GUILayout.Space(6);
-			GUILayout.Label("Colours: pick a look, or your own colours below.", Theme.Body);
+			GUILayout.Space(8);
+			GUILayout.Label("Ready-made looks (the window and highlight colours; the parts keep theirs)", Theme.Body);
 			GUILayout.BeginHorizontal();
 			foreach (Look look in Looks) {
-				bool current = SameColour(look.Background, lookBackground_) && SameColour(look.Accent, lookAccent_) && SameColour(look.Text, lookText_) && lookMuted_ == null;
-				if (GUILayout.Button(look.Name, current ? Theme.ChipActive : Theme.Chip)) {
-					lookBackground_ = look.Background;
-					lookAccent_ = look.Accent;
-					lookText_ = look.Text;
-					lookMuted_ = null;
+				bool current = SameColour(look.Background, Shown(LookOf(BackgroundKey))) && SameColour(look.Accent, Shown(LookOf(AccentKey))) &&
+					SameColour(look.Text, Shown(LookOf(TextKey))) && LookOf(MutedKey).Own == null && LookOf(ButtonKey).Own == null;
+				if (NavButton(look.Name, current ? Theme.ChipActive : Theme.Chip)) {
+					LookOf(BackgroundKey).Own = look.Background;
+					LookOf(AccentKey).Own = look.Accent;
+					LookOf(TextKey).Own = look.Text;
+					LookOf(MutedKey).Own = null;
+					LookOf(ButtonKey).Own = null;
 					lookPending_ = true;
 				}
 			}
 			GUILayout.FlexibleSpace();
 			GUILayout.EndHorizontal();
 
-			ColourRow("Background", ref lookBackground_, 1);
-			ColourRow("Accent (buttons, tabs)", ref lookAccent_, 2);
-			ColourRow("Text", ref lookText_, 3);
-			Color muted = lookMuted_ ?? Theme.Muted;
-			if (ColourRow("Second text (notes, labels)", ref muted, 4, lookMuted_ == null ? "Auto" : "Reset")) {
-				lookMuted_ = null;
-				lookPending_ = true;
-			} else if (!SameColour(muted, lookMuted_ ?? Theme.Muted)) {
-				lookMuted_ = muted;
-			}
-			if (Mathf.Abs(Theme.Luminance(lookBackground_) - Theme.Luminance(lookText_)) < 0.35f) {
+			LookGroup("Window", BackgroundKey, TextKey, MutedKey);
+			LookGroup("Highlights", AccentKey, ButtonKey);
+			LookGroup("Parts (their names across the top and their cards on Home)", PartKeys);
+
+			Color background = Shown(LookOf(BackgroundKey)), text = Shown(LookOf(TextKey));
+			if (Mathf.Abs(Theme.Luminance(background) - Theme.Luminance(text)) < 0.35f) {
 				GUILayout.Label("The text and the background are close: the text may be hard to read.", Theme.PillWarn);
-			} else if (Theme.Luminance(lookBackground_) > 0.5f) {
+			} else if (Theme.Luminance(background) > 0.5f) {
 				GUILayout.Label("On a light background some coloured notes (green, amber) are harder to read.", Theme.Small);
+			}
+			GUILayout.Space(6);
+			GUILayout.BeginHorizontal();
+			if (NavButton("Reset all colours", Theme.Button)) {
+				foreach (LookColour c in lookColours_) {
+					c.Own = null;
+				}
+				lookEditing_ = "";
+				lookPending_ = true;
+			}
+			GUILayout.FlexibleSpace();
+			GUILayout.EndHorizontal();
+		}
+
+		private void LookGroup(string title, params string[] keys) {
+			GUILayout.Space(8);
+			GUILayout.Label(title, Theme.SectionLabel);
+			foreach (string key in keys) {
+				LookRow(LookOf(key));
 			}
 		}
 
 		/// <summary>
-		/// A colour: its swatch and hex, a row of ready colours, and (Custom) sliders for hue, colour and brightness.
-		/// With <paramref name="reset"/>, a button with that text comes first; true when it's clicked.
+		/// A colour: its name, what it colours, the colour now, a row of ready colours, its hex (type one in), Auto or
+		/// Reset, and Custom for hue, colour and brightness sliders.
 		/// </summary>
-		private bool ColourRow(string label, ref Color colour, int which, string reset = null) {
-			bool resetClicked = false;
-			GUILayout.Space(4);
+		private void LookRow(LookColour c) {
+			Color now = Shown(c);
 			GUILayout.BeginHorizontal();
-			GUILayout.Label($"<b>{label}</b>  <color={Theme.MutedHex}>{Theme.ToHex(colour)}</color>", Theme.Body, GUILayout.Width(230));
-			Swatch(colour, 22f, current: true);
+			string note = c.Note != null ? $"  <color={Theme.MutedHex}>{c.Note}</color>" : "";
+			string auto = c.CanBeAuto && c.Own == null ? $"  <color={Theme.MutedHex}>(Auto)</color>" : "";
+			GUILayout.Label($"<b>{c.Label}</b>{auto}{note}", Theme.Body, GUILayout.Width(330));
+			Swatch(now, 22f, current: true);
 			GUILayout.Space(8);
 			foreach (Color swatch in Swatches) {
-				if (Swatch(swatch, 18f, current: SameColour(swatch, colour))) {
-					colour = swatch;
+				if (Swatch(swatch, 18f, current: SameColour(swatch, now))) {
+					c.Own = swatch;
 					lookPending_ = true;
 				}
 			}
 			GUILayout.FlexibleSpace();
-			if (reset != null) {
-				// "Auto" while it follows the text colour (nothing to undo), "Reset" once it's the player's own.
-				GUI.enabled = reset != "Auto";
-				resetClicked = GUILayout.Button(reset, Theme.Button);
-				GUI.enabled = true;
+			bool own = c.Own != null;
+			bool enabled = GUI.enabled;
+			GUI.enabled = enabled && own;
+			if (NavButton(c.CanBeAuto ? "Auto" : "Reset", Theme.Button)) {
+				c.Own = null;
+				lookPending_ = true;
 			}
-			if (GUILayout.Button(lookEditing_ == which ? "Done" : "Custom", Theme.Button)) {
-				lookEditing_ = lookEditing_ == which ? 0 : which;
+			GUI.enabled = enabled;
+			if (NavButton(lookEditing_ == c.Key ? "Done" : "Custom", Theme.Button)) {
+				lookEditing_ = lookEditing_ == c.Key ? "" : c.Key;
+				lookHexTyped_ = Theme.ToHex(now);
 			}
 			GUILayout.EndHorizontal();
-			if (lookEditing_ != which) {
-				return resetClicked;
+			if (lookEditing_ != c.Key) {
+				return;
 			}
-			Color.RGBToHSV(colour, out float h, out float s, out float v);
+
+			GUILayout.BeginHorizontal();
+			GUILayout.Label("Hex", Theme.Small, GUILayout.Width(80));
+			string typed = GUILayout.TextField(lookHexTyped_ ?? "", 7, Theme.Field, GUILayout.Width(100));
+			if (typed != lookHexTyped_) {
+				lookHexTyped_ = typed;
+				if (Theme.TryHex(typed, out Color fromHex)) {
+					c.Own = fromHex;
+					lookPending_ = true;
+				}
+			}
+			GUILayout.Label("like #D4537E", Theme.Small);
+			GUILayout.FlexibleSpace();
+			GUILayout.EndHorizontal();
+			Color.RGBToHSV(now, out float h, out float s, out float v);
 			float nh = SliderRow("Hue", h);
 			float ns = SliderRow("Colour", s);
 			float nv = SliderRow("Brightness", v);
 			if (Math.Abs(nh - h) > 0.001f || Math.Abs(ns - s) > 0.001f || Math.Abs(nv - v) > 0.001f) {
-				colour = Color.HSVToRGB(nh, ns, nv);
+				c.Own = Color.HSVToRGB(nh, ns, nv);
+				lookHexTyped_ = Theme.ToHex(c.Own.Value);
 				lookPending_ = true;
 			}
-			return resetClicked;
 		}
 
 		private static float SliderRow(string label, float value) {

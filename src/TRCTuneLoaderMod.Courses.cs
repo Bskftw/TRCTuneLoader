@@ -129,6 +129,7 @@ namespace TRC.TuneLoader {
 		}
 
 		private void SetupCourses() {
+			LoadManualSectors();
 			courses_.LoadOfficial();
 			courses_.LoadCustom(CoursesFolder);
 			foreach (string error in courses_.Errors) {
@@ -378,6 +379,7 @@ namespace TRC.TuneLoader {
 			pathShownFor_ = null;
 			run_ = new TimeAttackRun(course, course.IsCircuit ? PickedLaps : 1, PickedFlying);
 			runRule_ = TimeAttackRule;
+			lastStartedCode_ = course.Code;
 			runStart_ = null;
 			runResultUntil_ = 0;
 			ResetRunExtras();
@@ -769,10 +771,10 @@ namespace TRC.TuneLoader {
 				GUILayout.Label($"Time attack: {run_.Course.Name}", Theme.Heading);
 				GUILayout.Label(RunStatusText(), Theme.Body);
 				GUILayout.BeginHorizontal();
-				if (GUILayout.Button("Teleport to start", Theme.ButtonPrimary)) {
+				if (NavButton("Teleport to start", Theme.ButtonPrimary)) {
 					TeleportToStart();
 				}
-				if (GUILayout.Button("Stop time attack", Theme.Button)) {
+				if (NavButton("Stop time attack", Theme.Button)) {
 					StopTimeAttack();
 				}
 				GUILayout.FlexibleSpace();
@@ -786,10 +788,10 @@ namespace TRC.TuneLoader {
 					? $"Drive through the start line, then down the middle of the road to the finish line. Recording stops by itself there. Close this window ({shortcut_}) to drive."
 					: $"{pathRecorder_.Message}: {TimeAttackRun.Distance(pathRecorder_.Recorded)}", Theme.Body);
 				GUILayout.BeginHorizontal();
-				if (pathRecorder_.State != PathRecorder.Phase.Done && GUILayout.Button("Teleport to start", Theme.ButtonPrimary)) {
+				if (pathRecorder_.State != PathRecorder.Phase.Done && NavButton("Teleport to start", Theme.ButtonPrimary)) {
 					TeleportToStart();
 				}
-				if (pathRecorder_ != null && GUILayout.Button(pathRecorder_.State == PathRecorder.Phase.Done ? "Close" : "Stop recording", Theme.Button)) {
+				if (pathRecorder_ != null && NavButton(pathRecorder_.State == PathRecorder.Phase.Done ? "Close" : "Stop recording", Theme.Button)) {
 					pathRecorder_ = null;
 				}
 				GUILayout.FlexibleSpace();
@@ -821,11 +823,11 @@ namespace TRC.TuneLoader {
 				GUILayout.BeginHorizontal();
 				GUILayout.Label("Find a track", Theme.Small, GUILayout.Width(90));
 				trackFilter_ = GUILayout.TextField(trackFilter_ ?? "", 40, Theme.Field, GUILayout.Width(220));
-				if (trackFilter_.Length > 0 && GUILayout.Button("Clear", Theme.Button)) {
+				if (trackFilter_.Length > 0 && NavButton("Clear", Theme.Button)) {
 					trackFilter_ = "";
 				}
 				GUILayout.FlexibleSpace();
-				if (tracksOpen_.Count > 0 && GUILayout.Button("Close all", Theme.Button)) {
+				if (tracksOpen_.Count > 0 && NavButton("Close all", Theme.Button)) {
 					tracksOpen_.Clear();
 				}
 				GUILayout.EndHorizontal();
@@ -842,7 +844,7 @@ namespace TRC.TuneLoader {
 			GUILayout.EndVertical();
 
 			GUILayout.BeginHorizontal();
-			if (GUILayout.Button("Look for course objects again", Theme.Button)) {
+			if (NavButton("Look for course objects again", Theme.Button)) {
 				scannedMapKey_ = "";
 				mapSince_ = Time.unscaledTime - MapScanDelaySeconds;
 			}
@@ -875,8 +877,8 @@ namespace TRC.TuneLoader {
 			string flags = (course.Problems.Count > 0 ? $"  <color={Theme.WarnHex}>{course.Problems.Count} note(s)</color>" : "") +
 				(racingGhost_ != null && racingGhost_.CourseCode == course.Code ? $"  <color=#8FB8FF>ghost</color>" : "") +
 				(run_?.Course == course ? $"  <color={Theme.GoodHex}>driving</color>" : "");
-			string header = $"{(open ? "▾" : "▸")} <b>{course.Name}</b>  <color={Theme.MutedHex}>{course.KindName} · {length} · {course.SourceName}</color><b>{bestText}</b>{flags}";
-			if (GUILayout.Button(header, open ? Theme.RowSelected : Theme.Row) && !busy) {
+			string header = $"<b>{course.Name}</b>  <color={Theme.MutedHex}>{course.KindName} · {length} · {course.SourceName}</color><b>{bestText}</b>{flags}";
+			if (NavButton(header, open ? Theme.RowSelected : Theme.Row) && !busy) {
 				// bskftw, Nov 3: opening a track closes the others.
 				bool wasOpen = tracksOpen_.Contains(course.Code);
 				tracksOpen_.Clear();
@@ -887,7 +889,8 @@ namespace TRC.TuneLoader {
 			if (!open) {
 				return;
 			}
-			GUILayout.Label($"Course code {course.Code}{BestText(course)}{(course.Usable ? $" · {course.SectorEnds.Length} sectors" : "")}", Theme.Small);
+			DrawSelectedCourse(course);
+			GUILayout.Label($"Course code {course.Code}{BestText(course)}", Theme.Small);
 			foreach (string problem in course.Problems) {
 				GUILayout.Label($"<color={Theme.WarnHex}>{problem}</color>", Theme.Small);
 			}
@@ -895,40 +898,35 @@ namespace TRC.TuneLoader {
 			GUILayout.BeginHorizontal();
 			bool enabled = GUI.enabled;
 			GUI.enabled = enabled && course.Usable && hasPose_;
-			if (run_?.Course == course || pathRecorder_?.Course == course) {
-				// Running here: teleport (which closes the window) or stop, right on the track's row.
-				if (GUILayout.Button("Teleport to start", Theme.ButtonPrimary)) {
-					TeleportToStart();
-				}
-				if (run_?.Course == course && GUILayout.Button("Stop", Theme.Button)) {
-					StopTimeAttack();
-				}
-			} else if (GUILayout.Button("Time attack", Theme.ButtonPrimary, GUILayout.Width(110))) {
-				StartTimeAttack(course);
-			}
 			// A map course gets its path from driving it once (or a new one, replacing the player's own).
 			if (course.Source == CourseSource.Map && (!course.HasPath || course.PathFromPlayer) &&
-				GUILayout.Button(course.HasPath ? "Record again" : "Record path", Theme.Button)) {
+				NavButton(course.HasPath ? "Record again" : "Record path", Theme.Button)) {
 				StartRecordPath(course);
 			}
 			GUI.enabled = enabled && course.HasPath && hasPose_;
-			if (GUILayout.Button(pathShownFor_ == course ? "Hide path" : "Show path", Theme.Button)) {
+			if (NavButton(pathShownFor_ == course ? "Hide path" : "Show path", Theme.Button)) {
 				pathShownFor_ = pathShownFor_ == course ? null : course;
 			}
 			GUI.enabled = enabled;
-			DrawGhostsButton(course);
 			// Race grids: drive the road up to the start line (official courses and maps with grid spots have their own).
 			GUI.enabled = enabled && hasPose_ && course.Source != CourseSource.Official && course.GridObjects.Count == 0 && run_ == null && !InBattle && !InRace;
-			if (GUILayout.Button(gridRecorder_?.Course == course ? "Stop grid" : "Lay out grid", Theme.Button)) {
+			if (NavButton(gridRecorder_?.Course == course ? "Stop grid" : "Lay out grid", Theme.Button)) {
 				StartGrid(gridRecorder_?.Course == course ? null : course);
 			}
 			GUI.enabled = enabled;
 
-			if (course.Source == CourseSource.Custom && GUILayout.Button(editing_ == course ? "Done" : "Edit", Theme.Button)) {
+			if (course.Usable && course.HasPath && NavButton(sectorsEditing_ == course ? "Hide sectors" : $"Sectors{(course.ManualSectors.Count > 0 ? " (manual)" : "")}", Theme.Button)) {
+				sectorsEditing_ = sectorsEditing_ == course ? null : course;
+				sectorsResult_ = "";
+			}
+			if (course.Source == CourseSource.Custom && NavButton(editing_ == course ? "Done" : "Edit", Theme.Button)) {
 				StartEditing(editing_ == course ? null : course);
 			}
 			GUILayout.FlexibleSpace();
 			GUILayout.EndHorizontal();
+			if (sectorsEditing_ == course) {
+				DrawSectorEditor(course);
+			}
 			DrawGhostList(course);
 			if (editing_ == course) {
 				DrawCourseEditor(course);
@@ -1074,12 +1072,12 @@ namespace TRC.TuneLoader {
 
 		private void BuilderButtons(string primary, Action onPrimary, bool startOver) {
 			GUILayout.BeginHorizontal();
-			if (GUILayout.Button(primary, Theme.ButtonPrimary)) {
+			if (NavButton(primary, Theme.ButtonPrimary)) {
 				onPrimary();
 			}
 			bool enabled = GUI.enabled;
 			GUI.enabled = true;
-			if (startOver && GUILayout.Button("Start over", Theme.Button)) {
+			if (startOver && NavButton("Start over", Theme.Button)) {
 				recorder_.Clear();
 				courseResult_ = "";
 			}
@@ -1424,59 +1422,6 @@ namespace TRC.TuneLoader {
 			markers_.ShowSigns(startSign, finishSign);
 		}
 
-		/// <summary>
-		/// Called from OnGUI: each gantry's sign drawn over the screen exactly where its beam is, so trees and other signs
-		/// never hide it. Its corners follow the beam, so it's stuck to the gantry, turned and tilted with it (bskftw, Nov 3:
-		/// it turned to face the camera), and only seen from the side the cars come from. Fades out from
-		/// <see cref="GantrySignFade"/> to <see cref="GantrySignRange"/> metres away.
-		/// </summary>
-		private void DrawGantrySigns(float scale, float screenWidth) {
-			if (Event.current.type != EventType.Repaint) {
-				return;
-			}
-			Camera camera = HudCamera();
-			if (camera == null) {
-				return;
-			}
-			Color before = GUI.color;
-			Matrix4x4 matrix = GUI.matrix;
-			Vector3 eye = camera.transform.position;
-			foreach (Gantry gantry in markers_.VisibleGantries.OrderByDescending(g => (g.SignCentre - eye).sqrMagnitude)) {
-				// Only from the front: a car that's gone through sees the back of the gantry, not its sign.
-				if (Vector3.Dot(eye - gantry.SignCentre, gantry.Gate.Forward) > 0f) {
-					continue;
-				}
-				Vector3 centre = camera.WorldToScreenPoint(gantry.SignCentre);
-				Vector3 topLeft = camera.WorldToScreenPoint(gantry.SignTopLeft);
-				Vector3 topRight = camera.WorldToScreenPoint(gantry.SignTopRight);
-				Vector3 bottomLeft = camera.WorldToScreenPoint(gantry.SignBottomLeft);
-				if (centre.z > GantrySignRange || topLeft.z < 0.5f || topRight.z < 0.5f || bottomLeft.z < 0.5f) {
-					continue;
-				}
-				// Screen pixels, top down, as IMGUI counts them.
-				Vector2 tl = new Vector2(topLeft.x, Screen.height - topLeft.y);
-				Vector2 across = new Vector2(topRight.x, Screen.height - topRight.y) - tl;
-				Vector2 down = new Vector2(bottomLeft.x, Screen.height - bottomLeft.y) - tl;
-				if (across.magnitude < 24f) {
-					continue;
-				}
-				// The picture's square (100 x 100) mapped onto the sign's corners.
-				var onSign = Matrix4x4.identity;
-				onSign.SetColumn(0, new Vector4(across.x / 100f, across.y / 100f, 0f, 0f));
-				onSign.SetColumn(1, new Vector4(down.x / 100f, down.y / 100f, 0f, 0f));
-				onSign.SetColumn(3, new Vector4(tl.x, tl.y, 0f, 1f));
-				GUI.matrix = onSign;
-				GUI.color = new Color(1f, 1f, 1f, Mathf.Clamp01((GantrySignRange - centre.z) / (GantrySignRange - GantrySignFade)));
-				GUI.DrawTexture(new Rect(0f, 0f, 100f, 100f), gantry.Texture, ScaleMode.StretchToFill);
-			}
-			GUI.matrix = matrix;
-			GUI.color = before;
-		}
-
-		/// <summary>Gantry signs show within this many metres of the camera, fully from <see cref="GantrySignFade"/> in.</summary>
-		private const float GantrySignRange = 140f;
-		private const float GantrySignFade = 100f;
-
 		// ---- Icons on CarX's minimap and big map (bskftw, Nov 3) ----
 
 		private const string MapIconsPref = "map_icons";
@@ -1507,9 +1452,9 @@ namespace TRC.TuneLoader {
 					course = CoursesHere().FirstOrDefault(c => c.Code == open);
 				}
 				if (course != null && course.MapKey == map_.Key && course.Start != null) {
-					mapIcons_.Add(new MapIcon { Position = course.Start.Center, Color = MapStart, Size = 22 });
+					mapIcons_.Add(new MapIcon { Position = course.Start.Center, Color = MapStart, Size = 22, Shape = MapIconShape.Line, Heading = course.Start.Forward });
 					if (!course.IsCircuit && course.Finish != null) {
-						mapIcons_.Add(new MapIcon { Position = course.Finish.Center, Color = MapFinish, Size = 22 });
+						mapIcons_.Add(new MapIcon { Position = course.Finish.Center, Color = MapFinish, Size = 22, Shape = MapIconShape.Line, Heading = course.Finish.Forward });
 					}
 					if (course.HasPath) {
 						for (int i = 0; i < course.SectorEnds.Length - 1; i++) {
@@ -1518,12 +1463,12 @@ namespace TRC.TuneLoader {
 						}
 					}
 					foreach (CourseGate trap in course.Traps) {
-						mapIcons_.Add(new MapIcon { Position = trap.Center, Color = MapTrap, Size = 12 });
+						mapIcons_.Add(new MapIcon { Position = trap.Center, Color = MapTrap, Size = 16, Shape = MapIconShape.Camera });
 					}
 				}
 				if (freeRoamTraps_) {
 					foreach (SpeedTrap trap in mapTraps_) {
-						mapIcons_.Add(new MapIcon { Position = trap.Gate.Center, Color = MapTrap, Size = 12 });
+						mapIcons_.Add(new MapIcon { Position = trap.Gate.Center, Color = MapTrap, Size = 16, Shape = MapIconShape.Camera });
 					}
 				}
 			}

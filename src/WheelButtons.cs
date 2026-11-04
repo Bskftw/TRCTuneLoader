@@ -40,6 +40,7 @@ namespace TRC.TuneLoader {
 		private PropertyInfo name_;
 		private PropertyInfo buttonCount_;
 		private MethodInfo getButton_;
+		private PropertyInfo buttons_;
 		private bool looked_;
 		private bool failed_;
 		private readonly Dictionary<string, bool[]> held_ = new Dictionary<string, bool[]>(StringComparer.Ordinal);
@@ -52,6 +53,9 @@ namespace TRC.TuneLoader {
 
 		/// <summary>Device names Rewired sees now (for Options).</summary>
 		public List<string> Devices { get; } = new List<string>();
+
+		/// <summary>Each device's button names as Rewired knows them ("A", "D-Pad Up"...), by button number; empty when unknown.</summary>
+		public Dictionary<string, string[]> ButtonNames { get; } = new Dictionary<string, string[]>(StringComparer.Ordinal);
 
 		private void Find() {
 			looked_ = true;
@@ -75,6 +79,7 @@ namespace TRC.TuneLoader {
 				name_ = controller?.GetProperty("name");
 				buttonCount_ = controller?.GetProperty("buttonCount");
 				getButton_ = joystick?.GetMethod("GetButton", new[] { typeof(int) });
+				buttons_ = controller?.GetProperty("Buttons");
 				if (isReady_ == null || joysticks_ == null || name_ == null || buttonCount_ == null || getButton_ == null) {
 					Problem = "CarX's controller library changed: wheel buttons can't be read.";
 					failed_ = true;
@@ -114,6 +119,7 @@ namespace TRC.TuneLoader {
 					if (!held_.TryGetValue(device, out bool[] was) || was.Length != count) {
 						was = new bool[count];
 						held_[device] = was;
+						ButtonNames[device] = NamesOf(stick, count);
 						// First look at this device: buttons already held don't count as presses.
 						for (int i = 0; i < count; i++) {
 							args[0] = i;
@@ -134,6 +140,82 @@ namespace TRC.TuneLoader {
 				Problem = $"Wheel buttons stopped working: {e.Message}";
 				failed_ = true;
 				TrcLog.Warning(Problem);
+			}
+		}
+
+		private string[] NamesOf(object stick, int count) {
+			var names = new string[count];
+			try {
+				if (buttons_?.GetValue(stick, null) is IList buttons) {
+					for (int i = 0; i < count && i < buttons.Count; i++) {
+						object id = buttons[i]?.GetType().GetProperty("elementIdentifier")?.GetValue(buttons[i], null);
+						names[i] = id?.GetType().GetProperty("name")?.GetValue(id, null) as string ?? "";
+					}
+				}
+			} catch (Exception) {
+				// Without names, the menu's controller buttons can still be picked by pressing them (Options).
+			}
+			for (int i = 0; i < count; i++) {
+				names[i] = names[i] ?? "";
+			}
+			return names;
+		}
+
+		// ---- Keeping the car still while the menu is open ----
+
+		private readonly List<object> mapsTurnedOff_ = new List<object>();
+
+		/// <summary>
+		/// Turns CarX's controller maps for pads, wheels and joysticks off (false) while the mod's menu has the pad, so
+		/// the car doesn't steer or drive from the same buttons, and back on (true): only the ones this turned off. It
+		/// only changes which of CarX's own maps are on, on this PC. Returns false when Rewired can't be asked.
+		/// </summary>
+		public bool SetDriving(bool on) {
+			if (!looked_) {
+				Find();
+			}
+			if (failed_) {
+				return false;
+			}
+			try {
+				if (on) {
+					foreach (object map in mapsTurnedOff_) {
+						map?.GetType().GetProperty("enabled")?.SetValue(map, true, null);
+					}
+					mapsTurnedOff_.Clear();
+					return true;
+				}
+				if (mapsTurnedOff_.Count > 0) {
+					return true;
+				}
+				object players = reInput_.GetProperty("players", BindingFlags.Public | BindingFlags.Static)?.GetValue(null, null);
+				if (!(players?.GetType().GetProperty("AllPlayers")?.GetValue(players, null) is IList all)) {
+					return false;
+				}
+				Type controllerType = reInput_.Assembly.GetType("Rewired.ControllerType", false);
+				if (controllerType == null) {
+					return false;
+				}
+				object joystick = Enum.Parse(controllerType, "Joystick");
+				foreach (object player in all) {
+					object controllers = player?.GetType().GetField("controllers")?.GetValue(player);
+					object maps = controllers?.GetType().GetField("maps")?.GetValue(controllers);
+					MethodInfo getAll = maps?.GetType().GetMethod("GetAllMaps", new[] { controllerType });
+					if (!(getAll?.Invoke(maps, new[] { joystick }) is IEnumerable list)) {
+						continue;
+					}
+					foreach (object map in list) {
+						PropertyInfo enabled = map?.GetType().GetProperty("enabled");
+						if (enabled != null && enabled.GetValue(map, null) is bool isOn && isOn) {
+							enabled.SetValue(map, false, null);
+							mapsTurnedOff_.Add(map);
+						}
+					}
+				}
+				return true;
+			} catch (Exception e) {
+				TrcLog.Warning($"Couldn't {(on ? "give the controller back to CarX" : "keep the car still while the menu is open")}: {e.Message}");
+				return false;
 			}
 		}
 

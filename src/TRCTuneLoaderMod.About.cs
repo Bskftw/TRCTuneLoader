@@ -21,7 +21,7 @@ namespace TRC.TuneLoader {
 			GUILayout.Label("TRC, the TRC tunes and Project Dream", Theme.Heading);
 			DrawLines(ref aboutScroll_, aboutLines_);
 			GUILayout.BeginHorizontal();
-			if (GUILayout.Button("Mod page on GitHub", Theme.Button)) {
+			if (NavButton("Mod page on GitHub", Theme.Button)) {
 				Application.OpenURL(ModPage);
 			}
 			GUILayout.FlexibleSpace();

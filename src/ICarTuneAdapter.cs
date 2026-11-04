@@ -5,12 +5,24 @@ using UnityEngine;
 namespace TRC.TuneLoader {
 	/// <summary>Where the player's car is and how fast it goes, while driving.</summary>
 	/// <summary>Nov 3: an icon on CarX's minimap and big map (a start, finish, sector or speed trap).</summary>
+	public enum MapIconShape {
+		Dot,
+		/// <summary>A bar across the road (start and finish lines), turned to <see cref="MapIcon.Heading"/>.</summary>
+		Line,
+		/// <summary>A little camera (speed traps).</summary>
+		Camera,
+	}
+
 	public struct MapIcon {
 		public Vector3 Position;
 		public Color Color;
 
 		/// <summary>In the map's pixels.</summary>
 		public int Size;
+		public MapIconShape Shape;
+
+		/// <summary>The way you drive through it (lines); zero for none.</summary>
+		public Vector3 Heading;
 	}
 
 	public struct CarPose {

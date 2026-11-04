@@ -15,23 +15,6 @@ namespace TRC.TuneLoader {
 	/// ledger (EventLedger) fed from runs, battles and races.
 	/// </summary>
 	public partial class TRCTuneLoaderMod {
-		/// <summary>Home's Go to: the tools row's colour (teal, like the suspension logger).</summary>
-		private const string ToolsHex = "#40BAC4";
-
-		/// <summary>One group of Home's Go to: the part's name in its colour, its buttons under it (so it never needs to scroll sideways).</summary>
-		private static void GoToRow(string name, string hex, params (string Label, Action Go)[] buttons) {
-			GUILayout.Label($"<b><color={hex}>{name}</color></b>", Theme.Body);
-			GUILayout.BeginHorizontal();
-			GUILayout.Space(10);
-			foreach (var (label, go) in buttons) {
-				if (GUILayout.Button(label, Theme.Button)) {
-					go();
-				}
-			}
-			GUILayout.FlexibleSpace();
-			GUILayout.EndHorizontal();
-		}
-
 		private void OpenTab(int tab) {
 			tab_ = tab;
 			OnTabOpened(tab);
@@ -42,15 +25,15 @@ namespace TRC.TuneLoader {
 		private const string WheelWindowPref = "wheel_window";
 
 		/// <summary>Raise with each version that has news worth a pop-up.</summary>
-		private const string WhatsNewVersion = "0.16.1";
+		private const string WhatsNewVersion = "0.17.0";
 
 		private static readonly string[] WhatsNewLines = {
-			"<b>Gantries</b> at the start, finish and every sector: the start's lamps light with 3, 2, 1, GO, checkpoints show how far ahead of or behind your PB you are, and the finish shows STAGE CLEAR with your time, top speed and rank. FINISH shows on screen too.",
-			"<b>Map icons</b>: the start, finish, sectors and speed traps on CarX's minimap and map, for the course you're driving or the track open in Tracks.",
-			"<b>Time attack rules</b>: TRC spec, Open or one of your regulations, each with its own times. A <b>sector pop-up</b> shows each sector's time and gap to your PB.",
-			"<b>Random speed traps</b> on any track (pick how many), signs that can show your fastest ever, and every catch saved with the car and the rules.",
-			"<b>Single file</b> on narrow roads (each clock starts at the line), cars closer together side by side, and circuit races line up round the last corner.",
-			"<b>Smoother</b> on maps with lots of tracks: Tracks, Races and 1v1 no longer lag, and the path shows as chevrons you can see uphill. Regulations' power to weight is now a most in hp per kg.",
+			"<b>A new menu</b>: Home is a card for each part (TRC spec, Specs, Time attack, Battles, Free roam). Inside, the parts are across the top and their pages down the left; the logo brings you back.",
+			"<b>Controller</b>: the D-pad moves between buttons, A presses, B goes back, LB and RB change part, and the car keeps still while the menu has the pad.",
+			"<b>Specs</b>: make your own spec, a tune for each car like TRC's V1, V2, V3 and Revival. Share it as a zip, install other players' specs, race to one with a regulation, or drive time attacks to it.",
+			"<b>Manual sectors</b>: set where each sector ends on any sprint or circuit (Tracks, Sectors). They replace the automatic ones and go with your course when you share it.",
+			"<b>Start key</b> (Ctrl + G): starts a time attack on the track open in Tracks and puts you on its line. An open track shows its best, theoretical best and runs.",
+			"<b>Fixes</b>: gantry signs don't stretch up close, circuits don't get a wrong path note, and on the map the start and finish are lines and speed traps a camera.",
 		};
 
 		private readonly RoomSync roomSync_ = new RoomSync();
@@ -313,14 +296,14 @@ namespace TRC.TuneLoader {
 				GUILayout.FlexibleSpace();
 				bool enabled = GUI.enabled;
 				if (s.OpenRaceId != 0 && openRaces_.TryGetValue(s.OpenRaceId, out var open) && race_ == null) {
-					if (GUILayout.Button("Join", Theme.ButtonPrimary)) {
+					if (NavButton("Join", Theme.ButtonPrimary)) {
 						JoinRace(open.Lobby);
 						GoToBattle(SectionFor(open.Lobby));
 					}
 				}
 				bool canBattle = RoomBoard.Free(s) && System.Version.TryParse(s.Version, out System.Version theirs) && theirs >= BattleVersion;
 				GUI.enabled = enabled && canBattle && (battle_ == null || !battle_.Active) && !InRace;
-				if (GUILayout.Button("Challenge", Theme.Button)) {
+				if (NavButton("Challenge", Theme.Button)) {
 					pickedOpponent_ = s.From;
 					GoToBattle(0);
 				}
@@ -372,11 +355,11 @@ namespace TRC.TuneLoader {
 				GUILayout.FlexibleSpace();
 				bool enabled = GUI.enabled;
 				GUI.enabled = enabled && !have;
-				if (GUILayout.Button(have ? "Saved" : "Save", Theme.ButtonPrimary)) {
+				if (NavButton(have ? "Saved" : "Save", Theme.ButtonPrimary)) {
 					SaveSharedCourse(shared);
 				}
 				GUI.enabled = enabled;
-				if (GUILayout.Button("Dismiss", Theme.Button)) {
+				if (NavButton("Dismiss", Theme.Button)) {
 					roomBoard_.SharedCourses.Remove(shared);
 				}
 				GUILayout.EndHorizontal();
@@ -476,6 +459,10 @@ namespace TRC.TuneLoader {
 				RestartFromKey();
 				return;
 			}
+			if (!InBattle && !InRace && TrackToStart() != null) {
+				StartFromKey();
+				return;
+			}
 			ShowNotice("Nothing for the TRC button to do right now.", 2f);
 		}
 
@@ -505,7 +492,7 @@ namespace TRC.TuneLoader {
 				GUILayout.BeginHorizontal();
 				GUILayout.Label($"<b>{label}</b>  <color={Theme.MutedHex}>{(capturingWheel_ == which ? "press a button on your wheel or controller…" : binding.ToString())}</color>", Theme.Body);
 				GUILayout.FlexibleSpace();
-				if (GUILayout.Button(capturingWheel_ == which ? "Cancel" : "Pick a button", Theme.Button)) {
+				if (NavButton(capturingWheel_ == which ? "Cancel" : "Pick a button", Theme.Button)) {
 					if (capturingWheel_ == which) {
 						capturingWheel_ = 0;
 					} else {
@@ -515,7 +502,7 @@ namespace TRC.TuneLoader {
 						optionsResult_ = "";
 					}
 				}
-				if (binding.IsSet && GUILayout.Button("Clear", Theme.Button)) {
+				if (binding.IsSet && NavButton("Clear", Theme.Button)) {
 					binding = WheelButtons.Binding.None;
 					SavePref(pref, "");
 				}
@@ -528,6 +515,8 @@ namespace TRC.TuneLoader {
 			} else if (capturingWheel_ != 0 && wheel_.Devices.Count == 0) {
 				GUILayout.Label("CarX doesn't see a wheel or controller right now.", Theme.Small);
 			}
+			GUILayout.Space(6);
+			DrawPadOptions();
 			GUILayout.EndVertical();
 		}
 
@@ -540,10 +529,10 @@ namespace TRC.TuneLoader {
 				"what you were doing, your options and your mods. Send it to bskftw on Discord. It has the names of players you raced, and no tune values of anyone.", Theme.Small);
 			bugNote_ = GUILayout.TextArea(bugNote_ ?? "", 1000, Theme.Field, GUILayout.MinHeight(48));
 			GUILayout.BeginHorizontal();
-			if (GUILayout.Button("Make a bug report", Theme.ButtonPrimary)) {
+			if (NavButton("Make a bug report", Theme.ButtonPrimary)) {
 				MakeBugReport();
 			}
-			if (lastBugReport_.Length > 0 && GUILayout.Button("Show the file", Theme.Button)) {
+			if (lastBugReport_.Length > 0 && NavButton("Show the file", Theme.Button)) {
 				try {
 					Application.OpenURL("file:///" + (Path.GetDirectoryName(lastBugReport_) ?? "").Replace('\\', '/'));
 				} catch (Exception e) {
@@ -669,10 +658,10 @@ namespace TRC.TuneLoader {
 					GUILayout.Label($"• {line}", Theme.Body);
 				}
 				GUILayout.BeginHorizontal();
-				if (GUILayout.Button("Got it", Theme.ButtonPrimary)) {
+				if (NavButton("Got it", Theme.ButtonPrimary)) {
 					DismissWhatsNew();
 				}
-				if (GUILayout.Button("Take the new tour", Theme.Button)) {
+				if (NavButton("Take the new tour", Theme.Button)) {
 					DismissWhatsNew();
 					StartTour();
 				}
@@ -684,36 +673,9 @@ namespace TRC.TuneLoader {
 				GUILayout.Label(homeResult_, Theme.Body);
 			}
 
-			GUILayout.Label("Right now", Theme.SectionLabel);
-			GUILayout.Label(map_ == null ? "Not on a map." : $"On <b>{map_.Name}</b>{(car_ != null ? $" in the {car_.CarName}" : "")}", Theme.Body);
-			DrawStatusPill(carStatus_);
-
-			// The parts of the mod, in their colours, and the tools (bskftw, Nov 3: with everything new, organised).
-			GUILayout.Label("Go to", Theme.SectionLabel);
-			GUILayout.BeginVertical(Theme.Card);
-			GoToRow(Theme.Pillars[0], Theme.PillarHex[0],
-				("Put a TRC tune on", () => OpenTab(MyCarTab)),
-				("Tune sets", () => OpenTab(TuneSetsTab)),
-				("Regulations", () => OpenTab(RegulationsTab)),
-				("Players here", () => OpenTab(PlayersTab)));
-			GoToRow(Theme.Pillars[1], Theme.PillarHex[1],
-				("Tracks", () => GoToTimeAttack(0)),
-				("My times", () => { timesView_ = 0; GoToTimeAttack(2); }),
-				("Make a course", () => GoToTimeAttack(3)));
-			GoToRow(Theme.Pillars[2], Theme.PillarHex[2],
-				("1v1 battle", () => GoToBattle(0)),
-				("Races", () => GoToBattle(RacesSection)),
-				("Tournaments", () => GoToBattle(TournamentsSection)));
-			GoToRow(Theme.Pillars[3], Theme.PillarHex[3],
-				("Speed traps", () => GoToTimeAttack(1)),
-				("Fun games", () => GoToBattle(GamesSection)),
-				("My ratings", () => GoToBattle(RatingsSection)));
-			GoToRow("Tools & settings", ToolsHex,
-				("Suspension logger", () => OpenTab(SuspensionTab)),
-				("Mod check", () => OpenTab(ModCheckTab)),
-				("Arrange the screen", StartArranging),
-				("Options", () => OpenTab(OptionsTab)));
-			GUILayout.EndVertical();
+			// A card for each part of the mod, in its colour (bskftw, Nov 3: the "hub tiles" picture).
+			DrawHomeCards();
+			GUILayout.Space(6);
 
 			// What's waiting: challenges and open races.
 			List<RaceMessage> races = race_ == null ? openRaces_.Values.Select(v => v.Lobby).Where(l => l.Phase == RacePhase.Lobby || l.Phase == RacePhase.Finished).ToList() : new List<RaceMessage>();
@@ -724,7 +686,7 @@ namespace TRC.TuneLoader {
 					GUILayout.BeginHorizontal();
 					GUILayout.Label($"<b>{BattleMessage.PlainName(challenge.FromName)} challenges you</b>  <color={Theme.MutedHex}>{BattleFormats[(int)challenge.Format]}</color>", Theme.Body);
 					GUILayout.FlexibleSpace();
-					if (GUILayout.Button("Answer", Theme.ButtonPrimary)) {
+					if (NavButton("Answer", Theme.ButtonPrimary)) {
 						GoToBattle(0);
 					}
 					GUILayout.EndHorizontal();
@@ -737,7 +699,7 @@ namespace TRC.TuneLoader {
 					GUILayout.FlexibleSpace();
 					bool enabled = GUI.enabled;
 					GUI.enabled = enabled && lobby.Entries.Count < lobby.Settings.MaxPlayers;
-					if (GUILayout.Button("Join", Theme.ButtonPrimary)) {
+					if (NavButton("Join", Theme.ButtonPrimary)) {
 						JoinRace(lobby);
 						GoToBattle(SectionFor(lobby));
 					}
@@ -749,8 +711,10 @@ namespace TRC.TuneLoader {
 
 			DrawRoomBoard();
 			DrawSharedCourses();
-			DrawBugReport();
 			GUILayout.EndScrollView();
+			DividerLine();
+			GUILayout.Space(4);
+			DrawToolsRow();
 		}
 	}
 }

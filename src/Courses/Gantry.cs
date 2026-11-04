@@ -36,9 +36,9 @@ namespace TRC.TuneLoader {
 	/// (a plinth, a pillar with neon edges and three chevrons pointing up, a diamond light on top) and a truss beam
 	/// across with a neon strip. Real objects without colliders, like the old lines.
 	///
-	/// The sign (painted by <see cref="SignPages"/>) isn't part of the model: the mod draws it over the screen where the
-	/// beam is, in front of trees and other signs, and keeps it in view at the top of the screen when the car is close
-	/// (bskftw, Nov 2: "cant even see it when up close", "have it show in front of objects").
+	/// The sign (painted by <see cref="SignPages"/>) is two panels on the beam, one facing each way. Until Nov 3 it was
+	/// drawn over the screen so trees couldn't hide it, but it couldn't be seen from the far side and broke into moving
+	/// squares; bskftw: "just fixed to the poles and not worry about rendering it in front of things".
 	/// </summary>
 	public sealed class Gantry {
 		private const float TowerHeight = 5.6f;
@@ -63,12 +63,13 @@ namespace TRC.TuneLoader {
 		public Vector3 SignBottomLeft => SignCentre - Gate.Right * (SignWidth / 2f) - Vector3.up * (SignHeight / 2f);
 		public float SignHeight => SignWidth * SignPages.Height / SignPages.Width;
 
-		/// <summary>The sign's picture, for drawing it over the screen.</summary>
+		/// <summary>The sign's picture, on the two panels on the beam.</summary>
 		public Texture2D Texture => texture_;
 
 		private readonly SignPainter painter_;
 		private readonly Texture2D texture_;
 		private readonly Material glowMaterial_;
+		private Material signMaterial_;
 		private Texture2D bannerTexture_;
 		private Material bannerMaterial_;
 		private GantrySign shown_;
@@ -113,8 +114,8 @@ namespace TRC.TuneLoader {
 			if (glow == null) {
 				return null;
 			}
-			var texture = new Texture2D(SignPages.Width, SignPages.Height, TextureFormat.RGBA32, false) {
-				name = name, hideFlags = HideFlags.DontSave, filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp,
+			var texture = new Texture2D(SignPages.Width, SignPages.Height, TextureFormat.RGBA32, true) {
+				name = name, hideFlags = HideFlags.DontSave, filterMode = FilterMode.Trilinear, anisoLevel = 4, wrapMode = TextureWrapMode.Clamp,
 			};
 
 			var root = new GameObject(name) { hideFlags = HideFlags.DontSave };
@@ -175,6 +176,7 @@ namespace TRC.TuneLoader {
 
 			float signWidth = Mathf.Clamp(span * 0.55f, 3f, 6.5f);
 			var gantry = new Gantry(gate, root, texture, glow, Across(0f, (topBar + bottomBar) / 2f), signWidth);
+			gantry.AddSignPanels(makeMaterial);
 			if (banner != null) {
 				gantry.AddBanners(banner, feet, topY, back, facing, makeMaterial);
 			}
@@ -199,6 +201,33 @@ namespace TRC.TuneLoader {
 			// Never right up against the beam: at least a short tower on a bank as high as the road's gantry.
 			ground.y = Mathf.Min(ground.y, fromY - 0.6f);
 			return ground;
+		}
+
+		/// <summary>
+		/// The sign as two panels hung on the beam, one facing each way, so it reads from both sides (bskftw, Nov 3: drawn
+		/// over the screen it couldn't be seen from the far side, and broke into squares that moved with the camera).
+		/// Part of the model: fixed to the gantry, and trees can hide it like the towers.
+		/// </summary>
+		private void AddSignPanels(Func<Color, Texture, Material> makeMaterial) {
+			signMaterial_ = makeMaterial(Color.white, texture_);
+			if (signMaterial_ == null) {
+				return;
+			}
+			float clear = BarSize / 2f + 0.04f;
+			foreach (bool front in new[] { true, false }) {
+				// A quad shows its face to whoever looks along its blue arrow: the front panel to cars coming towards the
+				// gantry, the back one (turned round, so it isn't mirrored) to cars coming the other way.
+				Vector3 forward = front ? Gate.Forward : -Gate.Forward;
+				GameObject quad = GameObject.CreatePrimitive(PrimitiveType.Quad);
+				UnityEngine.Object.DestroyImmediate(quad.GetComponent<Collider>());
+				quad.name = front ? "sign" : "sign back";
+				quad.hideFlags = HideFlags.DontSave;
+				quad.transform.SetParent(Root.transform, false);
+				quad.transform.position = SignCentre - forward * clear;
+				quad.transform.rotation = Quaternion.LookRotation(forward, Vector3.up);
+				quad.transform.localScale = new Vector3(SignWidth, SignHeight, 1f);
+				SetUp(quad.GetComponent<MeshRenderer>(), signMaterial_);
+			}
 		}
 
 		/// <summary>
@@ -259,13 +288,16 @@ namespace TRC.TuneLoader {
 					break;
 			}
 			texture_.SetPixels32(painter_.BottomUp());
-			texture_.Apply(false);
+			texture_.Apply(true);
 		}
 
 		public void Destroy() {
 			UnityEngine.Object.Destroy(Root);
 			UnityEngine.Object.Destroy(texture_);
 			UnityEngine.Object.Destroy(glowMaterial_);
+			if (signMaterial_ != null) {
+				UnityEngine.Object.Destroy(signMaterial_);
+			}
 			if (bannerTexture_ != null) {
 				UnityEngine.Object.Destroy(bannerTexture_);
 			}

@@ -238,7 +238,7 @@ namespace TRC.TuneLoader {
 			int count = SavedGhostsFor(course.Code).Count + roomBoard_.SharedRuns.Count(r => r.Ghost.CourseCode == course.Code) +
 				(lastGhost_ != null && lastGhost_.CourseCode == course.Code && lastGhost_.FilePath.Length == 0 ? 1 : 0);
 			string label = racingGhost_ != null && racingGhost_.CourseCode == course.Code ? "Ghost on" : count > 0 ? $"Ghosts ({count})" : "Ghosts";
-			if (GUILayout.Button(ghostsOpenFor_ == course.Code ? "Hide ghosts" : label, Theme.Button)) {
+			if (NavButton(ghostsOpenFor_ == course.Code ? "Hide ghosts" : label, Theme.Button)) {
 				ghostsOpenFor_ = ghostsOpenFor_ == course.Code ? "" : course.Code;
 			}
 		}
@@ -256,7 +256,7 @@ namespace TRC.TuneLoader {
 				GUILayout.BeginHorizontal();
 				GUILayout.Label($"Racing: {racingGhost_.Title}", Theme.PillGood);
 				GUILayout.FlexibleSpace();
-				if (GUILayout.Button("Ghost off", Theme.Button)) {
+				if (NavButton("Ghost off", Theme.Button)) {
 					StopGhost();
 				}
 				GUILayout.EndHorizontal();
@@ -279,34 +279,34 @@ namespace TRC.TuneLoader {
 				GUILayout.FlexibleSpace();
 				bool enabled = GUI.enabled;
 				GUI.enabled = enabled && course.Usable && hasPose_ && !InRace && !InBattle;
-				if (GUILayout.Button("Race it", Theme.ButtonPrimary)) {
+				if (NavButton("Race it", Theme.ButtonPrimary)) {
 					RaceGhost(ghost, course);
 				}
 				GUI.enabled = enabled;
-				if (ghost.FilePath.Length == 0 && GUILayout.Button("Save", Theme.Button)) {
+				if (ghost.FilePath.Length == 0 && NavButton("Save", Theme.Button)) {
 					SaveGhost(ghost);
 					if (shared != null) {
 						roomBoard_.SharedRuns.Remove(shared);
 					}
 				}
-				if (GUILayout.Button(sharingGhost_ == ghost ? "Done" : "Share...", Theme.Button)) {
+				if (NavButton(sharingGhost_ == ghost ? "Done" : "Share...", Theme.Button)) {
 					sharingGhost_ = sharingGhost_ == ghost ? null : ghost;
 				}
-				if (shared != null && GUILayout.Button("Dismiss", Theme.Button)) {
+				if (shared != null && NavButton("Dismiss", Theme.Button)) {
 					roomBoard_.SharedRuns.Remove(shared);
 				}
-				if (GUILayout.Button(renamingGhost_ == ghost ? "Cancel" : "Name", Theme.Button)) {
+				if (NavButton(renamingGhost_ == ghost ? "Cancel" : "Name", Theme.Button)) {
 					renamingGhost_ = renamingGhost_ == ghost ? null : ghost;
 					ghostName_ = ghost.Name;
 				}
-				if (ghost.FilePath.Length > 0 && GUILayout.Button("Delete", Theme.Button)) {
+				if (ghost.FilePath.Length > 0 && NavButton("Delete", Theme.Button)) {
 					DeleteGhost(ghost);
 				}
 				GUILayout.EndHorizontal();
 				if (renamingGhost_ == ghost) {
 					GUILayout.BeginHorizontal();
 					ghostName_ = GUILayout.TextField(ghostName_ ?? "", 60, Theme.Field, GUILayout.Width(260));
-					if (GUILayout.Button(ghost.FilePath.Length > 0 ? "Save name" : "Save with this name", Theme.ButtonPrimary)) {
+					if (NavButton(ghost.FilePath.Length > 0 ? "Save name" : "Save with this name", Theme.ButtonPrimary)) {
 						ghost.Name = ghostName_.Trim();
 						SaveGhost(ghost);
 						renamingGhost_ = null;
@@ -355,7 +355,7 @@ namespace TRC.TuneLoader {
 			bool enabled = GUI.enabled;
 			GUI.enabled = enabled && roomSync_.IsAvailable;
 			string target = shareGhostTo_ == 0 ? "the room" : who[picked];
-			if (GUILayout.Button($"Send to {target}", Theme.ButtonPrimary)) {
+			if (NavButton($"Send to {target}", Theme.ButtonPrimary)) {
 				byte[] bytes = ghost.Encode();
 				if (bytes.Length > Ghost.MaxBytes) {
 					courseResult_ = $"That run is too long to share ({bytes.Length / 1024} KB, {Ghost.MaxBytes / 1024} KB at most).";
@@ -390,11 +390,11 @@ namespace TRC.TuneLoader {
 				GUILayout.BeginHorizontal();
 				GUILayout.Label($"<b>{TimeAttackRun.FormatTime(item.Ghost.Time)}</b> {item.Ghost.Driver} on {item.Ghost.CourseName}  <color={Theme.MutedHex}>{(item.MapName.Length > 0 ? item.MapName : item.MapKey)}</color>", Theme.Small);
 				GUILayout.FlexibleSpace();
-				if (GUILayout.Button("Save", Theme.Button)) {
+				if (NavButton("Save", Theme.Button)) {
 					SaveGhost(item.Ghost);
 					roomBoard_.SharedRuns.Remove(item);
 				}
-				if (GUILayout.Button("Dismiss", Theme.Button)) {
+				if (NavButton("Dismiss", Theme.Button)) {
 					roomBoard_.SharedRuns.Remove(item);
 				}
 				GUILayout.EndHorizontal();

@@ -82,6 +82,8 @@ namespace TRC.TuneLoader {
 			try {
 				shortcut_ = Shortcut.Parse(Kino.Prefs.Get(ShortcutPref, Shortcut.Default.Save()));
 				restartShortcut_ = Shortcut.Parse(Kino.Prefs.Get(RestartPref, Shortcut.RestartDefault.Save()), Shortcut.RestartDefault);
+				LoadPadOptions();
+				startShortcut_ = Shortcut.Parse(Kino.Prefs.Get(StartKeyPref, Shortcut.StartDefault.Save()), Shortcut.StartDefault);
 				tourSeen_ = Kino.Prefs.Get(TourPref, 0) >= 1;
 				float scale = Kino.Prefs.Get(WindowScalePref, 1f);
 				windowScale_ = WindowScales.OrderBy(s => Math.Abs(s - scale)).First();
@@ -126,6 +128,9 @@ namespace TRC.TuneLoader {
 		/// <summary>Called from OnGUI for every event: opens or closes the window, or records a new shortcut in Options.</summary>
 		private void HandleShortcutEvent(Event e) {
 			if (e == null) {
+				return;
+			}
+			if (HandleStartKey(e)) {
 				return;
 			}
 			if (e.type == EventType.KeyUp && e.keyCode == shortcut_.Key) {
@@ -192,6 +197,7 @@ namespace TRC.TuneLoader {
 			// A key released while the game was in the background never sends its key-up.
 			shortcutDown_ = false;
 			restartDown_ = false;
+			startDown_ = false;
 		}
 
 		private void SetRestartShortcut(Shortcut shortcut) {
@@ -256,17 +262,17 @@ namespace TRC.TuneLoader {
 				: $"Open or close this window with <b>{shortcut_}</b>.", Theme.Body);
 			GUILayout.BeginHorizontal();
 			if (capturingShortcut_) {
-				if (GUILayout.Button("Cancel", Theme.Button)) {
+				if (NavButton("Cancel", Theme.Button)) {
 					capturingShortcut_ = false;
 					optionsResult_ = "Shortcut not changed.";
 				}
 			} else {
-				if (GUILayout.Button("Change shortcut", Theme.ButtonPrimary)) {
+				if (NavButton("Change shortcut", Theme.ButtonPrimary)) {
 					capturingShortcut_ = true;
 					capturingRestart_ = false;
 					optionsResult_ = "";
 				}
-				if (!shortcut_.SameAs(Shortcut.Default) && GUILayout.Button($"Reset to {Shortcut.Default}", Theme.Button)) {
+				if (!shortcut_.SameAs(Shortcut.Default) && NavButton($"Reset to {Shortcut.Default}", Theme.Button)) {
 					SetShortcut(Shortcut.Default);
 				}
 			}
@@ -278,22 +284,23 @@ namespace TRC.TuneLoader {
 				: $"During a time attack, <b>{restartShortcut_}</b> sends your car back to the start line, ready to go again.", Theme.Body);
 			GUILayout.BeginHorizontal();
 			if (capturingRestart_) {
-				if (GUILayout.Button("Cancel", Theme.Button)) {
+				if (NavButton("Cancel", Theme.Button)) {
 					capturingRestart_ = false;
 					optionsResult_ = "Restart key not changed.";
 				}
 			} else {
-				if (GUILayout.Button("Change restart key", Theme.Button)) {
+				if (NavButton("Change restart key", Theme.Button)) {
 					capturingRestart_ = true;
 					capturingShortcut_ = false;
 					optionsResult_ = "";
 				}
-				if (!restartShortcut_.SameAs(Shortcut.RestartDefault) && GUILayout.Button($"Reset to {Shortcut.RestartDefault}", Theme.Button)) {
+				if (!restartShortcut_.SameAs(Shortcut.RestartDefault) && NavButton($"Reset to {Shortcut.RestartDefault}", Theme.Button)) {
 					SetRestartShortcut(Shortcut.RestartDefault);
 				}
 			}
 			GUILayout.FlexibleSpace();
 			GUILayout.EndHorizontal();
+			DrawStartKeyOption();
 			if (!string.IsNullOrEmpty(optionsResult_)) {
 				GUILayout.Label(optionsResult_, Theme.Small);
 			}
@@ -360,6 +367,8 @@ namespace TRC.TuneLoader {
 				SavePref(SectorsPref, showSectors_);
 			}
 			GUILayout.Space(8);
+			DrawManualSectorsOption();
+			GUILayout.Space(8);
 			GUILayout.Label("<b>Best line</b>: during a time attack, where you drove on your best run (or best lap) in this car is drawn on the road: " +
 				"red where you were slowest, through amber and green to blue where you were fastest, or in one colour.", Theme.Body);
 			int lineMode = Choice(BestLineModes, bestLineMode_);
@@ -410,10 +419,10 @@ namespace TRC.TuneLoader {
 			GUILayout.Label("<b>Screen layout</b>: move the timer (time attacks, races and battles), the speed trap flash, pop-up notices, the TRC spec badge and the suspension overlay " +
 				"wherever you like, all at once, without starting anything first.", Theme.Body);
 			GUILayout.BeginHorizontal();
-			if (GUILayout.Button("Arrange the screen", Theme.ButtonPrimary)) {
+			if (NavButton("Arrange the screen", Theme.ButtonPrimary)) {
 				StartArranging();
 			}
-			if (GUILayout.Button("Put everything back", Theme.Button)) {
+			if (NavButton("Put everything back", Theme.Button)) {
 				ResetLayout();
 			}
 			GUILayout.FlexibleSpace();
@@ -435,14 +444,14 @@ namespace TRC.TuneLoader {
 			if (backupsKeep_ > 0) {
 				GUILayout.BeginHorizontal();
 				if (cleanupPending_ == null) {
-					if (GUILayout.Button("Clean up now", Theme.Button)) {
+					if (NavButton("Clean up now", Theme.Button)) {
 						FindOldBackups();
 					}
 				} else {
-					if (GUILayout.Button($"Delete {cleanupPending_.Count} old backup(s)", Theme.ButtonPrimary)) {
+					if (NavButton($"Delete {cleanupPending_.Count} old backup(s)", Theme.ButtonPrimary)) {
 						DeleteOldBackups();
 					}
-					if (GUILayout.Button("Cancel", Theme.Button)) {
+					if (NavButton("Cancel", Theme.Button)) {
 						cleanupPending_ = null;
 						backupOptionsResult_ = "Nothing was deleted.";
 					}
@@ -466,7 +475,7 @@ namespace TRC.TuneLoader {
 			GUILayout.BeginVertical(Theme.Card);
 			GUILayout.Label("A quick walk through every part of this window.", Theme.Body);
 			GUILayout.BeginHorizontal();
-			if (GUILayout.Button("Take the tour", Theme.Button)) {
+			if (NavButton("Take the tour", Theme.Button)) {
 				StartTour();
 			}
 			GUILayout.FlexibleSpace();
@@ -480,7 +489,7 @@ namespace TRC.TuneLoader {
 		private static int Choice(string[] labels, int picked) {
 			GUILayout.BeginHorizontal();
 			for (int i = 0; i < labels.Length; i++) {
-				if (GUILayout.Button(labels[i], i == picked ? Theme.ChipActive : Theme.Chip)) {
+				if (NavButton(labels[i], i == picked ? Theme.ChipActive : Theme.Chip)) {
 					picked = i;
 				}
 			}
@@ -494,7 +503,7 @@ namespace TRC.TuneLoader {
 			for (int start = 0; start < labels.Length; start += perRow) {
 				GUILayout.BeginHorizontal();
 				for (int i = start; i < labels.Length && i < start + perRow; i++) {
-					if (GUILayout.Button(labels[i], i == picked ? Theme.ChipActive : Theme.Chip)) {
+					if (NavButton(labels[i], i == picked ? Theme.ChipActive : Theme.Chip)) {
 						picked = i;
 					}
 				}
@@ -555,9 +564,10 @@ namespace TRC.TuneLoader {
 			},
 			new TourStep {
 				Title = "Home",
-				Text = "Home has a button to every part of the mod, anything waiting for you (a challenge, a race that just opened), and the room board: " +
-					"what every TRC Tune Loader player in the room is doing. Tick I'm up for a battle so others know, and challenge or join them in one click. " +
-					"Courses shared with the room show here too, ready to save, and Report a bug makes one zip with everything needed to fix a problem.",
+				Text = "Home has a card for each part of the mod: TRC spec, Specs, Time attack, Battles and Free roam. Click a card (or one of the buttons on it) to go in; " +
+					"inside, the parts are across the top and each one's pages are down the left, and the logo brings you back here. Under the cards is anything waiting for you " +
+					"and the room board: what every TRC Tune Loader player in the room is doing. The tools are along the bottom, with Report a bug. " +
+					"On a controller: the D-pad moves, A presses, B goes back, LB and RB change part.",
 				Tab = HomeTab,
 			},
 			new TourStep {
@@ -584,8 +594,14 @@ namespace TRC.TuneLoader {
 			new TourStep {
 				Title = "Tune sets, Players, Mod check",
 				Text = "Tune sets lists every official set built into the mod. Players checks every car in an online room. " +
-					"Mod check lists the mods KSL has loaded. Your own tunes are kept in Backups, beside the tune sets in My car, whenever a TRC tune replaces one.",
+					"Mod check (in Tools) lists the mods KSL has loaded. Your own tunes are kept in Backups, beside the tune sets in My car, whenever a TRC tune replaces one.",
 				Tab = PlayersTab,
+			},
+			new TourStep {
+				Title = "Specs and regulations",
+				Text = "Make your own spec: a tune for each car, like TRC's V1, V2, V3 and Revival sets. Save your car's tune into it, share it as a zip, and install other players' specs " +
+					"by dropping theirs in your specs folder. A regulation can require a spec, so you can race to it, and Time attack can be driven to one.",
+				Tab = SpecsTab,
 			},
 			new TourStep {
 				Title = "Time attack",
@@ -597,26 +613,26 @@ namespace TRC.TuneLoader {
 			new TourStep {
 				Title = "Speed traps",
 				Text = "Drive through a speed trap and your speed flashes up: purple for a new best, green close to it, amber slower, and its SPEED CHECK sign shows your last speed. " +
-					"Speed traps (in Time attack) lists the map's traps grouped by track; New speed trap places your own, with a name and a width. A course's Edit can add traps along it.",
+					"Speed traps (in Free roam) lists the map's traps grouped by track; New speed trap places your own, with a name and a width. A course's Edit can add traps along it.",
 				Tab = CoursesTab,
 			},
 			new TourStep {
 				Title = "Battles, races and fun games",
-				Text = "The Battles tab has 1v1 battles (side by side, cat and mouse, or a Tokyo Xtreme Racer style highway battle on SP), Races and Tournaments " +
+				Text = "Battles has 1v1 battles (side by side, cat and mouse, or a Tokyo Xtreme Racer style highway battle on SP), Races and Tournaments " +
 					"(qualifying, grids, points series, knockouts, heats, and speed trap races; console players can race too), and Fun games: cops and runners, tag, infected, king of the hill, keep-up, convoy and highway cut-up. " +
-					"Run any of them to TRC spec, a regulation (Regulations tab) or Open, and just for fun if you like. When it's over, Run it back plays it again.",
+					"Run any of them to TRC spec, a regulation (Specs, Regulations) or Open, and just for fun if you like. When it's over, Run it back plays it again.",
 				Tab = BattlesTab,
 			},
 			new TourStep {
 				Title = "My times and ratings",
-				Text = "My times (in Time attack) keeps your best times and laps for each car and tune set; you can delete times there. My ratings (in Battles) shows your Elo for touge, highway and circuit, " +
+				Text = "My times (in Time attack) keeps your best times and laps for each car and tune set; you can delete times there. My ratings (in Free roam) shows your Elo for touge, highway and circuit, " +
 					"your Safety Rating and your license. Ratings are still being tested and will be reset before they count. The Course builder makes your own courses.",
 				Tab = CoursesTab,
 			},
 			new TourStep {
 				Title = "Options",
-				Text = "Change the shortcut, the restart key, wheel or controller buttons, the window size, the colours and text size (Look), the badge and track check, sectors and best line, " +
-					"and how many backups to keep, or take this tour again. Report a bug is here too. See you on the touge!",
+				Text = $"Change the shortcut, the restart key, the start key ({startShortcut_}: starts the track open in Tracks), wheel or controller buttons, the window size, the colours and text size (Look), " +
+					"the badge and track check, sectors (and your own manual ones) and best line, and how many backups to keep, or take this tour again. Report a bug is in Tools. See you on the touge!",
 				Tab = OptionsTab,
 			},
 		};
@@ -681,14 +697,14 @@ namespace TRC.TuneLoader {
 			GUILayout.Label(step.Text, Theme.Body);
 			GUILayout.Space(4);
 			GUILayout.BeginHorizontal();
-			if (!last && GUILayout.Button("Skip tour", Theme.Button)) {
+			if (!last && NavButton("Skip tour", Theme.Button)) {
 				EndTour();
 			}
 			GUILayout.FlexibleSpace();
-			if (tourStep_ > 0 && GUILayout.Button("Back", Theme.Button)) {
+			if (tourStep_ > 0 && NavButton("Back", Theme.Button)) {
 				GoToTourStep(tourStep_ - 1);
 			}
-			if (GUILayout.Button(last ? "Finish" : "Next", Theme.ButtonPrimary)) {
+			if (NavButton(last ? "Finish" : "Next", Theme.ButtonPrimary)) {
 				if (last) {
 					EndTour();
 				} else {

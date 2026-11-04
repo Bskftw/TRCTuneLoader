@@ -147,7 +147,7 @@ namespace TRC.TuneLoader {
 				GUILayout.BeginHorizontal();
 				GUILayout.Label("Find", Theme.Small, GUILayout.Width(40));
 				picker.Filter = GUILayout.TextField(picker.Filter ?? "", 40, Theme.Field, GUILayout.Width(220));
-				if (picker.Filter.Length > 0 && GUILayout.Button("Clear", Theme.Button)) {
+				if (picker.Filter.Length > 0 && NavButton("Clear", Theme.Button)) {
 					picker.Filter = "";
 				}
 				Course chosen = courses.FirstOrDefault(c => c.Code == picked);
@@ -162,7 +162,7 @@ namespace TRC.TuneLoader {
 			float scrollY = picker.Scroll.y;
 			picker.Scroll = GUILayout.BeginScrollView(picker.Scroll, GUILayout.Height(Mathf.Min(height, 12f + shown.Count * picker.List.Row)));
 			LongRows(picker.List, shown, scrollY, c => c.Code, c => false, course => {
-				if (GUILayout.Button(label(course), picked == course.Code ? Theme.RowSelected : Theme.Row)) {
+				if (NavButton(label(course), picked == course.Code ? Theme.RowSelected : Theme.Row)) {
 					picked = course.Code;
 				}
 			});

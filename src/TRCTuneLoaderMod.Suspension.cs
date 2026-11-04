@@ -208,6 +208,11 @@ namespace TRC.TuneLoader {
 				string damper = Mathf.Abs(speed) < 20f ? "" : speed > 0 ? $"<color=#FAC775>bump {speed:0}</color>" : $"<color=#8FB8FF>reb {-speed:0}</color>";
 				string text = wf.Contact ? $"<b>{wf.Compression * 100:0}%</b>\n{wf.Load / 1000f:0.0} kN\n{damper}" : "<b><color=#F7C1C1>OFF</color></b>\nthe road";
 				var label = new Rect(left ? rect.x + 8f : tyre.xMax + 8f, tyre.y, left ? tyre.x - rect.x - 14f : rect.xMax - tyre.xMax - 14f, 54f);
+				if (suspensionStylesVersion_ != Theme.Version) {
+					// The look changed: made again in the new text colour and size.
+					suspensionStylesVersion_ = Theme.Version;
+					suspensionLeft_ = suspensionRight_ = null;
+				}
 				GUIStyle style = left ? suspensionRight_ ?? (suspensionRight_ = new GUIStyle(Theme.HudSmall) { alignment = TextAnchor.UpperRight, richText = true })
 					: suspensionLeft_ ?? (suspensionLeft_ = new GUIStyle(Theme.HudSmall) { alignment = TextAnchor.UpperLeft, richText = true });
 				GUI.Label(label, text, style);
@@ -233,6 +238,7 @@ namespace TRC.TuneLoader {
 		}
 
 		private GUIStyle suspensionLeft_;
+		private int suspensionStylesVersion_ = -1;
 		private GUIStyle suspensionRight_;
 
 		/// <summary>The overlay can be dragged anywhere while the window is open, like the timer.</summary>
@@ -313,11 +319,11 @@ namespace TRC.TuneLoader {
 				SavePref(SuspensionScopePref, scope);
 			}
 			GUILayout.BeginHorizontal();
-			if (GUILayout.Button("Start a new session", Theme.Button)) {
+			if (NavButton("Start a new session", Theme.Button)) {
 				session_ = null;
 				suspensionResult_ = "The session starts again from here.";
 			}
-			if (suspensionPosition_.x >= 0 && GUILayout.Button("Put the overlay back", Theme.Button)) {
+			if (suspensionPosition_.x >= 0 && NavButton("Put the overlay back", Theme.Button)) {
 				suspensionPosition_ = new Vector2(-1f, -1f);
 				SavePref(SuspensionPositionPref, suspensionPosition_);
 			}
@@ -356,7 +362,7 @@ namespace TRC.TuneLoader {
 			GUILayout.Label($"{log.Label}", Theme.Heading);
 			GUILayout.Label($"{log.Started.ToString("MMM d HH:mm", CultureInfo.InvariantCulture)} · {log.Seconds:0} s logged · {log.Events.Count} event(s)", Theme.Small);
 			GUILayout.BeginHorizontal();
-			if (GUILayout.Button("Export CSV", Theme.Button)) {
+			if (NavButton("Export CSV", Theme.Button)) {
 				try {
 					string path = log.SaveCsv(SuspensionFolder);
 					suspensionResult_ = $"Saved {log.Frames.Count} frames to {path}. It opens in a spreadsheet or a telemetry tool.";
@@ -364,7 +370,7 @@ namespace TRC.TuneLoader {
 					suspensionResult_ = $"Couldn't save it: {e.Message}";
 				}
 			}
-			if (GUILayout.Button(baseline_ == log ? "This is the baseline" : "Compare against this later", Theme.Button)) {
+			if (NavButton(baseline_ == log ? "This is the baseline" : "Compare against this later", Theme.Button)) {
 				baseline_ = log;
 				suspensionResult_ = "Saved as the baseline: change the tune, drive the same road, and the next report shows what changed.";
 			}

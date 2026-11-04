@@ -321,6 +321,10 @@ namespace TRC.TuneLoader {
 				if (x > Screen.width / scale || x + width < 0 || y > Screen.height / scale || y + height < 0) {
 					continue;
 				}
+				// Never over the window (bskftw, Nov 3: a sign showed on top of the Tracks page).
+				if (windowOpen_ && windowRect_.Overlaps(new Rect(x, y, width, height))) {
+					continue;
+				}
 				float fade = Mathf.Clamp01((SignRange - screen.z) / 80f);
 				GUI.color = new Color(1f, 1f, 1f, fade);
 				GUI.DrawTexture(new Rect(x, y, width, height), texture, ScaleMode.ScaleToFit);
@@ -389,12 +393,12 @@ namespace TRC.TuneLoader {
 			GUILayout.FlexibleSpace();
 			bool enabled = GUI.enabled;
 			GUI.enabled = enabled && map_ != null && !sharingTraps_ && mapTraps_.Any(t => t.Source == CourseSource.Custom);
-			if (GUILayout.Button("Share...", Theme.Button)) {
+			if (NavButton("Share...", Theme.Button)) {
 				sharingTraps_ = true;
 				placingTrap_ = false;
 			}
 			GUI.enabled = enabled && hasPose_ && map_ != null && !placingTrap_;
-			if (GUILayout.Button("New speed trap", Theme.ButtonPrimary)) {
+			if (NavButton("New speed trap", Theme.ButtonPrimary)) {
 				StartPlacingTrap();
 				sharingTraps_ = false;
 			}
@@ -430,7 +434,7 @@ namespace TRC.TuneLoader {
 				string title = group.Key.Length == 0 ? "Other speed traps" : group.Key;
 				bool open = trapGroupsOpen_.Contains(title) || (trapEditing_ != null && traps.Contains(trapEditing_));
 				float best = traps.SelectMany(t => trapRecords_.Where(r => r.TrapKey == t.Key)).Select(r => r.Kmh).DefaultIfEmpty(0f).Max();
-				if (GUILayout.Button($"{(open ? "▾" : "▸")}  <b>{title}</b>  <color={Theme.MutedHex}>{traps.Count} trap(s){(best > 0 ? $" · fastest {best:0} km/h" : "")}</color>", Theme.Row)) {
+				if (NavButton($"<b>{title}</b>  <color={Theme.MutedHex}>{traps.Count} trap(s){(best > 0 ? $" · fastest {best:0} km/h" : "")}</color>", Theme.Row)) {
 					if (!trapGroupsOpen_.Remove(title)) {
 						trapGroupsOpen_.Add(title);
 					}
@@ -441,13 +445,13 @@ namespace TRC.TuneLoader {
 						GUILayout.Space(18);
 						if (trapGroupDeletePending_ == title) {
 							GUILayout.Label($"Delete all {traps.Count} traps in {title}? Their speeds stay saved.", Theme.Small);
-							if (GUILayout.Button("Delete them", Theme.ButtonPrimary)) {
+							if (NavButton("Delete them", Theme.ButtonPrimary)) {
 								DeleteTrapGroup(title);
 							}
-							if (GUILayout.Button("Keep", Theme.Button)) {
+							if (NavButton("Keep", Theme.Button)) {
 								trapGroupDeletePending_ = "";
 							}
-						} else if (GUILayout.Button("Delete this group", Theme.Button)) {
+						} else if (NavButton("Delete this group", Theme.Button)) {
 							trapGroupDeletePending_ = title;
 						}
 						GUILayout.FlexibleSpace();
@@ -473,7 +477,7 @@ namespace TRC.TuneLoader {
 			GUILayout.Label($"<b>{trap.Name}</b>  <color={Theme.MutedHex}>{(trap.Source == CourseSource.Map ? "map" : "yours")} · {trap.Gate.Width:0} m wide · {TimeAttackRun.Distance(away)} away" +
 				$"{(best > 0 ? $" · best {best:0} km/h" : "")}{(mine > 0 && mine < best ? $" · this car {mine:0}" : "")}</color>", Theme.Body);
 			GUILayout.FlexibleSpace();
-			if (trap.Source == CourseSource.Custom && trapEditing_ != trap && GUILayout.Button("Edit", Theme.Button)) {
+			if (trap.Source == CourseSource.Custom && trapEditing_ != trap && NavButton("Edit", Theme.Button)) {
 				trapEditing_ = trap;
 				trapEditName_ = trap.Name;
 				trapEditWidth_ = trap.Gate.Width;
@@ -497,11 +501,11 @@ namespace TRC.TuneLoader {
 			GUILayout.BeginHorizontal();
 			bool enabled = GUI.enabled;
 			GUI.enabled = enabled && hasPose_ && TuneRules.Trim(newTrapName_).Length > 0;
-			if (GUILayout.Button("Place it here", Theme.ButtonPrimary)) {
+			if (NavButton("Place it here", Theme.ButtonPrimary)) {
 				AddFreeRoamTrap();
 			}
 			GUI.enabled = enabled;
-			if (GUILayout.Button("Done", Theme.Button)) {
+			if (NavButton("Done", Theme.Button)) {
 				placingTrap_ = false;
 			}
 			GUILayout.FlexibleSpace();
@@ -516,26 +520,26 @@ namespace TRC.TuneLoader {
 			GUILayout.Label("Width (the line on the road shows it while you edit)", Theme.SectionLabel);
 			DrawTrapWidths(ref trapEditWidth_);
 			GUILayout.BeginHorizontal();
-			if (GUILayout.Button("Save", Theme.ButtonPrimary)) {
+			if (NavButton("Save", Theme.ButtonPrimary)) {
 				EditFreeRoamTrap(trap, TuneRules.Trim(trapEditName_), trapEditWidth_, move: false);
 			}
 			bool enabled = GUI.enabled;
 			GUI.enabled = enabled && hasPose_;
-			if (GUILayout.Button("Move it here", Theme.Button)) {
+			if (NavButton("Move it here", Theme.Button)) {
 				EditFreeRoamTrap(trap, TuneRules.Trim(trapEditName_), trapEditWidth_, move: true);
 			}
 			GUI.enabled = enabled;
 			if (trapDeletePending_ == trap) {
-				if (GUILayout.Button("Delete it", Theme.ButtonPrimary)) {
+				if (NavButton("Delete it", Theme.ButtonPrimary)) {
 					DeleteFreeRoamTrap(trap);
 				}
-				if (GUILayout.Button("Keep", Theme.Button)) {
+				if (NavButton("Keep", Theme.Button)) {
 					trapDeletePending_ = null;
 				}
-			} else if (GUILayout.Button("Delete", Theme.Button)) {
+			} else if (NavButton("Delete", Theme.Button)) {
 				trapDeletePending_ = trap;
 			}
-			if (GUILayout.Button("Cancel", Theme.Button)) {
+			if (NavButton("Cancel", Theme.Button)) {
 				trapEditing_ = null;
 				trapDeletePending_ = null;
 			}
@@ -589,11 +593,11 @@ namespace TRC.TuneLoader {
 			bool enabled = GUI.enabled;
 			GUI.enabled = enabled && sending.Count > 0 && roomSync_.IsAvailable;
 			string target = shareTrapsTo_ == 0 ? "the room" : who[pickedWho < 0 ? 0 : pickedWho];
-			if (GUILayout.Button($"Send {Math.Min(sending.Count, RoomMessage.MaxTraps)} trap(s) to {target}", Theme.ButtonPrimary)) {
+			if (NavButton($"Send {Math.Min(sending.Count, RoomMessage.MaxTraps)} trap(s) to {target}", Theme.ButtonPrimary)) {
 				ShareTraps(sending, shareTrapsGroup_.Length == 0 ? "All their traps" : shareTrapsGroup_, shareTrapsTo_, target);
 			}
 			GUI.enabled = enabled;
-			if (GUILayout.Button("Done", Theme.Button)) {
+			if (NavButton("Done", Theme.Button)) {
 				sharingTraps_ = false;
 			}
 			GUILayout.FlexibleSpace();
@@ -629,10 +633,10 @@ namespace TRC.TuneLoader {
 				string here = map_ != null && map_.Key == shared.MapKey ? "" : " (another map)";
 				GUILayout.Label($"<b>{shared.Label}</b>  <color={Theme.MutedHex}>from {shared.FromName}{(shared.JustForMe ? ", just for you" : "")} · {shared.Traps.Count} trap(s) · {map}{here}</color>", Theme.Body);
 				GUILayout.FlexibleSpace();
-				if (GUILayout.Button("Add them", Theme.ButtonPrimary)) {
+				if (NavButton("Add them", Theme.ButtonPrimary)) {
 					AddSharedTraps(shared);
 				}
-				if (GUILayout.Button("Dismiss", Theme.Button)) {
+				if (NavButton("Dismiss", Theme.Button)) {
 					roomBoard_.SharedTrapSets.Remove(shared);
 				}
 				GUILayout.EndHorizontal();
@@ -756,7 +760,7 @@ namespace TRC.TuneLoader {
 				GUILayout.BeginHorizontal();
 				bool enabled = GUI.enabled;
 				GUI.enabled = enabled && map_ != null && CoursesHere().Any(c => c.HasPath);
-				if (GUILayout.Button("Random traps on a track...", Theme.Button)) {
+				if (NavButton("Random traps on a track...", Theme.Button)) {
 					randomTrapsOpen_ = true;
 				}
 				GUI.enabled = enabled;
@@ -778,11 +782,11 @@ namespace TRC.TuneLoader {
 			Course picked = withPaths.FirstOrDefault(c => c.Code == randomTrapsCourse_);
 			bool on = GUI.enabled;
 			GUI.enabled = on && picked != null;
-			if (GUILayout.Button("Place them", Theme.ButtonPrimary)) {
+			if (NavButton("Place them", Theme.ButtonPrimary)) {
 				PlaceRandomTraps(picked, RandomTrapCounts[randomTrapCount_]);
 			}
 			GUI.enabled = on;
-			if (GUILayout.Button("Close", Theme.Button)) {
+			if (NavButton("Close", Theme.Button)) {
 				randomTrapsOpen_ = false;
 			}
 			GUILayout.FlexibleSpace();

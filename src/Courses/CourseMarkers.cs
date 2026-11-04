@@ -430,6 +430,7 @@ namespace TRC.TuneLoader {
 		private static Material[] materials_;
 
 		private readonly ChevronLine line_ = new ChevronLine("TRC best line");
+		private Material[] plain_;
 		private IList<float> kmh_;
 		private float min_;
 		private float max_;
@@ -451,7 +452,10 @@ namespace TRC.TuneLoader {
 					return Mathf.Clamp(Mathf.FloorToInt(share * Ramp.Length), 0, Ramp.Length - 1);
 				});
 			} else {
-				line_.Show(line, camera, new[] { CourseMarkers.DotMaterial }, i => 0);
+				if (plain_ == null || plain_[0] != CourseMarkers.DotMaterial) {
+					plain_ = new[] { CourseMarkers.DotMaterial };
+				}
+				line_.Show(line, camera, plain_, i => 0);
 			}
 		}
 

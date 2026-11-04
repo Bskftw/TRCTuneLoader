@@ -594,7 +594,7 @@ namespace TRC.TuneLoader {
 				int theirs = SectionFor(race_);
 				GUILayout.BeginVertical(Theme.Guide);
 				GUILayout.Label(theirs == GamesSection ? "You're in a fun game." : theirs == TournamentsSection ? "You're in a tournament." : "You're in a race.", Theme.Body);
-				if (GUILayout.Button($"Go to {BattleSections[theirs]}", Theme.Button)) {
+				if (NavButton($"Go to {BattleSections[theirs]}", Theme.Button)) {
 					battleViewMode_ = theirs;
 				}
 				GUILayout.EndVertical();
@@ -627,7 +627,7 @@ namespace TRC.TuneLoader {
 				GUILayout.FlexibleSpace();
 				bool enabled = GUI.enabled;
 				GUI.enabled = enabled && !full && hasPose_;
-				if (GUILayout.Button(full ? "Full" : running ? "Join (next race)" : "Join", Theme.ButtonPrimary, GUILayout.Width(130))) {
+				if (NavButton(full ? "Full" : running ? "Join (next race)" : "Join", Theme.ButtonPrimary, GUILayout.Width(130))) {
 					JoinRace(lobby);
 				}
 				GUI.enabled = enabled;
@@ -735,7 +735,7 @@ namespace TRC.TuneLoader {
 			GUILayout.BeginHorizontal();
 			bool enabled = GUI.enabled;
 			GUI.enabled = enabled && picked != null;
-			if (GUILayout.Button(tournament ? "Open the tournament" : "Open the race", Theme.ButtonPrimary)) {
+			if (NavButton(tournament ? "Open the tournament" : "Open the race", Theme.ButtonPrimary)) {
 				HostRace(picked);
 			}
 			GUI.enabled = enabled;
@@ -767,7 +767,7 @@ namespace TRC.TuneLoader {
 			hostMax_ = Choice(MaxDriverChoices.Select(MaxDriversText).ToArray(), Math.Min(hostMax_, MaxDriverChoices.Length - 1));
 			GUILayout.Space(4);
 			GUILayout.BeginHorizontal();
-			if (GUILayout.Button($"Open {RoomModeNames[hostGame_].ToLowerInvariant()}", Theme.ButtonPrimary)) {
+			if (NavButton($"Open {RoomModeNames[hostGame_].ToLowerInvariant()}", Theme.ButtonPrimary)) {
 				HostRace(null);
 			}
 			GUILayout.FlexibleSpace();
@@ -784,7 +784,7 @@ namespace TRC.TuneLoader {
 						GUILayout.BeginHorizontal();
 						GUILayout.Label($"{i + 1}. {r.CourseName}{(r.Laps > 1 ? $", {r.Laps} laps" : "")}{(r.ReverseGrid ? ", reverse grid" : "")}", Theme.Body);
 						GUILayout.FlexibleSpace();
-						if (GUILayout.Button("Remove", Theme.Button)) {
+						if (NavButton("Remove", Theme.Button)) {
 							hostRounds_.RemoveAt(i);
 						}
 						GUILayout.EndHorizontal();
@@ -793,7 +793,7 @@ namespace TRC.TuneLoader {
 					roundReverse_ = Choice(new[] { "Normal grid", "Reverse grid" }, roundReverse_ ? 1 : 0) == 1;
 					bool enabled = GUI.enabled;
 					GUI.enabled = enabled && picked != null && hostRounds_.Count < 12;
-					if (GUILayout.Button("Add round", Theme.Button)) {
+					if (NavButton("Add round", Theme.Button)) {
 						hostRounds_.Add(new TournamentRound { CourseCode = picked.Code, CourseName = picked.Name, Laps = picked.IsCircuit ? RaceLapChoices[hostLaps_] : 1, ReverseGrid = roundReverse_ });
 					}
 					GUI.enabled = enabled;
@@ -842,7 +842,7 @@ namespace TRC.TuneLoader {
 					if (r.MyDriver?.Racer == true || !r.IsHost) {
 						GUILayout.Label(mine.Passes ? "Your car meets the regulation." : $"Your car doesn't meet it: {string.Join("; ", mine.Broken.Take(3))}", mine.Passes ? Theme.PillGood : Theme.PillWarn);
 					}
-					if (RegulationByCode(r.Settings.Regulation.Code) == null && GUILayout.Button("Save this regulation", Theme.Button)) {
+					if (RegulationByCode(r.Settings.Regulation.Code) == null && NavButton("Save this regulation", Theme.Button)) {
 						SaveRegulation(r.Settings.Regulation.Copy(), $"Saved {r.Settings.Regulation.Name}.");
 					}
 				}
@@ -874,19 +874,19 @@ namespace TRC.TuneLoader {
 					GUILayout.FlexibleSpace();
 					// The host as race director: penalties after the race, and everyone sees the new results.
 					if (r.IsHost && !r.IsGame && !r.Settings.NoPenalties) {
-						if (GUILayout.Button("+5 s", Theme.Button)) {
+						if (NavButton("+5 s", Theme.Button)) {
 							r.Penalize(row.Id, 5, false, BattleNow);
 							TrcLog.Info($"Race {r.Id}: +5 s for {row.Name}.");
 						}
-						if (GUILayout.Button("+10 s", Theme.Button)) {
+						if (NavButton("+10 s", Theme.Button)) {
 							r.Penalize(row.Id, 10, false, BattleNow);
 							TrcLog.Info($"Race {r.Id}: +10 s for {row.Name}.");
 						}
-						if (GUILayout.Button("DQ", Theme.Button)) {
+						if (NavButton("DQ", Theme.Button)) {
 							r.Penalize(row.Id, 0, true, BattleNow);
 							TrcLog.Info($"Race {r.Id}: {row.Name} disqualified by the host.");
 						}
-						if ((row.Penalty > 0 || row.State == RacerState.Disqualified) && GUILayout.Button("Clear", Theme.Button)) {
+						if ((row.Penalty > 0 || row.State == RacerState.Disqualified) && NavButton("Clear", Theme.Button)) {
 							r.Penalize(row.Id, 0, false, BattleNow);
 						}
 					}
@@ -943,7 +943,7 @@ namespace TRC.TuneLoader {
 				GUILayout.BeginHorizontal();
 				GUILayout.Label($"<b>{d.Name}</b>{(d.Id == r.HostId ? " (host)" : "")}  <color={Theme.MutedHex}>{string.Join(" · ", parts)}</color>", Theme.Body);
 				GUILayout.FlexibleSpace();
-				if (r.IsHost && d.Id != MySteamId && GUILayout.Button("Remove", Theme.Button)) {
+				if (r.IsHost && d.Id != MySteamId && NavButton("Remove", Theme.Button)) {
 					r.Kick(d.Id, now);
 				}
 				GUILayout.EndHorizontal();
@@ -958,17 +958,17 @@ namespace TRC.TuneLoader {
 			}
 
 			GUILayout.BeginHorizontal();
-			if (r.Phase == RacePhase.Gridding && r.MySpot().HasValue && GUILayout.Button("Teleport to my spot", Theme.ButtonPrimary)) {
+			if (r.Phase == RacePhase.Gridding && r.MySpot().HasValue && NavButton("Teleport to my spot", Theme.ButtonPrimary)) {
 				TeleportToRaceSpot();
 			}
-			if (r.Phase == RacePhase.Qualifying && GUILayout.Button("Teleport to start", Theme.ButtonPrimary)) {
+			if (r.Phase == RacePhase.Qualifying && NavButton("Teleport to start", Theme.ButtonPrimary)) {
 				TeleportToQualifyingStart();
 			}
 			if (r.IsHost) {
 				DrawHostButtons(r, now);
 			}
 			GUILayout.FlexibleSpace();
-			if (GUILayout.Button(r.IsHost ? "Close race" : "Leave race", Theme.Button)) {
+			if (NavButton(r.IsHost ? "Close race" : "Leave race", Theme.Button)) {
 				LeaveRace();
 			}
 			GUILayout.EndHorizontal();
@@ -979,50 +979,50 @@ namespace TRC.TuneLoader {
 				case RacePhase.Lobby:
 				case RacePhase.Finished:
 					if (hostTournament_ > 0 && tournament_ == null && !r.IsGame) {
-						if (r.Settings.Order == GridOrder.Qualifying && GUILayout.Button("Start qualifying", Theme.Button)) {
+						if (r.Settings.Order == GridOrder.Qualifying && NavButton("Start qualifying", Theme.Button)) {
 							r.StartQualifying(now);
 						}
-						if (r.Drivers.Count >= 2 && GUILayout.Button("Start the tournament", Theme.ButtonPrimary)) {
+						if (r.Drivers.Count >= 2 && NavButton("Start the tournament", Theme.ButtonPrimary)) {
 							StartTournament();
 							if (tournament_.Settings.Kind != TournamentKind.Knockout) {
 								NextTournamentStep();
 							}
 						}
 					} else if (tournament_ != null) {
-						if (!tournament_.Done && GUILayout.Button(NextStepLabel(), Theme.ButtonPrimary)) {
+						if (!tournament_.Done && NavButton(NextStepLabel(), Theme.ButtonPrimary)) {
 							NextTournamentStep();
 						}
 					} else {
-						if (r.Settings.Order == GridOrder.Qualifying && GUILayout.Button("Start qualifying", Theme.Button)) {
+						if (r.Settings.Order == GridOrder.Qualifying && NavButton("Start qualifying", Theme.Button)) {
 							r.StartQualifying(now);
 						}
-						if (GUILayout.Button(r.Phase == RacePhase.Finished ? "Run it back" : "Start race", Theme.ButtonPrimary)) {
+						if (NavButton(r.Phase == RacePhase.Finished ? "Run it back" : "Start race", Theme.ButtonPrimary)) {
 							r.StartRace(now);
 						}
 					}
-					if (r.Phase == RacePhase.Finished && GUILayout.Button("Back to lobby", Theme.Button)) {
+					if (r.Phase == RacePhase.Finished && NavButton("Back to lobby", Theme.Button)) {
 						r.BackToLobby();
 					}
 					break;
 				case RacePhase.Qualifying:
-					if (GUILayout.Button("End qualifying", Theme.Button)) {
+					if (NavButton("End qualifying", Theme.Button)) {
 						r.EndQualifying(now);
 					}
 					break;
 				case RacePhase.Gridding:
-					if (GUILayout.Button("Go now", Theme.Button)) {
+					if (NavButton("Go now", Theme.Button)) {
 						r.GoNow(now);
 					}
-					if (GUILayout.Button("Call it off", Theme.Button)) {
+					if (NavButton("Call it off", Theme.Button)) {
 						r.EndRace(now, 0);
 					}
 					break;
 				case RacePhase.Countdown:
 				case RacePhase.Running:
-					if (r.EndAt < 0 && GUILayout.Button("End in 60 s", Theme.Button)) {
+					if (r.EndAt < 0 && NavButton("End in 60 s", Theme.Button)) {
 						r.EndRace(now, 60);
 					}
-					if (GUILayout.Button("End now", Theme.Button)) {
+					if (NavButton("End now", Theme.Button)) {
 						r.EndRace(now, 0);
 					}
 					break;

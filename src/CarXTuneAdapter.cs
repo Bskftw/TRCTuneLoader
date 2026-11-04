@@ -592,6 +592,10 @@ namespace TRC.TuneLoader {
 					}
 					TrcMinimapItem item = mapIcons_[i];
 					item.transform.position = icons[i].Position;
+					item.Shape = icons[i].Shape;
+					Vector3 heading = new Vector3(icons[i].Heading.x, 0f, icons[i].Heading.z);
+					// The map turns an icon with its object, so a line lies across the road.
+					item.transform.rotation = heading.sqrMagnitude > 1e-4f ? Quaternion.LookRotation(heading) : Quaternion.identity;
 					IconColour.SetValue(item, (Color?)icons[i].Color);
 					int? size = icons[i].Size;
 					bool resized = !Equals(IconSize.GetValue(item), size);
@@ -657,6 +661,10 @@ namespace TRC.TuneLoader {
 							float size = full ? FullMapIconSize(ours.size) : ours.size * MinimapIconScale;
 							if (Mathf.Abs(icon.size.x - size) > 0.5f) {
 								icon.size = new Vector2(size, size);
+							}
+							Sprite shape = MapIconSprites.For(ours.Shape);
+							if (shape != null && icon.image != shape) {
+								icon.image = shape;
 							}
 						}
 					}
@@ -1818,6 +1826,8 @@ namespace TRC.TuneLoader {
 	/// show (in online rooms); these belong to no car, so they go on the map straight away, like CarX's waypoint does.
 	/// </summary>
 	internal sealed class TrcMinimapItem : MinimapItem {
+		public MapIconShape Shape;
+
 		protected override Cysharp.Threading.Tasks.UniTask WaitCar() {
 			Minimaps.MinimapProvider.AddIcon(this);
 			return Cysharp.Threading.Tasks.UniTask.CompletedTask;

@@ -26,8 +26,22 @@ namespace TRC.TuneLoader {
 		public static Color AccentSoft = Hex(0x4B1528);
 		public static Color AccentText = Hex(0xF4C0D1);
 
+		/// <summary>
+		/// The buttons' colour (bskftw, Nov 3: one colour for every button, chosen in Look, not each part's colour):
+		/// the main buttons, picked chips and picked rows. Follows the accent unless the player picks one.
+		/// </summary>
+		public static Color ButtonColour = DefaultAccent;
+		public static Color ButtonHover = Hex(0xE0668F);
+		public static Color ButtonSoft = Hex(0x4B1528);
+
+		/// <summary>Text on a filled button: dark on a light button colour, white on a dark one.</summary>
+		public static Color ButtonText = Color.white;
+
 		/// <summary>Text size, on top of the window size: 1 is the normal size.</summary>
 		public static float TextScale { get; private set; } = 1f;
+
+		/// <summary>Goes up every time the colours or text size change, so styles made from them know to be made again.</summary>
+		public static int Version { get; private set; }
 
 		/// <summary>The textures the styles use, so a rebuild can let the old ones go.</summary>
 		private static readonly System.Collections.Generic.List<Texture2D> made_ = new System.Collections.Generic.List<Texture2D>();
@@ -38,7 +52,7 @@ namespace TRC.TuneLoader {
 		/// default colours give exactly the TRC look.
 		/// </summary>
 		/// <param name="muted">The second text colour (notes, labels, the grey text), or null to work it out from the text.</param>
-		public static void Configure(Color background, Color accent, Color text, float textScale, Color? muted = null) {
+		public static void Configure(Color background, Color accent, Color text, float textScale, Color? muted = null, Color? button = null) {
 			TextScale = Mathf.Clamp(textScale, 0.8f, 1.6f);
 			bool standard = Same(background, DefaultBackground) && Same(accent, DefaultAccent) && Same(text, DefaultText);
 			if (standard) {
@@ -74,8 +88,20 @@ namespace TRC.TuneLoader {
 				own.a = 1f;
 				Muted = own;
 			}
+			if (button is Color mine) {
+				mine.a = 1f;
+				ButtonColour = mine;
+				ButtonHover = Color.Lerp(mine, Color.white, 0.12f);
+				ButtonSoft = Color.Lerp(Background, mine, 0.28f);
+			} else {
+				ButtonColour = Accent;
+				ButtonHover = AccentHover;
+				ButtonSoft = AccentSoft;
+			}
+			ButtonText = Luminance(ButtonColour) > 0.6f ? new Color(0.08f, 0.08f, 0.09f) : Color.white;
 			MutedHex = ToHex(Muted);
 			ready_ = false;
+			Version++;
 		}
 
 		public static float Luminance(Color c) => 0.2126f * c.r + 0.7152f * c.g + 0.0722f * c.b;
@@ -170,11 +196,14 @@ namespace TRC.TuneLoader {
 			Close.fixedWidth = 28;
 			Close.fixedHeight = 28;
 
-			Chip = Clickable(Rounded(Color.clear, Control, 12), Rounded(Hover, Control, 12), 12, new Color(0.78f, 0.78f, 0.81f), new RectOffset(12, 12, 4, 5));
-			ChipActive = Clickable(Rounded(AccentSoft, Accent, 12), Rounded(AccentSoft, AccentHover, 12), 12, AccentText, new RectOffset(12, 12, 4, 5));
+			// The choices not picked are in the second text colour, so Look changes them too (bskftw, Nov 3).
+			Chip = Clickable(Rounded(Color.clear, Control, 12), Rounded(Hover, Control, 12), 12, Muted, new RectOffset(12, 12, 4, 5));
+			Chip.hover.textColor = Theme.Text;
+			ChipActive = Clickable(Rounded(ButtonColour, ButtonColour, 12), Rounded(ButtonHover, ButtonHover, 12), 12, ButtonText, new RectOffset(12, 12, 4, 5));
+			ChipActive.fontStyle = FontStyle.Bold;
 
 			Button = Clickable(Rounded(Color.clear, Control, 6), Rounded(Hover, Control, 6), 13, Theme.Text, new RectOffset(14, 14, 8, 8));
-			ButtonPrimary = Clickable(Rounded(Accent, Accent, 6), Rounded(AccentHover, AccentHover, 6), 13, Color.white, new RectOffset(14, 14, 8, 8));
+			ButtonPrimary = Clickable(Rounded(ButtonColour, ButtonColour, 6), Rounded(ButtonHover, ButtonHover, 6), 13, ButtonText, new RectOffset(14, 14, 8, 8));
 			ButtonPrimary.fontStyle = FontStyle.Bold;
 
 			Row = Clickable(Rounded(Color.clear, Color.clear, 6), Rounded(Hover, Color.clear, 6), 13, Theme.Text, new RectOffset(10, 10, 6, 6));
@@ -182,8 +211,8 @@ namespace TRC.TuneLoader {
 			Row.richText = true;
 			Row.wordWrap = true;
 			RowSelected = new GUIStyle(Row) {
-				normal = { background = Rounded(AccentSoft, Accent, 6), textColor = Theme.Text },
-				hover = { background = Rounded(AccentSoft, AccentHover, 6), textColor = Theme.Text },
+				normal = { background = Rounded(ButtonSoft, ButtonColour, 6), textColor = Theme.Text },
+				hover = { background = Rounded(ButtonSoft, ButtonHover, 6), textColor = Theme.Text },
 			};
 
 			Card = Box(Rounded(Panel, Border, 8), 8, new RectOffset(10, 10, 8, 8));

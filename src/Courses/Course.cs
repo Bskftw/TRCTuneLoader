@@ -111,6 +111,19 @@ namespace TRC.TuneLoader {
 		/// </summary>
 		public List<Vector3> SectorPoints = new List<Vector3>();
 
+		/// <summary>
+		/// Where the player set each sector to end (bskftw, Nov 3: "manually set sector checkpoints"). While
+		/// <see cref="UseManualSectors"/> is on they replace the automatic ones (the map's, or the course split evenly).
+		/// The player's own courses keep them in the file's [sectors], so they go with the course when it's shared;
+		/// map and official courses keep them in <see cref="SectorOverlay"/>. Not part of the code.
+		/// </summary>
+		public List<Vector3> ManualSectors = new List<Vector3>();
+
+		/// <summary>The Options switch: manual sectors replace automatic ones (on), or are kept but not used (off).</summary>
+		public static bool UseManualSectors = true;
+
+		public bool ManualSectorsOn => UseManualSectors && ManualSectors.Count > 0;
+
 		/// <summary>What a highway battle runs on: no lines and no path, just the map.</summary>
 		public static Course FreeRoam(string mapKey) => new Course { Name = "Free roam", MapKey = mapKey ?? "", Source = CourseSource.Custom, Kind = CourseKind.Highway };
 
@@ -371,6 +384,7 @@ namespace TRC.TuneLoader {
 				PathFromPlayer = PathFromPlayer,
 				Reversed = true,
 				SectorPoints = new List<Vector3>(SectorPoints),
+				ManualSectors = new List<Vector3>(ManualSectors),
 				Traps = Traps.Select(t => new CourseGate { Center = t.Center, Forward = -t.Forward, Width = t.Width }).Reverse().ToList(),
 			};
 			reversed.SectorPoints.Reverse();
@@ -435,8 +449,16 @@ namespace TRC.TuneLoader {
 			}
 			Distances = CourseGeometry.Cumulative(Path);
 			Length = Distances.Length > 0 ? Distances[Distances.Length - 1] : 0f;
-			SectorEnds = CourseGeometry.SectorEnds(Path, Distances, SectorPoints);
 			Code = CourseCode.Compute(this);
+			if (Source != CourseSource.Custom) {
+				ManualSectors = SectorOverlay.For(Code);
+			}
+			RefreshSectors();
+		}
+
+		/// <summary>Works out where the sectors end again, after the manual sectors or their switch changed.</summary>
+		public void RefreshSectors() {
+			SectorEnds = CourseGeometry.SectorEnds(Path, Distances, ManualSectorsOn ? ManualSectors : SectorPoints);
 		}
 
 		private static void RoundGate(CourseGate gate) {

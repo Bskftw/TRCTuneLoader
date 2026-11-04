@@ -52,6 +52,9 @@ namespace TRC.TuneLoader {
 
 		/// <summary>How the body moves the wheels (widebody kits, Workshop bodies), null when unknown.</summary>
 		public List<string> Stance;
+
+		/// <summary>The player specs (their titles) whose tune is on the car, null when unknown (another player's car).</summary>
+		public List<string> Specs;
 	}
 
 	/// <summary>What a car does against a regulation: the rules it breaks, and the ones that couldn't be checked.</summary>
@@ -104,6 +107,12 @@ namespace TRC.TuneLoader {
 		/// over 0.22 hp for each kg).
 		/// </summary>
 		public float? MaxHpPerKg;
+
+		/// <summary>
+		/// A player spec the car must run (its title, like "Drift Kings v2"; "" for none): each driver's tune has to be that
+		/// spec's tune for their car (bskftw, Nov 3: spec racing with players' own specs). Drivers need the spec installed.
+		/// </summary>
+		public string Spec = "";
 
 		public bool EngineSwaps = true;
 		public bool DrivetrainChange = true;
@@ -179,6 +188,13 @@ namespace TRC.TuneLoader {
 					r.Unknown.Add("power to weight");
 				} else if (Over(car.Hp / car.Mass, MaxHpPerKg.Value, Leeway(3, MaxHpPerKg.Value))) {
 					r.Broken.Add($"{car.Hp / car.Mass:0.000} hp per kg: the most is {MaxHpPerKg.Value:0.000} hp per kg");
+				}
+			}
+			if (Spec.Length > 0) {
+				if (car.Specs == null) {
+					r.Unknown.Add("spec");
+				} else if (!car.Specs.Any(s => string.Equals(s, Spec, StringComparison.OrdinalIgnoreCase))) {
+					r.Broken.Add($"Not on the {Spec} spec: put on its tune for this car (Specs), or install the spec if you don't have it");
 				}
 			}
 			if (!EngineSwaps) {
@@ -281,6 +297,9 @@ namespace TRC.TuneLoader {
 		/// <summary>The rules in a few words, for lists and lobbies.</summary>
 		public string Summary() {
 			var parts = new List<string>();
+			if (Spec.Length > 0) {
+				parts.Add($"{Spec} spec");
+			}
 			if (Setups.Count > 0) {
 				parts.Add(string.Join("/", Setups.Select(SetupLabel)));
 			}
@@ -339,6 +358,9 @@ namespace TRC.TuneLoader {
 			// Only written when set, so regulations made before it keep their codes.
 			if (MaxHpPerKg.HasValue) {
 				text.Append("max_hp_per_kg = ").Append(Number(MaxHpPerKg.Value)).Append('\n');
+			}
+			if (Spec.Length > 0) {
+				text.Append("spec = ").Append(Spec.Replace("#", "").Replace("\n", " ").Trim()).Append('\n');
 			}
 			text.Append("engine_swaps = ").Append(YesNo(EngineSwaps)).Append('\n');
 			text.Append("drivetrain_change = ").Append(YesNo(DrivetrainChange)).Append('\n');
@@ -444,6 +466,7 @@ namespace TRC.TuneLoader {
 							case "max_weight": reg.MaxWeight = Float(value); break;
 							case "min_kg_per_hp": reg.MinKgPerHp = Float(value); break;
 							case "max_hp_per_kg": reg.MaxHpPerKg = Float(value); break;
+							case "spec": reg.Spec = value.Trim(); break;
 							case "engine_swaps": reg.EngineSwaps = Yes(value); break;
 							case "drivetrain_change": reg.DrivetrainChange = Yes(value); break;
 							case "kino_swaps": reg.OutsideSwaps = Yes(value); break;

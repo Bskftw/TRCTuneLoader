@@ -14,8 +14,9 @@ namespace TRC.TuneLoader {
 	public partial class TRCTuneLoaderMod {
 		private const int WindowId = 0x7C1A11;
 		/// <summary>The window grows a little with a bigger text size, so lines still fit.</summary>
-		private static float WindowWidth => Mathf.Round(780f * (1f + (Theme.TextScale - 1f) * 0.6f));
-		private static float WindowHeight => Mathf.Round(640f * (1f + (Theme.TextScale - 1f) * 0.4f));
+		/// <summary>Wider since 0.17: each category's pages are a list down the left of every page.</summary>
+		private static float WindowWidth => Mathf.Round(940f * (1f + (Theme.TextScale - 1f) * 0.6f));
+		private static float WindowHeight => Mathf.Round(680f * (1f + (Theme.TextScale - 1f) * 0.4f));
 		private const float StatusRefreshSeconds = 2.0f;
 		/// <summary>The main tabs. Since 0.15.0 Backups is part of My car, and Battles has its own tab (it was inside Time attack). 0.16: Regulations and Suspension.</summary>
 		private static readonly string[] TabNames = { "Home", "My car", "Tune sets", "Players", "Mod check", "Time attack", "Battles", "Regulations", "Suspension", "Options", "About" };
@@ -105,6 +106,8 @@ namespace TRC.TuneLoader {
 			mouseOverWindow_ = false;
 			capturingShortcut_ = false;
 			capturingRestart_ = false;
+			capturingStart_ = false;
+			ReleasePad();
 			if (tourStep_ >= 0) {
 				EndTour();
 			}
@@ -116,8 +119,23 @@ namespace TRC.TuneLoader {
 			GUIUtility.hotControl = 0;
 		}
 
-		/// <summary>Called from Update: keeps the cursor usable and stops clicks reaching CarX's menus under the window.</summary>
+		private readonly InputBlocker inputBlocker_ = new InputBlocker();
+		private bool inputBlockerFailed_;
+
+		/// <summary>
+		/// Called from Update: keeps the cursor usable and, while the window is open, keeps every click and the mouse
+		/// wheel off the game (an invisible layer over CarX's menus: see <see cref="InputBlocker"/>). Turning CarX's
+		/// EventSystem off instead, as before, let its camera zoom and turn with the mouse under the window.
+		/// </summary>
 		private void UpdateWindowInput() {
+			if (!inputBlockerFailed_) {
+				try {
+					inputBlocker_.Set(windowOpen_);
+				} catch (Exception e) {
+					inputBlockerFailed_ = true;
+					TrcLog.Warning($"Couldn't keep clicks off the game while the window is open: {e.Message}");
+				}
+			}
 			if (!windowOpen_) {
 				return;
 			}
@@ -126,7 +144,8 @@ namespace TRC.TuneLoader {
 			Cursor.lockState = CursorLockMode.None;
 
 			try {
-				if (mouseOverWindow_) {
+				// Only when the layer couldn't be made: the old way, CarX's menus off while the mouse is over the window.
+				if (inputBlockerFailed_ && mouseOverWindow_) {
 					if (eventSystemWeDisabled_ == null && CurrentEventSystem?.GetValue(null, null) is Behaviour eventSystem && eventSystem.enabled) {
 						eventSystem.enabled = false;
 						eventSystemWeDisabled_ = eventSystem;
@@ -160,8 +179,7 @@ namespace TRC.TuneLoader {
 			bool courseHud = (CourseHudVisible || NoticeVisible) && !arranging_;
 			bool signs = TrapSignsVisible;
 			bool suspension = SuspensionOverlayVisible && !arranging_;
-			bool gantrySigns = hasPose_ && markers_.HasVisibleGantries && !arranging_;
-			if (!windowOpen_ && !hud && !courseHud && !signs && !suspension && !gantrySigns) {
+			if (!windowOpen_ && !hud && !courseHud && !signs && !suspension) {
 				return;
 			}
 
@@ -179,9 +197,6 @@ namespace TRC.TuneLoader {
 
 				if (signs) {
 					DrawTrapSigns(scale);
-				}
-				if (gantrySigns) {
-					DrawGantrySigns(scale, screenWidth);
 				}
 				if (courseHud) {
 					DrawCourseHud(screenWidth, screenHeight, scale);
@@ -220,95 +235,45 @@ namespace TRC.TuneLoader {
 		}
 
 		private void DrawWindow(int id) {
-			FrogInput();
-			DrawHeader();
-			DrawTabs();
+			BeginNavFrame();
+			try {
+				FrogInput();
+				DrawNavHeader();
 
-			GUILayout.BeginVertical(ContentArea, GUILayout.ExpandHeight(true));
-			DrawInviteBanner();
-			bool showTab = tourStep_ < 0 || DrawTourCard();
-			if (!showTab) {
-				GUILayout.FlexibleSpace();
-			} else {
-				switch (tab_) {
-					case HomeTab: DrawHomeTab(); break;
-					case MyCarTab: DrawMyCarTab(); break;
-					case TuneSetsTab: DrawTuneSetsTab(); break;
-					case PlayersTab: DrawPlayersTab(); break;
-					case ModCheckTab: DrawModCheckTab(); break;
-					case CoursesTab: DrawCoursesTab(); break;
-					case BattlesTab: DrawBattlesTab(); break;
-					case RegulationsTab: DrawRegulationsTab(); break;
-					case SuspensionTab: DrawSuspensionTab(); break;
-					case OptionsTab: DrawOptionsTab(); break;
-					default: DrawAboutTab(); break;
+				GUILayout.BeginVertical(ContentArea, GUILayout.ExpandHeight(true));
+				DrawInviteBanner();
+				bool showTab = tourStep_ < 0 || DrawTourCard();
+				if (!showTab) {
+					GUILayout.FlexibleSpace();
+				} else if (tab_ == HomeTab) {
+					DrawHomeTab();
+				} else {
+					DrawCategoryPage(DrawOpenTab);
 				}
+				GUILayout.EndVertical();
+				DrawPadBar();
+				DrawFrog();
+			} finally {
+				EndNavFrame();
 			}
-			GUILayout.EndVertical();
-			DrawFrog();
 
 			GUI.DragWindow(new Rect(0, 0, WindowWidth, 64));
 		}
 
-		private void DrawHeader() {
-			GUILayout.BeginHorizontal(HeaderArea);
-			if (logo_ != null) {
-				Rect logoRect = GUILayoutUtility.GetRect(44, 44, GUILayout.Width(44), GUILayout.Height(44));
-				GUI.DrawTexture(logoRect, logo_, ScaleMode.ScaleToFit);
-				if (Event.current.type == EventType.MouseDown && Event.current.button == 0 && logoRect.Contains(Event.current.mousePosition)) {
-					Event.current.Use();
-					LogoClicked();
-				}
-				GUILayout.Space(10);
-			}
-
-			GUILayout.BeginVertical();
-			GUILayout.Label("TRC Tune Loader", Theme.Title);
-			GUILayout.Label($"{Theme.Tagline} · v{Version}", Theme.Subtitle);
-			GUILayout.EndVertical();
-
-			GUILayout.FlexibleSpace();
-			if (GUILayout.Button("×", Theme.Close)) {
-				CloseWindow();
-			}
-			GUILayout.EndHorizontal();
-			DividerLine();
-		}
-
-		private void DrawTabs() {
-			// One row when they fit, else two (11 tabs since 0.16, and a bigger text size makes them wider).
-			var labels = new string[TabNames.Length];
-			float total = 16f;
-			for (int i = 0; i < TabNames.Length; i++) {
-				labels[i] = TabLabel(i);
-				total += Theme.Tab.CalcSize(new GUIContent(labels[i])).x + Theme.Tab.margin.horizontal;
-			}
-			int perRow = total <= WindowWidth - 8f ? TabNames.Length : (TabNames.Length + 1) / 2;
-			for (int start = 0; start < TabNames.Length; start += perRow) {
-				GUILayout.BeginHorizontal(TabArea);
-				for (int i = start; i < TabNames.Length && i < start + perRow; i++) {
-					DrawTab(i, labels[i]);
-				}
-				GUILayout.FlexibleSpace();
-				GUILayout.EndHorizontal();
-			}
-			DividerLine();
-		}
-
-		private string TabLabel(int i) =>
-			i == PlayersTab && players_.Count > 0 ? $"Players ({players_.Count})"
-			: i == BattlesTab && invites_.Count > 0 ? $"{TabNames[i]} ({invites_.Count})"
-			: i == HomeTab && whatsNewPending_ ? "Home (new)"
-			: TabNames[i];
-
-		private void DrawTab(int i, string label) {
-			if (GUILayout.Button(label, i == tab_ ? Theme.TabActive : Theme.Tab)) {
-				tab_ = i;
-				OnTabOpened(i);
-			}
-			if (i == tab_ && Event.current.type == EventType.Repaint) {
-				Rect tab = GUILayoutUtility.GetLastRect();
-				GUI.DrawTexture(new Rect(tab.x, tab.yMax - 2, tab.width, 2), Theme.AccentLine);
+		private void DrawOpenTab() {
+			switch (tab_) {
+				case MyCarTab: DrawMyCarTab(); break;
+				case TuneSetsTab: DrawTuneSetsTab(); break;
+				case PlayersTab: DrawPlayersTab(); break;
+				case ModCheckTab: DrawModCheckTab(); break;
+				case CoursesTab: DrawCoursesTab(); break;
+				case BattlesTab: DrawBattlesTab(); break;
+				case RegulationsTab: DrawRegulationsTab(); break;
+				case SuspensionTab: DrawSuspensionTab(); break;
+				case OptionsTab: DrawOptionsTab(); break;
+				case SpecsTab: DrawSpecsPage(); break;
+				case BugTab: DrawBugTab(); break;
+				default: DrawAboutTab(); break;
 			}
 		}
 
@@ -368,7 +333,7 @@ namespace TRC.TuneLoader {
 			GUILayout.Label("Tune set", Theme.SectionLabel);
 			GUILayout.BeginHorizontal();
 			foreach (TuneFile option in tunes) {
-				if (GUILayout.Button(TuneSets.NameOf(option.SetId), option == tune ? Theme.ChipActive : Theme.Chip)) {
+				if (NavButton(TuneSets.NameOf(option.SetId), option == tune ? Theme.ChipActive : Theme.Chip)) {
 					chosenSet_ = option.SetId;
 					showNumbers_ = false;
 					lastResult_ = "";
@@ -380,17 +345,17 @@ namespace TRC.TuneLoader {
 			GUILayout.Space(6);
 
 			GUILayout.BeginHorizontal();
-			if (GUILayout.Button(car_.InDyno ? $"Load {tune.Name} into the dyno" : $"Apply {tune.Name}", Theme.ButtonPrimary)) {
+			if (NavButton(car_.InDyno ? $"Load {tune.Name} into the dyno" : $"Apply {tune.Name}", Theme.ButtonPrimary)) {
 				showNumbers_ = false;
 				ApplyOfficial(tune);
 				nextStatusRefresh_ = 0;
 			}
-			if (GUILayout.Button("Check my tune", Theme.Button)) {
+			if (NavButton("Check my tune", Theme.Button)) {
 				showNumbers_ = false;
 				CheckOwnCarFromMenu();
 				nextStatusRefresh_ = 0;
 			}
-			if (GUILayout.Button(showNumbers_ ? "Hide numbers" : "Real numbers", Theme.Button)) {
+			if (NavButton(showNumbers_ ? "Hide numbers" : "Real numbers", Theme.Button)) {
 				showNumbers_ = !showNumbers_;
 				if (showNumbers_) {
 					carNumbers_ = ValueLines(tune);
@@ -458,7 +423,7 @@ namespace TRC.TuneLoader {
 		private void DrawTuneSetsTab() {
 			GUILayout.BeginHorizontal();
 			foreach (string set in official_.Sets) {
-				if (GUILayout.Button(TuneSets.NameOf(set), set == listSet_ ? Theme.ChipActive : Theme.Chip)) {
+				if (NavButton(TuneSets.NameOf(set), set == listSet_ ? Theme.ChipActive : Theme.Chip)) {
 					listSet_ = set;
 					setTune_ = null;
 				}
@@ -475,7 +440,7 @@ namespace TRC.TuneLoader {
 			foreach (TuneFile tune in inSet) {
 				bool mine = car_ != null && tune.IsFor(car_.CarId, car_.SlotId);
 				string text = (string.IsNullOrEmpty(tune.Car) ? tune.DisplayName : tune.Car) + (mine ? $" <color={Theme.AccentHex}>(your car)</color>" : "");
-				if (GUILayout.Button(text, tune == setTune_ ? Theme.RowSelected : Theme.Row)) {
+				if (NavButton(text, tune == setTune_ ? Theme.RowSelected : Theme.Row)) {
 					setTune_ = tune;
 					setNumbers_ = ValueLines(tune);
 				}
@@ -508,13 +473,8 @@ namespace TRC.TuneLoader {
 				return;
 			}
 
-			List<PlayerRow> problems = players_.Where(HasProblem).ToList();
-			int filter = Choice(new[] { $"Everyone ({players_.Count})", $"Only problems ({problems.Count})" }, problemsOnly_ ? 1 : 0);
-			if ((filter == 1) != problemsOnly_) {
-				problemsOnly_ = filter == 1;
-				SavePref(ProblemsOnlyPref, problemsOnly_);
-			}
-			List<PlayerRow> shown = problemsOnly_ ? problems : players_;
+			// Everyone / Only problems is beside the page's title (Nav.DrawPageOptions).
+			List<PlayerRow> shown = problemsOnly_ ? players_.Where(HasProblem).ToList() : players_;
 
 			GUILayout.BeginHorizontal(GUILayout.ExpandHeight(true));
 			GUILayout.BeginVertical(Theme.Card, GUILayout.Width(290), GUILayout.ExpandHeight(true));
@@ -524,7 +484,7 @@ namespace TRC.TuneLoader {
 			}
 			foreach (PlayerRow row in shown) {
 				bool selected = selectedPlayer_ != null && SamePlayer(row, selectedPlayer_);
-				if (GUILayout.Button(PlayerRowText(row), selected ? Theme.RowSelected : Theme.Row)) {
+				if (NavButton(PlayerRowText(row), selected ? Theme.RowSelected : Theme.Row)) {
 					selectedPlayer_ = row;
 				}
 			}
@@ -537,7 +497,7 @@ namespace TRC.TuneLoader {
 			GUILayout.EndVertical();
 			GUILayout.EndHorizontal();
 
-			if (GUILayout.Button("Refresh", Theme.Button, GUILayout.Width(100))) {
+			if (NavButton("Refresh", Theme.Button, GUILayout.Width(100))) {
 				nextPlayersRefresh_ = 0;
 				nextReportRequest_ = 0;
 			}
@@ -673,7 +633,7 @@ namespace TRC.TuneLoader {
 			GUILayout.Label($"Loaded mods ({modCheck_.Entries.Count})", Theme.SectionLabel);
 			DrawLines(ref modScroll_, modCheck_.Mods);
 
-			if (GUILayout.Button("Refresh", Theme.Button, GUILayout.Width(100))) {
+			if (NavButton("Refresh", Theme.Button, GUILayout.Width(100))) {
 				modCheck_.Refresh();
 			}
 		}
@@ -693,7 +653,7 @@ namespace TRC.TuneLoader {
 			foreach (TuneFile backup in backups_) {
 				GUILayout.Label($"<b>{backup.Name}</b>\n<color={Theme.MutedHex}>{backup.Notes}</color>", Theme.Small);
 				GUILayout.BeginHorizontal();
-				if (GUILayout.Button("Restore", Theme.Button)) {
+				if (NavButton("Restore", Theme.Button)) {
 					RestoreBackup(backup);
 				}
 				GUILayout.FlexibleSpace();
@@ -712,10 +672,13 @@ namespace TRC.TuneLoader {
 		/// tabs inside tabs. <paramref name="notes"/> are small counts after each name ("" for none).
 		/// </summary>
 		private static int SideNav(string[] names, int picked, string[] notes = null) {
+			if (sideNavHidden_) {
+				return picked;
+			}
 			GUILayout.BeginVertical(Theme.Card, GUILayout.Width(SideNavWidth), GUILayout.ExpandHeight(true));
 			for (int i = 0; i < names.Length; i++) {
 				string note = notes != null && i < notes.Length && notes[i].Length > 0 ? $"  <color={Theme.MutedHex}>{notes[i]}</color>" : "";
-				if (GUILayout.Button($"{names[i]}{note}", i == picked ? Theme.RowSelected : Theme.Row)) {
+				if (NavButton($"{names[i]}{note}", i == picked ? Theme.RowSelected : Theme.Row)) {
 					picked = i;
 				}
 			}

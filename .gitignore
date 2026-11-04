@@ -23,3 +23,6 @@ Resources/*
 !Resources/gantry_glow.png
 !Resources/gantry_font.txt
 !Resources/frog.png
+
+# Local images, PDFs and downloads (kept on this PC, not in git)
+media/

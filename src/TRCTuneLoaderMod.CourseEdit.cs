@@ -28,7 +28,7 @@ namespace TRC.TuneLoader {
 			editName_ = GUILayout.TextField(editName_ ?? "", 60, Theme.Field);
 			bool enabled = GUI.enabled;
 			GUI.enabled = enabled && TuneRules.Trim(editName_).Length > 0 && TuneRules.Trim(editName_) != course.Name;
-			if (GUILayout.Button("Rename", Theme.Button, GUILayout.Width(90))) {
+			if (NavButton("Rename", Theme.Button, GUILayout.Width(90))) {
 				string name = TuneRules.Trim(editName_);
 				ReplaceCourse(course, Copy(course, c => c.Name = name), $"Renamed to {name}.");
 			}
@@ -49,22 +49,22 @@ namespace TRC.TuneLoader {
 			GUILayout.Space(4);
 			GUILayout.BeginHorizontal();
 			GUI.enabled = enabled && hasPose_ && map_ != null && course.MapKey == map_.Key && course.HasPath;
-			if (GUILayout.Button("Add speed trap here", Theme.Button)) {
+			if (NavButton("Add speed trap here", Theme.Button)) {
 				AddCourseTrap(course);
 			}
 			GUI.enabled = enabled;
-			if (course.Traps.Count > 0 && GUILayout.Button($"Remove its {course.Traps.Count} speed trap(s)", Theme.Button)) {
+			if (course.Traps.Count > 0 && NavButton($"Remove its {course.Traps.Count} speed trap(s)", Theme.Button)) {
 				RemoveCourseTraps(course);
 			}
 			GUILayout.FlexibleSpace();
 			GUI.enabled = enabled && course.Usable && roomSync_.IsAvailable;
-			if (GUILayout.Button("Share with the room", Theme.Button)) {
+			if (NavButton("Share with the room", Theme.Button)) {
 				ShareCourse(course);
 			}
 			GUI.enabled = enabled;
 			GUILayout.EndHorizontal();
 			GUILayout.BeginHorizontal();
-			if (GUILayout.Button(course.IsCircuit ? "Drive it the other way" : "Flip direction", Theme.Button)) {
+			if (NavButton(course.IsCircuit ? "Drive it the other way" : "Flip direction", Theme.Button)) {
 				string name = course.Name.EndsWith(ReversedSuffix, StringComparison.Ordinal)
 					? course.Name.Substring(0, course.Name.Length - ReversedSuffix.Length)
 					: course.Name + ReversedSuffix;
@@ -73,20 +73,20 @@ namespace TRC.TuneLoader {
 				ReplaceCourse(course, flipped, course.IsCircuit ? "The circuit now goes the other way round." : "The course now runs the other way: start and finish swapped.");
 			}
 			GUI.enabled = enabled && hasPose_ && map_ != null && course.MapKey == map_.Key && run_ == null && !InBattle;
-			if (GUILayout.Button("Record the path again", Theme.Button)) {
+			if (NavButton("Record the path again", Theme.Button)) {
 				StartRecordPath(course);
 			}
 			GUI.enabled = enabled;
 			GUILayout.FlexibleSpace();
 			if (deletePending_ == course) {
-				if (GUILayout.Button("Delete it", Theme.ButtonPrimary)) {
+				if (NavButton("Delete it", Theme.ButtonPrimary)) {
 					editing_ = null;
 					DeleteCourse(course);
 				}
-				if (GUILayout.Button("Keep", Theme.Button)) {
+				if (NavButton("Keep", Theme.Button)) {
 					deletePending_ = null;
 				}
-			} else if (GUILayout.Button("Delete", Theme.Button)) {
+			} else if (NavButton("Delete", Theme.Button)) {
 				deletePending_ = course;
 			}
 			GUILayout.EndHorizontal();

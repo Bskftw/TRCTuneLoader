@@ -80,6 +80,7 @@ namespace TRC.TuneLoader {
 				if (adapter_.TryCheckStance(car_, out List<string> stance, out _)) {
 					facts.Stance = stance;
 				}
+				facts.Specs = MySpecs();
 			} catch (Exception e) {
 				TrcLog.Error(e);
 			}
@@ -153,7 +154,7 @@ namespace TRC.TuneLoader {
 					code = regulations_[0].Code;
 				}
 				foreach (Regulation r in regulations_) {
-					if (GUILayout.Button($"<b>{r.Name}</b>  <color={Theme.MutedHex}>{r.Code} · {r.Summary()}</color>", r.Code == code ? Theme.RowSelected : Theme.Row)) {
+					if (NavButton($"<b>{r.Name}</b>  <color={Theme.MutedHex}>{r.Code} · {r.Summary()}</color>", r.Code == code ? Theme.RowSelected : Theme.Row)) {
 						code = r.Code;
 					}
 				}
@@ -175,8 +176,14 @@ namespace TRC.TuneLoader {
 
 		private const string TimeAttackRulesPref = "time_attack_rules";
 		private const string TimeAttackRegulationPref = "time_attack_regulation";
+		private const string TimeAttackSpecPref = "time_attack_spec";
+		private static readonly string[] TimeAttackRuleModes = { "TRC spec", "Regulation", "Open", "Player spec" };
+
+		/// <summary>A time attack driven to a player spec: its record's rule is this and the spec's title.</summary>
+		private const string SpecRulePrefix = "spec:";
 		private int timeAttackMode_ = -1;
 		private string timeAttackRule_ = "";
+		private string timeAttackSpec_ = "";
 
 		/// <summary>The rules the time attack running was started with (its record's <see cref="TimeAttackRecord.Rule"/>).</summary>
 		private string runRule_ = "";
@@ -185,14 +192,18 @@ namespace TRC.TuneLoader {
 		private string TimeAttackRule {
 			get {
 				LoadTimeAttackRules();
-				return timeAttackMode_ == 2 ? TimeAttackLog.OpenRule : timeAttackMode_ == 1 && RegulationByCode(timeAttackRule_) != null ? timeAttackRule_ : "";
+				return timeAttackMode_ == 2 ? TimeAttackLog.OpenRule
+					: timeAttackMode_ == 1 && RegulationByCode(timeAttackRule_) != null ? timeAttackRule_
+					: timeAttackMode_ == 3 && SpecByTitle(timeAttackSpec_) != null ? SpecRulePrefix + timeAttackSpec_
+					: "";
 			}
 		}
 
 		private void LoadTimeAttackRules() {
 			if (timeAttackMode_ < 0) {
-				timeAttackMode_ = Mathf.Clamp(KSL.API.Kino.Prefs.Get(TimeAttackRulesPref, 0), 0, 2);
+				timeAttackMode_ = Mathf.Clamp(KSL.API.Kino.Prefs.Get(TimeAttackRulesPref, 0), 0, TimeAttackRuleModes.Length - 1);
 				timeAttackRule_ = KSL.API.Kino.Prefs.Get(TimeAttackRegulationPref, "");
+				timeAttackSpec_ = KSL.API.Kino.Prefs.Get(TimeAttackSpecPref, "");
 			}
 		}
 
@@ -201,7 +212,7 @@ namespace TRC.TuneLoader {
 			LoadTimeAttackRules();
 			GUILayout.BeginHorizontal();
 			GUILayout.Label("Rules", Theme.SectionLabel, GUILayout.Width(60));
-			int mode = Choice(RuleModes, timeAttackMode_);
+			int mode = Choice(TimeAttackRuleModes, timeAttackMode_);
 			GUILayout.EndHorizontal();
 			if (mode != timeAttackMode_) {
 				timeAttackMode_ = mode;
@@ -225,17 +236,39 @@ namespace TRC.TuneLoader {
 					}
 				}
 			}
+			if (mode == 3) {
+				if (specs_.Count == 0) {
+					GUILayout.Label("You have no specs yet: make one or install one in Specs.", Theme.PillWarn);
+				} else {
+					if (SpecByTitle(timeAttackSpec_) == null) {
+						timeAttackSpec_ = specs_[0].Title;
+					}
+					GUILayout.BeginHorizontal();
+					GUILayout.Space(64);
+					int index = specs_.FindIndex(s => s.Title == timeAttackSpec_);
+					int pick = Choice(specs_.Select(s => s.Title).ToArray(), Math.Max(0, index), 4);
+					GUILayout.EndHorizontal();
+					if (pick != index) {
+						timeAttackSpec_ = specs_[pick].Title;
+						SavePref(TimeAttackSpecPref, timeAttackSpec_);
+					}
+				}
+			}
 			GUILayout.Label(mode == 0 ? "TRC spec: the times that count for TRC." : mode == 2 ? "Open: any setup. Open times are kept apart from TRC spec ones."
+				: mode == 3 ? "To a player spec: your car has to run the spec's tune for it, and its times are kept apart."
 				: "To a regulation: your car is checked against it at the start and finish, and its times are kept apart.", Theme.Small);
 		}
 
 		/// <summary>A regulation's name for its code (the code when it's not saved here).</summary>
-		private string RuleName(string code) => RegulationByCode(code)?.Name ?? code;
+		private string RuleName(string code) =>
+			code.StartsWith(SpecRulePrefix, StringComparison.Ordinal) ? $"{code.Substring(SpecRulePrefix.Length)} spec" : RegulationByCode(code)?.Name ?? code;
 
 		/// <summary>Puts the time attack's rules on its record, and for a regulation whether the car meets it now.</summary>
 		private void SetRules(TimeAttackRecord record) {
 			record.Rule = runRule_ ?? "";
-			if (record.Rule.Length > 0 && record.Rule != TimeAttackLog.OpenRule) {
+			if (record.Rule.StartsWith(SpecRulePrefix, StringComparison.Ordinal)) {
+				record.RuleOk = MySpecs().Contains(record.Rule.Substring(SpecRulePrefix.Length));
+			} else if (record.Rule.Length > 0 && record.Rule != TimeAttackLog.OpenRule) {
 				RegulationResult result = RegulationByCode(record.Rule)?.Check(MyCarFacts());
 				record.RuleOk = result != null && result.Passes;
 			}
@@ -290,23 +323,23 @@ namespace TRC.TuneLoader {
 					GUILayout.Label(r.Notes, Theme.Small);
 				}
 				GUILayout.BeginHorizontal();
-				if (GUILayout.Button(checkedRegulation_ == r.Code ? "Hide check" : "Check my car", Theme.ButtonPrimary)) {
+				if (NavButton(checkedRegulation_ == r.Code ? "Hide check" : "Check my car", Theme.ButtonPrimary)) {
 					checkedRegulation_ = checkedRegulation_ == r.Code ? "" : r.Code;
 					myFactsUntil_ = 0;
 				}
-				if (GUILayout.Button("Edit", Theme.Button)) {
+				if (NavButton("Edit", Theme.Button)) {
 					StartEditingRegulation(r);
 					regulationsView_ = 1;
 				}
-				if (GUILayout.Button(sharingRegulation_ == r.Code ? "Done sharing" : "Share...", Theme.Button)) {
+				if (NavButton(sharingRegulation_ == r.Code ? "Done sharing" : "Share...", Theme.Button)) {
 					sharingRegulation_ = sharingRegulation_ == r.Code ? "" : r.Code;
 				}
-				if (GUILayout.Button("Copy for Discord", Theme.Button)) {
+				if (NavButton("Copy for Discord", Theme.Button)) {
 					GUIUtility.systemCopyBuffer = $"{r.Name} ({r.Code}): {r.ShareText()}";
 					regulationResult_ = $"Copied {r.Name}. Paste it in Discord: anyone with TRC Tune Loader imports it here with Paste.";
 				}
 				GUILayout.FlexibleSpace();
-				if (GUILayout.Button("Delete", Theme.Button)) {
+				if (NavButton("Delete", Theme.Button)) {
 					DeleteRegulation(r);
 				}
 				GUILayout.EndHorizontal();
@@ -323,14 +356,14 @@ namespace TRC.TuneLoader {
 			GUILayout.BeginVertical(Theme.Card);
 			GUILayout.Label("Paste a regulation someone copied for Discord (the line starting TRCREG1.), or a whole .trcreg file's text.", Theme.Small);
 			GUILayout.BeginHorizontal();
-			if (GUILayout.Button("Paste from clipboard", Theme.ButtonPrimary)) {
+			if (NavButton("Paste from clipboard", Theme.ButtonPrimary)) {
 				ImportRegulation(GUIUtility.systemCopyBuffer);
 			}
-			if (GUILayout.Button("Open the folder", Theme.Button)) {
+			if (NavButton("Open the folder", Theme.Button)) {
 				Directory.CreateDirectory(RegulationsFolder);
 				Application.OpenURL("file:///" + RegulationsFolder.Replace('\\', '/'));
 			}
-			if (GUILayout.Button("Reload", Theme.Button)) {
+			if (NavButton("Reload", Theme.Button)) {
 				LoadRegulations();
 			}
 			GUILayout.FlexibleSpace();
@@ -388,7 +421,7 @@ namespace TRC.TuneLoader {
 			bool enabled = GUI.enabled;
 			GUI.enabled = enabled && roomSync_.IsAvailable;
 			string target = shareRegulationTo_ == 0 ? "the room" : who[picked];
-			if (GUILayout.Button($"Send to {target}", Theme.ButtonPrimary)) {
+			if (NavButton($"Send to {target}", Theme.ButtonPrimary)) {
 				var m = new RoomMessage { Kind = RoomKind.RegulationShare, From = MySteamId, Name = MyName(), To = shareRegulationTo_, Regulation = r };
 				int pieces = roomSync_.Send(m);
 				regulationResult_ = pieces > 0 ? $"Sent {r.Name} to {target}. They need TRC Tune Loader 0.16 or newer, and save it in Regulations, Shared with you." : "Couldn't send it: is the room's connection all right?";
@@ -411,11 +444,11 @@ namespace TRC.TuneLoader {
 				GUILayout.Label(r.Summary(), Theme.Small);
 				GUILayout.BeginHorizontal();
 				bool have = RegulationByCode(r.Code) != null;
-				if (GUILayout.Button(have ? "Already saved" : "Save it", Theme.ButtonPrimary) && !have) {
+				if (NavButton(have ? "Already saved" : "Save it", Theme.ButtonPrimary) && !have) {
 					SaveRegulation(r.Copy(), $"Saved {r.Name}.");
 					roomBoard_.SharedRegulations.Remove(item);
 				}
-				if (GUILayout.Button("Dismiss", Theme.Button)) {
+				if (NavButton("Dismiss", Theme.Button)) {
 					roomBoard_.SharedRegulations.Remove(item);
 				}
 				GUILayout.FlexibleSpace();
@@ -520,7 +553,7 @@ namespace TRC.TuneLoader {
 				}
 				string setup = Regulation.SetupNames[i];
 				bool on = r.Setups.Contains(setup);
-				if (GUILayout.Button(Regulation.SetupLabels[i], on ? Theme.ChipActive : Theme.Chip)) {
+				if (NavButton(Regulation.SetupLabels[i], on ? Theme.ChipActive : Theme.Chip)) {
 					if (on) {
 						r.Setups.Remove(setup);
 					} else {
@@ -538,7 +571,7 @@ namespace TRC.TuneLoader {
 				string name = r.CarNames.TryGetValue(car, out string n) ? n : adapter_.TryGetCarName(car, out string carName) ? carName : $"car {car}";
 				GUILayout.Label(name, Theme.Body);
 				GUILayout.FlexibleSpace();
-				if (GUILayout.Button("Remove", Theme.Button)) {
+				if (NavButton("Remove", Theme.Button)) {
 					r.Cars.Remove(car);
 					r.CarNames.Remove(car);
 				}
@@ -547,7 +580,7 @@ namespace TRC.TuneLoader {
 			GUILayout.BeginHorizontal();
 			bool enabled = GUI.enabled;
 			GUI.enabled = enabled && mine.CarId > 0 && !r.Cars.Contains(mine.CarId);
-			if (GUILayout.Button(mine.CarId > 0 ? $"Add my {mine.CarName}" : "Add my car", Theme.Button)) {
+			if (NavButton(mine.CarId > 0 ? $"Add my {mine.CarName}" : "Add my car", Theme.Button)) {
 				r.Cars.Add(mine.CarId);
 				r.CarNames[mine.CarId] = mine.CarName;
 			}
@@ -588,6 +621,20 @@ namespace TRC.TuneLoader {
 			}
 			GUILayout.EndVertical();
 
+			GUILayout.Label("Spec", Theme.SectionLabel);
+			GUILayout.BeginVertical(Theme.Card);
+			var specChoices = new List<string> { "Any tune" };
+			specChoices.AddRange(specs_.Select(s => s.Title));
+			if (r.Spec.Length > 0 && !specChoices.Contains(r.Spec)) {
+				specChoices.Add(r.Spec);
+			}
+			int specPick = Choice(specChoices.ToArray(), r.Spec.Length == 0 ? 0 : specChoices.IndexOf(r.Spec), 3);
+			r.Spec = specPick <= 0 ? "" : specChoices[specPick];
+			GUILayout.Label(r.Spec.Length == 0
+				? "Or make every driver run one of your specs' tunes (Specs): spec racing with your own tunes."
+				: $"Every driver must run the {r.Spec} spec's tune for their car, so they need the spec installed (share it from Specs).", Theme.Small);
+			GUILayout.EndVertical();
+
 			GUILayout.Label("Allowed", Theme.SectionLabel);
 			GUILayout.BeginVertical(Theme.Card);
 			r.EngineSwaps = AllowRow("CarX engine swaps", r.EngineSwaps);
@@ -603,7 +650,7 @@ namespace TRC.TuneLoader {
 
 			GUILayout.BeginHorizontal();
 			GUI.enabled = enabled && r.Name.Trim().Length > 0;
-			if (GUILayout.Button(r.FilePath.Length > 0 ? "Save changes" : "Save", Theme.ButtonPrimary)) {
+			if (NavButton(r.FilePath.Length > 0 ? "Save changes" : "Save", Theme.ButtonPrimary)) {
 				r.Name = r.Name.Trim();
 				string code = r.Code;
 				SaveRegulation(r, $"Saved {r.Name} ({code}).");
@@ -611,7 +658,7 @@ namespace TRC.TuneLoader {
 				regulationsView_ = 0;
 			}
 			GUI.enabled = enabled;
-			if (GUILayout.Button("Cancel", Theme.Button)) {
+			if (NavButton("Cancel", Theme.Button)) {
 				editingRegulation_ = null;
 				regulationsView_ = 0;
 			}
@@ -626,7 +673,7 @@ namespace TRC.TuneLoader {
 		/// <summary>One rule that's allowed or not: a button that switches it, then what it is (so a long name never pushes the row wide).</summary>
 		private static bool AllowRow(string what, bool allowed) {
 			GUILayout.BeginHorizontal();
-			if (GUILayout.Button(allowed ? "Allowed" : "Not allowed", allowed ? Theme.ChipActive : Theme.Chip, GUILayout.Width(120))) {
+			if (NavButton(allowed ? "Allowed" : "Not allowed", allowed ? Theme.ChipActive : Theme.Chip, GUILayout.Width(120))) {
 				allowed = !allowed;
 			}
 			GUILayout.Label(what, Theme.Body);
@@ -652,7 +699,7 @@ namespace TRC.TuneLoader {
 				limit.Max = NumberField("max:" + limit.Key, 70f);
 				GUILayout.Label(mine.Numbers.TryGetValue(limit.Key, out float value) ? $"<color={Theme.MutedHex}>yours {Regulation.Number(value)}</color>" : "", Theme.Small);
 				GUILayout.FlexibleSpace();
-				if (GUILayout.Button("Remove", Theme.Button)) {
+				if (NavButton("Remove", Theme.Button)) {
 					r.Limits.Remove(limit);
 				}
 				GUILayout.EndHorizontal();
@@ -665,7 +712,7 @@ namespace TRC.TuneLoader {
 				GUILayout.BeginHorizontal();
 				for (int i = start; i < groups.Length && i < start + 4; i++) {
 					bool open = groups[i] == limitGroup_;
-					if (GUILayout.Button(groups[i], open ? Theme.ButtonPrimary : Theme.Button)) {
+					if (NavButton(groups[i], open ? Theme.ButtonPrimary : Theme.Button)) {
 						limitGroup_ = open ? "" : groups[i];
 					}
 				}
@@ -679,7 +726,7 @@ namespace TRC.TuneLoader {
 				GUILayout.BeginHorizontal();
 				int inRow = 0;
 				foreach (TuneLabels.Setting setting in left) {
-					if (GUILayout.Button("+ " + setting.Label, Theme.Chip)) {
+					if (NavButton("+ " + setting.Label, Theme.Chip)) {
 						r.Limits.Add(new ValueLimit { Key = setting.Key });
 						regulationFields_["min:" + setting.Key] = "";
 						regulationFields_["max:" + setting.Key] = mine.Numbers.TryGetValue(setting.Key, out float v) ? Regulation.Number(v) : "";
@@ -716,7 +763,7 @@ namespace TRC.TuneLoader {
 					r.Tyres[i].MaxWidth = mm.Value;
 				}
 				GUILayout.FlexibleSpace();
-				if (GUILayout.Button("Remove", Theme.Button)) {
+				if (NavButton("Remove", Theme.Button)) {
 					r.Tyres.RemoveAt(i);
 					for (int j = i; j < r.Tyres.Count; j++) {
 						regulationFields_[$"tyre_kg:{j}"] = Regulation.Number(r.Tyres[j].UpToKg);
@@ -731,7 +778,7 @@ namespace TRC.TuneLoader {
 				GUILayout.Label("A car heavier than every class uses the heaviest one.", Theme.Small);
 			}
 			GUILayout.BeginHorizontal();
-			if (r.Tyres.Count < 20 && GUILayout.Button("Add a weight class", Theme.Button)) {
+			if (r.Tyres.Count < 20 && NavButton("Add a weight class", Theme.Button)) {
 				float kg = r.Tyres.Count > 0 ? r.Tyres.Max(t => t.UpToKg) + 200 : 1200;
 				float mm = r.Tyres.Count > 0 ? r.Tyres.Max(t => t.MaxWidth) + 20 : 265;
 				r.Tyres.Add(new TyreBracket { UpToKg = kg, MaxWidth = mm });

@@ -34,7 +34,7 @@ namespace TRC.TuneLoader {
 		public const float MetresPerExtraSector = 2000f;
 
 		/// <summary>A sector object closer than this (metres) to the start or finish, or to another one, is left out.</summary>
-		private const float MinSectorMetres = 20f;
+		public const float MinSectorMetres = 20f;
 
 		/// <summary>A car this far above or below a line (metres) isn't crossing it: it's on a bridge or a road underneath.</summary>
 		public const float GateHeight = 6f;

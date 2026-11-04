@@ -2,6 +2,33 @@
 
 All versions of TRC Tune Loader, newest first. "Not tested in game yet" means the version builds and its automatic tests pass, but nobody has tried it in CarX yet.
 
+## 0.17.0 (Nov 3 2026)
+
+Partly tested in game: the new menu and Home, Look, the gantry signs, My times, the best line, and keeping clicks off the game. The controller, specs, manual sectors and the start key build and pass their automatic tests.
+
+**New**
+- **A new menu.** Home is a big card for each part of the mod in its colour: TRC spec, Specs, Time attack, Battles and Free roam, each with a line about what's going on and buttons to its pages. Inside, the parts are across the top, their pages are down the left, and the logo takes you back to Home. The tools (Mod check, Suspension logger, Options, About, Arrange screen) are along the bottom of Home, with Report a bug. A pill at the top right says whether your car is TRC spec.
+- **Controller in the menu.** The D-pad moves between buttons, A presses one, B goes back to Home (or closes the window on Home), and LB and RB change part. While the menu has the controller, the car keeps still. A bar along the bottom shows the buttons. Both can be turned off in Options.
+- **Specs.** Make your own spec: a tune for each car, like TRC's V1, V2, V3 and Revival sets. Save your car's tune into it, put a spec's tune on (your own tune is backed up first), and share it as a zip that lands on your Desktop. To install someone's spec, drop their zip (or its folder) in your specs folder and press Look again. Each spec is its own folder in `specs`. TRC spec stays its own part, as before.
+- **Race to a spec.** A regulation can require one of your specs, so battles, races and tournaments can be run to it. Every driver needs the spec installed, and 0.17.0.
+- **Time attack to a spec.** Time attack's rules have a fourth choice, Player spec, with its own times.
+- **Manual sectors.** Open a sprint or circuit in Tracks and press **Sectors**, then drive to where a sector should end and press **Add sector end here**. Manual sectors replace the automatic ones. On your own courses they're saved in the course file, so they go with it when you share it. On map courses, **Copy sectors code** and **Paste sectors code** share them. Options can turn manual sectors off. Changing sectors doesn't change the course code.
+- **Start key** (Ctrl + G, change it in Options): starts a time attack on the track open in Tracks (or the last one you drove) and puts you on its start line, flying or standing as picked. The TRC wheel button does the same when there's nothing else for it to do.
+- **The selected track** in Tracks shows its name big, its kind, length and sectors, your best, your theoretical best and how many runs you've done, with **Teleport & start**.
+
+**Changed**
+- On CarX's minimap and map, the start and finish show as a line across the road, and speed traps as a little camera.
+- The window is a bit wider, to fit the page list down the left.
+- **Look** in Options is redone for the new menu. Background, text and second text; accent and button colours; and a colour for each part of the menu (its name across the top and its Home card). Type a hex code or use sliders. **Reset all colours** puts everything back.
+- Home's cards are all the same size, with TRC spec across the top, and each fades from its colour in one corner to dark in the other.
+
+**Fixed**
+- Your best line no longer stays on the road after a time attack. It shows during the countdown and the run, and on your way back to the start line.
+- Speed trap and gantry signs no longer show on top of the open window.
+- While the window is open, clicks no longer go through to the game, and the mouse wheel no longer zooms the game's camera.
+- Gantry signs are fixed to the beam now, facing both ways, so they can be seen from either side and no longer break into squares when the camera moves. Like the rest of the gantry, trees and walls can hide them.
+- Circuits no longer get a note saying their path stops thousands of metres before the finish. A circuit's path is now checked to come back round to the start line.
+
 ## 0.16.1 (Nov 3 2026)
 
 Partly tested in game (the gantries, signs, tracks list and Lake Akina); the rest builds and passes its automatic tests.

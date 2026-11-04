@@ -19,7 +19,7 @@
     <LangVersion>9</LangVersion>
     <AssemblyName>TRCTuneLoader</AssemblyName>
     <RootNamespace>TRC.TuneLoader</RootNamespace>
-    <Version>0.16.1</Version>
+    <Version>0.17.0</Version>
     <Configurations>Debug;Release;Release_Encrypted</Configurations>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <Nullable>disable</Nullable>
@@ -48,6 +48,15 @@
     </Reference>
     <Reference Include="UnityEngine.TextRenderingModule">
       <HintPath>$(CarXManaged)\UnityEngine.TextRenderingModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <!-- The invisible layer that keeps clicks and the mouse wheel off the game while the window is open (src/Ui/InputBlocker.cs) -->
+    <Reference Include="UnityEngine.UI">
+      <HintPath>$(CarXManaged)\UnityEngine.UI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.UIModule">
+      <HintPath>$(CarXManaged)\UnityEngine.UIModule.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <!-- Loading a speed trap sign picture the player puts in the mod's folder (speed_trap_sign.png) -->
