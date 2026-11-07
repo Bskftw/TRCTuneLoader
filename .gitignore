@@ -26,3 +26,4 @@ Resources/*
 
 # Local images, PDFs and downloads (kept on this PC, not in git)
 media/
+__pycache__/

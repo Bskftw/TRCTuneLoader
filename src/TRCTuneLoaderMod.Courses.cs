@@ -922,6 +922,15 @@ namespace TRC.TuneLoader {
 			if (course.Source == CourseSource.Custom && NavButton(editing_ == course ? "Done" : "Edit", Theme.Button)) {
 				StartEditing(editing_ == course ? null : course);
 			}
+			// Any track with a path, the map's own and official ones too (bskftw, Nov 6): opens Speed traps' random traps with it picked.
+			if (course.HasPath && course.Length > 300f && NavButton("Random speed traps", Theme.Button)) {
+				coursesView_ = 1;
+				courseResult_ = "";
+				randomTrapsOpen_ = true;
+				randomTrapsCourse_ = course.Code;
+				placingTrap_ = false;
+				trapEditing_ = null;
+			}
 			GUILayout.FlexibleSpace();
 			GUILayout.EndHorizontal();
 			if (sectorsEditing_ == course) {

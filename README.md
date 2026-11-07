@@ -17,11 +17,12 @@ A KSL mod for CarX Drift Racing Online, made for TRC (Touge Racing Community). B
 | **Regulations** | For communities that tune their own cars to rules: a most power, tyre widths per weight class, no swaps, one setup. Make one, share it, and run battles, races and tournaments to it, with its own Elo. |
 | **Suspension** | Data logging like a real race team: how far each wheel compresses, the tyre's load, when it leaves the road, packing down over bumps, bottoming, and a damper speed histogram, with a live overlay. Off unless you turn it on. |
 | **Ghosts & shared runs** | Your best time attacks are kept as ghosts. Race a ghost, yours or one someone shared, with the live delta and sectors against it. Ghosts have no physics, so no slipstream. |
+| **Traffic lab (very early testing)** | AI traffic on Project Dream's highways and on any track's path, shared with everyone in the room: the same cars and the same crashes. In Tools. Expect bugs and big changes. |
 | **Speed traps, room games & ratings** | Speed traps in free roam and on courses with a floating SPEED CHECK sign, random traps on any track, speed trap races, fun games (cops and runners, tag, infected, king of the hill, highway cut-up and more), and an Elo rating, Safety Rating and license (still being tested). |
 
 ![The four parts of TRC Tune Loader](docs/images/overview.png)
 
-**Version 0.17.1** (Nov 3 2026). What changed in each version: [CHANGELOG.md](CHANGELOG.md).
+**Version 0.18.0** (Nov 6 2026). What changed in each version: [CHANGELOG.md](CHANGELOG.md).
 
 **Still in testing.** The mod is new and still being tested, so bugs will happen, especially in the newest features (see "Tested in game" below). If something goes wrong, press **Report a bug** (Home, bottom right) and send bskftw the zip it puts on your Desktop.
 
@@ -380,6 +381,19 @@ The mod writes what it does to its own log, `kino\mods\TRCTuneLoader\TRCTuneLoad
 - CarX's paint screen briefly changes some engine values, so a Check while it's open can show differences.
 - Times, battles, races and ratings are saved on your own PC only, for now. They're kept ready for the TRC server.
 
+## Traffic lab (very early testing)
+
+Tools > Traffic lab. Nothing runs until you press **Start traffic**, and stopping it removes everything.
+
+- **Highway lanes**: on Project Dream, cars drive the highway lanes around you. They come in out of sight, merge, change lanes, take exits, and go when nobody is near. Pick how busy, the speed limit, the side of the road, and **Realistic** or **Cut-up** (even speeds, always a gap through).
+- **Track paths**: on any track with a path, cars drive it one way or both ways.
+- **Crashes**: hit a car and it's knocked out of the traffic. The cars behind it go round it.
+- **In a room**: one player starts the traffic. Everyone else opens the Traffic lab page and presses **Join** next to that player's name, under "Traffic in this room". Everyone needs this version.
+
+It's very early: expect bugs, and things to change a lot.
+
+Traffic cars: "Generic passenger car pack" by Comrade1280 (https://sketchfab.com/3d-models/generic-passenger-car-pack-20f9af9b8a404d5cb022ac6fe87f21f5) and "LCT 3000 '95 - Low poly model" by Daniel Zhabotinsky (https://sketchfab.com/3d-models/lct-3000-95-low-poly-model-663a0953c038434a918cb85725c88ffa), from Sketchfab, licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Changed for the TRC traffic: re-materialed, re-coloured and set up as traffic.
+
 ## Feature status
 
 | Feature | Since | Tested in game |
@@ -411,4 +425,5 @@ The mod writes what it does to its own log, `kino\mods\TRCTuneLoader\TRCTuneLoad
 | Start, finish and checkpoint gantries, FINISH on screen, map icons, time attack rules, sector pop-up, random speed traps, single file on narrow roads, path chevrons, smoother long lists | 0.16.1 | Partly: the gantries and signs, the tracks list, circuit paths |
 | New menu (Home cards, parts and pages), controller in the menu, player specs, manual sectors, start key | 0.17.0 | Partly: the menu, Home, Look, gantry signs, My times |
 | Specs: Check my car and Players (specs checked like TRC spec), My car renamed TRC Tunes, diff types by name | 0.17.1 | Partly: the Specs pages, Home, diff types |
+| Traffic lab (very early testing), Random speed traps on every track, smoother Speed traps page | 0.18.0 | Partly: traffic on Project Dream with four players (before room sharing was fixed) |
 

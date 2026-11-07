@@ -18,9 +18,6 @@ namespace TRC.TuneLoader {
 		private static float WindowWidth => Mathf.Round(940f * (1f + (Theme.TextScale - 1f) * 0.6f));
 		private static float WindowHeight => Mathf.Round(680f * (1f + (Theme.TextScale - 1f) * 0.4f));
 		private const float StatusRefreshSeconds = 2.0f;
-		/// <summary>The main tabs. Since 0.15.0 Backups is part of My car, and Battles has its own tab (it was inside Time attack). 0.16: Regulations and Suspension.</summary>
-		private static readonly string[] TabNames = { "Home", "TRC Tunes", "Tune sets", "Players", "Mod check", "Time attack", "Battles", "Regulations", "Suspension", "Options", "About" };
-
 		// UGUI's EventSystem lives in UnityEngine.UI; found by name so the mod doesn't need that DLL.
 		private static readonly PropertyInfo CurrentEventSystem =
 			Type.GetType("UnityEngine.EventSystems.EventSystem, UnityEngine.UI")?.GetProperty("current", BindingFlags.Public | BindingFlags.Static);
@@ -260,7 +257,34 @@ namespace TRC.TuneLoader {
 			GUI.DragWindow(new Rect(0, 0, WindowWidth, 64));
 		}
 
+		// How long the open page takes to draw (all its events in a frame), logged when it's slow (bskftw, Nov 6: pages
+		// lagging; this says which one in the next bug report).
+		private readonly System.Diagnostics.Stopwatch pageWatch_ = new System.Diagnostics.Stopwatch();
+		private double pageFrameMs_, pageMs_;
+		private int pageFrame_ = -1, pageTab_ = -1;
+		private float pageSlowLoggedAt_ = -100f;
+
 		private void DrawOpenTab() {
+			if (pageFrame_ != Time.frameCount) {
+				pageMs_ = pageTab_ == tab_ ? pageMs_ * 0.9 + pageFrameMs_ * 0.1 : pageFrameMs_;
+				pageTab_ = tab_;
+				pageFrameMs_ = 0;
+				pageFrame_ = Time.frameCount;
+				if (pageMs_ > 4.0 && Time.unscaledTime - pageSlowLoggedAt_ > 30f) {
+					pageSlowLoggedAt_ = Time.unscaledTime;
+					TrcLog.Warning($"The window's page {tab_} (view {coursesView_}/{battleViewMode_}) takes {pageMs_:0.0} ms a frame to draw.");
+				}
+			}
+			pageWatch_.Restart();
+			try {
+				DrawOpenTabNow();
+			} finally {
+				pageWatch_.Stop();
+				pageFrameMs_ += pageWatch_.Elapsed.TotalMilliseconds;
+			}
+		}
+
+		private void DrawOpenTabNow() {
 			switch (tab_) {
 				case MyCarTab: DrawMyCarTab(); break;
 				case TuneSetsTab: DrawTuneSetsTab(); break;
@@ -275,7 +299,14 @@ namespace TRC.TuneLoader {
 				case SpecCarTab: DrawSpecCarPage(); break;
 				case SpecPlayersTab: DrawSpecPlayersPage(); break;
 				case BugTab: DrawBugTab(); break;
-				default: DrawAboutTab(); break;
+				case AboutTab: DrawAboutTab(); break;
+				default:
+					bool drawn = false;
+					DrawDevPage(tab_, ref drawn);
+					if (!drawn) {
+						DrawAboutTab();
+					}
+					break;
 			}
 		}
 

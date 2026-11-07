@@ -19,7 +19,7 @@
     <LangVersion>9</LangVersion>
     <AssemblyName>TRCTuneLoader</AssemblyName>
     <RootNamespace>TRC.TuneLoader</RootNamespace>
-    <Version>0.17.1</Version>
+    <Version>0.18.0</Version>
     <Configurations>Debug;Release;Release_Encrypted</Configurations>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <Nullable>disable</Nullable>
@@ -141,9 +141,16 @@
     <PropertyGroup>
       <GameModFolder>$(CarXPath)\kino\mods\TRCTuneLoader</GameModFolder>
     </PropertyGroup>
-    <Delete Files="$(GameModFolder)\TRCTuneLoader.dll" />
-    <Copy SourceFiles="$(MSBuildProjectDirectory)\dist\TRCTuneLoader.ksm" DestinationFolder="$(GameModFolder)" Retries="0" ContinueOnError="WarnAndContinue" />
-    <Message Importance="high" Text="TRC Tune Loader installed to $(GameModFolder). Start (or restart) CarX to load it." />
+    <!-- Never install while CarX is running: exits 0 when the game's process is there. -->
+    <Exec Command="powershell -NoProfile -Command &quot;if (Get-Process -Name 'Drift Racing Online' -ErrorAction SilentlyContinue) { exit 0 } else { exit 1 }&quot;" IgnoreExitCode="true" EchoOff="true">
+      <Output TaskParameter="ExitCode" PropertyName="CarXRunningCode" />
+    </Exec>
+    <Message Importance="high" Condition="'$(CarXRunningCode)' == '0'" Text="CarX is running, so the mod was NOT installed (it's in dist). Close CarX and build again to install it." />
+    <Delete Files="$(GameModFolder)\TRCTuneLoader.dll" Condition="'$(CarXRunningCode)' != '0'" />
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\dist\TRCTuneLoader.ksm" DestinationFolder="$(GameModFolder)" Retries="0" ContinueOnError="WarnAndContinue" Condition="'$(CarXRunningCode)' != '0'" />
+    <!-- The traffic lab's cars next to the mod (since 0.18.0; Directory.Build.targets). -->
+    <Copy SourceFiles="@(TrafficCar)" DestinationFolder="$(GameModFolder)\TrafficLab\cars" SkipUnchangedFiles="true" Condition="'$(CarXRunningCode)' != '0'" />
+    <Message Importance="high" Condition="'$(CarXRunningCode)' != '0'" Text="TRC Tune Loader installed to $(GameModFolder). Start (or restart) CarX to load it." />
   </Target>
 
 </Project>

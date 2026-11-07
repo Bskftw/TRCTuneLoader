@@ -81,17 +81,29 @@ namespace TRC.TuneLoader {
 						new NavPage { Name = "Fun games", Tab = BattlesTab, View = GamesSection, Note = () => OpenCount(GamesSection) },
 						new NavPage { Name = "My ratings", Tab = BattlesTab, View = RatingsSection },
 					} },
-					new NavCategory { Name = "Tools", Part = 5, Pages = new[] {
-						new NavPage { Name = "Mod check", Tab = ModCheckTab },
-						new NavPage { Name = "Suspension logger", Tab = SuspensionTab },
-						new NavPage { Name = "Options", Tab = OptionsTab },
-						new NavPage { Name = "About", Tab = AboutTab },
-						new NavPage { Name = "Report a bug", Tab = BugTab },
-					} },
+					new NavCategory { Name = "Tools", Part = 5, Pages = ToolsPages() },
 				};
 				return categories_;
 			}
 		}
+
+		private NavPage[] ToolsPages() {
+			var pages = new List<NavPage> {
+				new NavPage { Name = "Mod check", Tab = ModCheckTab },
+				new NavPage { Name = "Suspension logger", Tab = SuspensionTab },
+				new NavPage { Name = "Options", Tab = OptionsTab },
+				new NavPage { Name = "About", Tab = AboutTab },
+				new NavPage { Name = "Report a bug", Tab = BugTab },
+			};
+			AddDevPages(pages);
+			return pages.ToArray();
+		}
+
+		/// <summary>Empty in the player mod: bskftw's private builds add their own pages to Tools (the traffic lab).</summary>
+		partial void AddDevPages(List<NavPage> pages);
+
+		/// <summary>Empty in the player mod: draws a private build's own page when it's open.</summary>
+		partial void DrawDevPage(int tab, ref bool drawn);
 
 		/// <summary>Open races, tournaments or games for a Battles section ("in one" when the player is).</summary>
 		private string OpenCount(int section) {

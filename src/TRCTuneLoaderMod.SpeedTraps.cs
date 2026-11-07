@@ -415,6 +415,7 @@ namespace TRC.TuneLoader {
 				DrawShareTraps();
 			}
 
+			EnsureTrapList();
 			GUILayout.BeginVertical(Theme.Card, GUILayout.ExpandHeight(true));
 			trapScroll_ = GUILayout.BeginScrollView(trapScroll_);
 			if (map_ == null) {
@@ -422,18 +423,16 @@ namespace TRC.TuneLoader {
 			} else if (mapTraps_.Count == 0) {
 				GUILayout.Label("No speed traps on this map yet. Press New speed trap, stop on the road where you want one, and place it.", Theme.Small);
 			}
-			var groups = mapTraps_.GroupBy(t => t.Group, StringComparer.OrdinalIgnoreCase)
-				.OrderBy(g => g.Key.Length == 0 ? 1 : 0).ThenBy(g => g.Key, StringComparer.OrdinalIgnoreCase);
-			foreach (var group in groups) {
-				List<SpeedTrap> traps = group.OrderBy(t => SpeedTrap.NumberOf(t.Name)).ThenBy(t => t.Name, StringComparer.OrdinalIgnoreCase).ToList();
-				if (group.Key.Length == 0 && groups.Count() == 1) {
+			foreach (TrapGroup group in trapGroups_) {
+				List<SpeedTrap> traps = group.Traps;
+				if (group.Key.Length == 0 && trapGroups_.Count == 1) {
 					// Nothing named into groups yet: just the list.
 					traps.ForEach(DrawTrapRow);
 					continue;
 				}
 				string title = group.Key.Length == 0 ? "Other speed traps" : group.Key;
 				bool open = trapGroupsOpen_.Contains(title) || (trapEditing_ != null && traps.Contains(trapEditing_));
-				float best = traps.SelectMany(t => trapRecords_.Where(r => r.TrapKey == t.Key)).Select(r => r.Kmh).DefaultIfEmpty(0f).Max();
+				float best = group.Best;
 				if (NavButton($"<b>{title}</b>  <color={Theme.MutedHex}>{traps.Count} trap(s){(best > 0 ? $" · fastest {best:0} km/h" : "")}</color>", Theme.Row)) {
 					if (!trapGroupsOpen_.Remove(title)) {
 						trapGroupsOpen_.Add(title);
@@ -469,9 +468,51 @@ namespace TRC.TuneLoader {
 			GUILayout.EndVertical();
 		}
 
+		// The page's list, made again only when the traps or the records change, or once a second (bskftw, Nov 6: the tab
+		// lagged; it grouped, sorted and searched every record for every trap several times a frame).
+		private sealed class TrapGroup {
+			public string Key = "";
+			public List<SpeedTrap> Traps;
+			public float Best;
+		}
+
+		private List<TrapGroup> trapGroups_ = new List<TrapGroup>();
+		private readonly Dictionary<string, float> trapBest_ = new Dictionary<string, float>(StringComparer.Ordinal);
+		private readonly Dictionary<string, float> trapBestCar_ = new Dictionary<string, float>(StringComparer.Ordinal);
+		private List<SpeedTrap> trapListFor_;
+		private int trapListTraps_ = -1, trapListRecords_ = -1;
+		private float trapListAt_ = -100f;
+
+		private void EnsureTrapList() {
+			if (trapListFor_ == mapTraps_ && trapListTraps_ == mapTraps_.Count && trapListRecords_ == trapRecords_.Count && Time.unscaledTime - trapListAt_ < 1f) {
+				return;
+			}
+			trapListFor_ = mapTraps_;
+			trapListTraps_ = mapTraps_.Count;
+			trapListRecords_ = trapRecords_.Count;
+			trapListAt_ = Time.unscaledTime;
+			trapBest_.Clear();
+			trapBestCar_.Clear();
+			foreach (SpeedTrapRecord r in trapRecords_) {
+				if (!trapBest_.TryGetValue(r.TrapKey, out float best) || r.Kmh > best) {
+					trapBest_[r.TrapKey] = r.Kmh;
+				}
+				string car = r.TrapKey + "|" + r.CarId;
+				if (!trapBestCar_.TryGetValue(car, out float mine) || r.Kmh > mine) {
+					trapBestCar_[car] = r.Kmh;
+				}
+			}
+			trapGroups_ = mapTraps_.GroupBy(t => t.Group, StringComparer.OrdinalIgnoreCase)
+				.OrderBy(g => g.Key.Length == 0 ? 1 : 0).ThenBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
+				.Select(g => {
+					List<SpeedTrap> traps = g.OrderBy(t => SpeedTrap.NumberOf(t.Name)).ThenBy(t => t.Name, StringComparer.OrdinalIgnoreCase).ToList();
+					return new TrapGroup { Key = g.Key, Traps = traps, Best = traps.Select(t => trapBest_.TryGetValue(t.Key, out float b) ? b : 0f).DefaultIfEmpty(0f).Max() };
+				}).ToList();
+		}
+
 		private void DrawTrapRow(SpeedTrap trap) {
-			float mine = trapRecords_.Where(r => r.TrapKey == trap.Key && r.CarId == pose_.CarId).Select(r => r.Kmh).DefaultIfEmpty(0f).Max();
-			float best = trapRecords_.Where(r => r.TrapKey == trap.Key).Select(r => r.Kmh).DefaultIfEmpty(0f).Max();
+			float mine = trapBestCar_.TryGetValue(trap.Key + "|" + pose_.CarId, out float m) ? m : 0f;
+			float best = trapBest_.TryGetValue(trap.Key, out float b) ? b : 0f;
 			float away = hasPose_ ? Vector3.Distance(pose_.Position, trap.Gate.Center) : 0f;
 			GUILayout.BeginHorizontal();
 			GUILayout.Label($"<b>{trap.Name}</b>  <color={Theme.MutedHex}>{(trap.Source == CourseSource.Map ? "map" : "yours")} · {trap.Gate.Width:0} m wide · {TimeAttackRun.Distance(away)} away" +

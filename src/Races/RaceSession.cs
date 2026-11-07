@@ -183,7 +183,6 @@ namespace TRC.TuneLoader {
 		private double lastCourseSent_ = double.MinValue;
 		private double lastJoin_ = double.MinValue;
 		private double lastHeardHost_;
-		private double hostSentAt_;
 		private double goHostTime_;
 		private int countdownId_;
 		private int countdownStarted_;
@@ -747,7 +746,6 @@ namespace TRC.TuneLoader {
 					RoundTrip = roundTrip;
 				}
 			}
-			hostSentAt_ = m.SentAt;
 			if (m.RaceNumber != RaceNumber) {
 				return;
 			}

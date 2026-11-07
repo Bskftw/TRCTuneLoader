@@ -2,6 +2,15 @@
 
 All versions of TRC Tune Loader, newest first. "Not tested in game yet" means the version builds and its automatic tests pass, but nobody has tried it in CarX yet.
 
+## 0.18.0 (Nov 6 2026)
+
+Not tested in game yet. The traffic lab was tried with four players on Project Dream; room sharing is fixed in this version but not tried again yet.
+
+- **Traffic lab (very early testing)**, in Tools: AI traffic on Project Dream's highways and on any track's path. Pick how busy, the speed limit, driving on the left or right, and a realistic or cut-up style. Cars merge, change lanes, take exits, and crash when you hit them. In a room, one player starts the traffic and the others press Join next to their name, so everyone sees the same cars and the same crashes. Expect bugs and big changes.
+- Traffic cars: "Generic passenger car pack" by Comrade1280 and "LCT 3000 '95 - Low poly model" by Daniel Zhabotinsky, from Sketchfab, CC BY 4.0, changed for the TRC traffic.
+- Time attack, Tracks: every track with a path has a **Random speed traps** button, the map's own and official tracks too. It opens Speed traps with that track picked.
+- Time attack, Speed traps: the page no longer lags with lots of traps and speeds saved.
+
 ## 0.17.1 (Nov 3 2026)
 
 Partly tested in game: the Specs pages, the Home cards and the diff type picker. Checking other players against your specs and regulations needs two players and passes its automatic tests.

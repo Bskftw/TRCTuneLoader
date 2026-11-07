@@ -15,23 +15,16 @@ namespace TRC.TuneLoader {
 	/// ledger (EventLedger) fed from runs, battles and races.
 	/// </summary>
 	public partial class TRCTuneLoaderMod {
-		private void OpenTab(int tab) {
-			tab_ = tab;
-			OnTabOpened(tab);
-		}
-
 		private const string WhatsNewPref = "whats_new_seen";
 		private const string WheelActionPref = "wheel_action";
 		private const string WheelWindowPref = "wheel_window";
 
 		/// <summary>Raise with each version that has news worth a pop-up.</summary>
-		private const string WhatsNewVersion = "0.17.1";
+		private const string WhatsNewVersion = "0.18.0";
 
 		private static readonly string[] WhatsNewLines = {
-			"<b>Specs, Check my car</b>: your car against your specs, checked as strictly as TRC spec (saved setup, live car, stance, swaps), and against each regulation: met, or what breaks it.",
-			"<b>Specs, Players</b>: everyone in the room against your specs and regulations, checked from what CarX shares of their car. A player whose mod claims a spec or regulation they're not on shows in red.",
-			"<b>My car is now TRC Tunes</b>, just for the TRC tunes. Regulations pick the <b>diff type</b> by name (Open, Welded, Viscous, Clutch type).",
-			"New in 0.17: a new menu, controller support, your own specs, manual sectors and the Ctrl + G start key. See the changelog for all of it.",
+			"<b>Traffic lab</b> (very early testing), in Tools: AI traffic on Project Dream's highways and on any track's path. In a room, one player starts it and the others press Join: everyone sees the same cars and crashes.",
+			"<b>Random speed traps</b> on any track with a path, the map's own and official ones too: the button is on each track in Tracks.",
 		};
 
 		private readonly RoomSync roomSync_ = new RoomSync();
@@ -309,12 +302,6 @@ namespace TRC.TuneLoader {
 				GUILayout.EndHorizontal();
 			}
 			GUILayout.EndVertical();
-		}
-
-		private void GoToTimeAttack(int view) {
-			tab_ = CoursesTab;
-			OnTabOpened(CoursesTab);
-			coursesView_ = view;
 		}
 
 		/// <summary>The Battles tab at a section: 0 1v1 battles, 1 races, 2 fun games, 3 ratings.</summary>

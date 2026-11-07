@@ -23,7 +23,7 @@ namespace TRC.TuneLoader {
 	/// </summary>
 	[KSLMeta("TRCTuneLoader", Version, "bskftw")]
 	public partial class TRCTuneLoaderMod : BaseMod {
-		public const string Version = "0.17.1";
+		public const string Version = "0.18.0";
 
 		private const string BackupsFolderName = "Backups";
 		private const float CarRefreshSeconds = 1.0f;
@@ -157,10 +157,15 @@ namespace TRC.TuneLoader {
 			} catch (Exception e) {
 				TrcLog.Error(e);
 			}
+			// Last, so the room channels above keep their places for everyone.
+			RegisterDevPackets();
 		}
 
 		/// <summary>Empty in the player mod: only a private build on bskftw's PC fills it in (map load timing).</summary>
 		partial void StartDevTools();
+
+		/// <summary>The private builds' own room messages: KSL only takes new kinds of message while the mod starts.</summary>
+		partial void RegisterDevPackets();
 
 		private void Update() {
 			sync_?.Tick();
