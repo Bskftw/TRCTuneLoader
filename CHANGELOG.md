@@ -2,6 +2,12 @@
 
 All versions of TRC Tune Loader, newest first. "Not tested in game yet" means the version builds and its automatic tests pass, but nobody has tried it in CarX yet.
 
+## 0.18.1 (Nov 6 2026)
+
+Not tested in game yet.
+
+- Traffic lab: traffic is shared with the room again. In 0.18.0 nobody's traffic was sent, so "Traffic in this room" stayed empty. Everyone needs 0.18.1.
+
 ## 0.18.0 (Nov 6 2026)
 
 Not tested in game yet. The traffic lab was tried with four players on Project Dream; room sharing is fixed in this version but not tried again yet.
