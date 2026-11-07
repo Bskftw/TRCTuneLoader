@@ -2,6 +2,14 @@
 
 All versions of TRC Tune Loader, newest first. "Not tested in game yet" means the version builds and its automatic tests pass, but nobody has tried it in CarX yet.
 
+## 0.18.2 (Nov 7 2026)
+
+Not tested in game yet. Fixes from the first traffic test with three players.
+
+- Traffic lab: a car someone hits is one wreck for everyone, not one per player.
+- Traffic lab: other players' cars no longer knock traffic out on your screen. Only the player who hits a car decides, so cars don't vanish from under the host.
+- Traffic lab: following someone's traffic is smoother.
+
 ## 0.18.1 (Nov 6 2026)
 
 Not tested in game yet.

@@ -22,7 +22,7 @@ A KSL mod for CarX Drift Racing Online, made for TRC (Touge Racing Community). B
 
 ![The four parts of TRC Tune Loader](docs/images/overview.png)
 
-**Version 0.18.1** (Nov 6 2026). What changed in each version: [CHANGELOG.md](CHANGELOG.md).
+**Version 0.18.2** (Nov 7 2026). What changed in each version: [CHANGELOG.md](CHANGELOG.md).
 
 **Still in testing.** The mod is new and still being tested, so bugs will happen, especially in the newest features (see "Tested in game" below). If something goes wrong, press **Report a bug** (Home, bottom right) and send bskftw the zip it puts on your Desktop.
 
