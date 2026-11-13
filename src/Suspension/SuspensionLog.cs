@@ -1,3 +1,4 @@
+// A suspension log: each wheel's travel, damper speeds, loads, hits, packing and contact lost, added frame by frame.
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -7,105 +8,6 @@ using System.Text;
 using UnityEngine;
 
 namespace TRC.TuneLoader {
-	/// <summary>One wheel at one moment: how far the suspension is compressed, the tyre's load and whether it touches the road.</summary>
-	public struct WheelFrame {
-		/// <summary>0 fully extended (drooped), 1 fully compressed.</summary>
-		public float Compression;
-
-		/// <summary>Vertical load on the tyre (N).</summary>
-		public float Load;
-		public bool Contact;
-		public float SlipAngle;
-		public float SlipRatio;
-	}
-
-	/// <summary>All four wheels at one moment (front left, front right, rear left, rear right, CarX's order).</summary>
-	public sealed class SuspensionFrame {
-		public double Time;
-		public Vector3 Position;
-		public float Kmh;
-		public WheelFrame[] Wheels = new WheelFrame[4];
-	}
-
-	/// <summary>One corner's suspension from the tune, as CarX built it.</summary>
-	public sealed class CornerSetup {
-		/// <summary>Full spring travel (m).</summary>
-		public float Travel;
-
-		/// <summary>Spring rate (N/m) and the four damper rates (N per m/s, if CarX's units are real ones).</summary>
-		public float Spring;
-		public float SlowBump;
-		public float FastBump;
-		public float SlowRebound;
-		public float FastRebound;
-
-		/// <summary>Damper speeds (m/s) where slow damping ends and fast damping starts, for bump and rebound.</summary>
-		public float BumpSlowLimit = 0.1f;
-		public float BumpFastLimit = 1f;
-		public float ReboundSlowLimit = 0.1f;
-		public float ReboundFastLimit = 1f;
-
-		/// <summary>The car's weight on this corner (kg), from the weight and its balance.</summary>
-		public float CornerMass;
-
-		/// <summary>The spring's natural frequency (Hz): how fast the corner bounces on its spring.</summary>
-		public float Frequency => Spring > 0 && CornerMass > 0 ? Mathf.Sqrt(Spring / CornerMass) / (2f * Mathf.PI) : 0f;
-
-		/// <summary>A damper rate as a share of critical damping (0.7 settles fast without bouncing; 1 never overshoots).</summary>
-		public float Ratio(float damping) => Spring > 0 && CornerMass > 0 ? damping / (2f * Mathf.Sqrt(Spring * CornerMass)) : 0f;
-	}
-
-	/// <summary>Something that happened to a wheel, where it happened.</summary>
-	public sealed class SuspensionEvent {
-		public enum Kind { ContactLost, Packing, Bottomed, LoadSpike }
-
-		public Kind What;
-		public int Wheel;
-		public double Time;
-		public Vector3 Position;
-		public float Kmh;
-
-		/// <summary>Contact lost: right after a hard compression. Packing: compression from and to.</summary>
-		public bool AfterCompression;
-		public float From;
-		public float To;
-
-		/// <summary>Contact lost: how long the tyre was off the road (s).</summary>
-		public double Seconds;
-
-		/// <summary>Where on the course (m along it), when a course was being driven; -1 otherwise.</summary>
-		public float Along = -1f;
-	}
-
-	/// <summary>One wheel's numbers over a session or a run.</summary>
-	public sealed class WheelReport {
-		/// <summary>Seconds at each damper speed: bins of <see cref="SuspensionLog.BinMmS"/> mm/s from -<see cref="SuspensionLog.MaxMmS"/> (rebound) to +MaxMmS (bump); the ends hold everything faster.</summary>
-		public double[] Histogram = new double[SuspensionLog.Bins];
-
-		/// <summary>Seconds at each 5% of travel (0 extended to 100 compressed).</summary>
-		public double[] TravelTime = new double[20];
-
-		public float MinCompression = 1f;
-		public float MaxCompression;
-		public double Seconds;
-		public double BumpSeconds;
-		public double ReboundSeconds;
-		public double FastBumpSeconds;
-		public double FastReboundSeconds;
-		public float FastestBumpMmS;
-		public float FastestReboundMmS;
-		public int ContactLost;
-		public int ContactLostAfterCompression;
-		public int Bottomed;
-		public int Packing;
-		public int LoadSpikes;
-		public float MeanLoad;
-		public float PeakLoad;
-
-		/// <summary>How much of the time the damper moved in bump rather than rebound (beyond the slow range), 0 to 1.</summary>
-		public float BumpShare => BumpSeconds + ReboundSeconds > 0 ? (float)(BumpSeconds / (BumpSeconds + ReboundSeconds)) : 0.5f;
-	}
-
 	/// <summary>
 	/// Suspension data logging (bskftw, Nov 1, for a player who wanted to see "compression stacking", road contact on
 	/// rebound and a too-stiff bump "without relying on the lack of feeling in a game"). The mod feeds a frame of all
@@ -122,7 +24,7 @@ namespace TRC.TuneLoader {
 	///
 	/// Nothing here knows about CarX, so the self-test drives it with made-up wheels.
 	/// </summary>
-	public sealed class SuspensionLog {
+	public sealed partial class SuspensionLog {
 		public const int BinMmS = 25;
 		public const int MaxMmS = 500;
 		public const int Bins = 2 * MaxMmS / BinMmS + 2;
@@ -372,100 +274,6 @@ namespace TRC.TuneLoader {
 					EndHits(w);
 				}
 			}
-		}
-
-		// ---- What it means ----
-
-		/// <summary>Plain-language notes on what the numbers point to, each with the wheel(s) it's about.</summary>
-		public List<string> Advice() {
-			var notes = new List<string>();
-			for (int w = 0; w < 4; w++) {
-				WheelReport r = Wheels[w];
-				if (r.Seconds < 5) {
-					continue;
-				}
-				string name = WheelNames[w];
-				if (r.Packing > 0) {
-					notes.Add($"{name}: packed down {r.Packing} time(s) through a run of bumps (it couldn't extend back before the next one). Try less rebound damping, slow and fast, or a little less fast bump.");
-				}
-				if (r.ContactLostAfterCompression >= 3) {
-					notes.Add($"{name}: left the road {r.ContactLostAfterCompression} times right after a hard compression (thrown off the bump). Try less fast bump, or slightly less rebound so it follows the road down again.");
-				}
-				int otherLosses = r.ContactLost - r.ContactLostAfterCompression;
-				if (otherLosses >= 3) {
-					notes.Add($"{name}: unloaded {otherLosses} times over crests or dips. Rebound may be too slow for the wheel to follow the road down, or the spring too soft at that end.");
-				}
-				if (r.Bottomed >= 3) {
-					notes.Add($"{name}: hit full compression {r.Bottomed} times. A stiffer spring, more slow bump, more ride height or more travel would keep it off the stops.");
-				}
-				if (r.LoadSpikes >= 5) {
-					notes.Add($"{name}: load spiked to {SpikeTimes:0.#}x its share of the weight {r.LoadSpikes} times on bumps. Fast bump may be too stiff for this road.");
-				}
-				if (r.MaxCompression > 0 && r.MaxCompression < 0.6f && r.Bottomed == 0) {
-					notes.Add($"{name}: used only up to {r.MaxCompression * 100:0}% of its travel. It could go softer (spring or slow bump) and use more of it.");
-				}
-				float share = r.BumpShare;
-				if (r.BumpSeconds + r.ReboundSeconds > 2 && (share > 0.62f || share < 0.38f)) {
-					notes.Add(share > 0.5f
-						? $"{name}: the damper spends much longer moving in bump than rebound ({share * 100:0}% / {100 - share * 100:0}%): rebound is slow compared with bump, which leads to packing."
-						: $"{name}: the damper spends much longer moving in rebound than bump ({share * 100:0}% / {100 - share * 100:0}%): bump is stiff compared with rebound.");
-				}
-			}
-			if (notes.Count == 0 && Seconds >= 10) {
-				notes.Add("Nothing stands out: no packing, no contact lost after compressions, no bottoming. Drive the bumpiest part of the road to see more.");
-			}
-			return notes;
-		}
-
-		public static string EventText(SuspensionEvent e) {
-			string where = e.Along >= 0 ? $"at {TimeAttackRun.Distance(e.Along)}" : "";
-			switch (e.What) {
-				case SuspensionEvent.Kind.ContactLost:
-					return $"{WheelNames[e.Wheel]} left the road{(e.AfterCompression ? " right after a compression" : "")}{(e.Seconds > 0 ? $" for {e.Seconds:0.00} s" : "")} {where}, {e.Kmh:0} km/h";
-				case SuspensionEvent.Kind.Packing:
-					return $"{WheelNames[e.Wheel]} packed down from {e.From * 100:0}% to {e.To * 100:0}% {where}, {e.Kmh:0} km/h";
-				case SuspensionEvent.Kind.Bottomed:
-					return $"{WheelNames[e.Wheel]} bottomed out {where}, {e.Kmh:0} km/h";
-				default:
-					return $"{WheelNames[e.Wheel]} load spike ({e.To:0.0}x its share) {where}, {e.Kmh:0} km/h";
-			}
-		}
-
-		// ---- CSV ----
-
-		/// <summary>Every frame as a CSV (time, speed, position, and each wheel's compression, damper speed, load, contact and slip), for a spreadsheet or a telemetry tool.</summary>
-		public string ToCsv() {
-			var text = new StringBuilder("time_s,kmh,x,y,z");
-			foreach (string w in WheelShort) {
-				text.Append($",{w}_compression_pct,{w}_damper_mm_s,{w}_load_n,{w}_contact,{w}_slip_angle,{w}_slip_ratio");
-			}
-			text.Append('\n');
-			string F(double v, string format = "0.###") => v.ToString(format, CultureInfo.InvariantCulture);
-			double start = Frames.Count > 0 ? Frames[0].Time : 0;
-			for (int i = 0; i < Frames.Count; i++) {
-				SuspensionFrame f = Frames[i];
-				SuspensionFrame p = i > 0 ? Frames[i - 1] : f;
-				double dt = f.Time - p.Time;
-				text.Append(F(f.Time - start, "0.0000")).Append(',').Append(F(f.Kmh, "0.0")).Append(',')
-					.Append(F(f.Position.x, "0.00")).Append(',').Append(F(f.Position.y, "0.00")).Append(',').Append(F(f.Position.z, "0.00"));
-				for (int w = 0; w < 4; w++) {
-					WheelFrame wf = f.Wheels[w];
-					float travel = Setup[w]?.Travel > 0 ? Setup[w].Travel : 0.15f;
-					double speed = dt > 0 ? (wf.Compression - p.Wheels[w].Compression) * travel / dt * 1000 : 0;
-					text.Append(',').Append(F(wf.Compression * 100, "0.0")).Append(',').Append(F(speed, "0")).Append(',').Append(F(wf.Load, "0"))
-						.Append(',').Append(wf.Contact ? "1" : "0").Append(',').Append(F(wf.SlipAngle, "0.000")).Append(',').Append(F(wf.SlipRatio, "0.000"));
-				}
-				text.Append('\n');
-			}
-			return text.ToString();
-		}
-
-		public string SaveCsv(string folder) {
-			Directory.CreateDirectory(folder);
-			string name = new string($"{Started.ToString("yyyy-MM-dd HHmmss", CultureInfo.InvariantCulture)} {Label}".Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c).ToArray()).Trim();
-			string path = Path.Combine(folder, name + ".csv");
-			File.WriteAllText(path, ToCsv(), new UTF8Encoding(false));
-			return path;
 		}
 	}
 }

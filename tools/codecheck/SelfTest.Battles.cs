@@ -225,7 +225,7 @@ namespace TRC.TuneLoader.CodeCheck {
 		/// </summary>
 		private static (Player host, Player guest) PlayBattle(Course course, BattleFormat format, uint id, bool open,
 			Action<Player, Player> setUp = null, double seconds = 400, double hostToGuest = 0.06, double guestToHost = 0.09, Func<double, bool> networkUp = null,
-			Action<double, Player, Player> onFrame = null) {
+			Action<double, Player, Player> onFrame = null, double again = 0) {
 			var host = new Player { Name = "Host", Id = HostId, ClockOrigin = 100 };
 			var guest = new Player { Name = "Guest", Id = GuestId, ClockOrigin = 5000 };
 			setUp?.Invoke(host, guest);
@@ -283,6 +283,9 @@ namespace TRC.TuneLoader.CodeCheck {
 						Player other = p == host ? guest : host;
 						if (networkUp == null || networkUp(t)) {
 							wires.Add(new Wire { DeliverAt = t + (p == host ? hostToGuest : guestToHost), Data = message.Encode(), To = other });
+							if (again > 0) {
+								wires.Add(new Wire { DeliverAt = t + again + (p == host ? hostToGuest : guestToHost), Data = message.Encode(), To = other });
+							}
 						}
 					}
 				}

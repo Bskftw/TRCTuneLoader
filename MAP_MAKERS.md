@@ -111,6 +111,17 @@ Line Renderers don't survive the map upload, so don't use one for the path.
 
 Side by side, cars line up 3 m apart, either side of the middle. On roads too narrow for two cars (under about 6 m, like Yabitsu or Maze Pass), races and 1v1 battles line up **single file** by themselves, and each driver's clock starts when they cross the start line, so the cars further back lose nothing. The mod measures the road from your `TRC Mainroad` collider; without one, from the start object's X scale.
 
+## Traffic lanes
+
+The traffic lab's highway traffic drives lanes. Instead of each player recording them in game, they can be part of your map:
+
+- One object per lane, named `TRC Lane <name>`, for example `TRC Lane Highway - Left 1`. Add `[speed 80]` for the lane's own speed limit (km/h) and `[exit 30]` for an exit lane that roughly 30% of cars take: `TRC Lane Exit 1 [speed 60] [exit 30]`.
+- Each one is a thin strip mesh along the lane, made by the TRC Paths Blender add-on's **Make map lane meshes**. The strip's UVs hold the distance along the lane, which tells the mod which way the lane runs. A strip without those UVs isn't read.
+- In Unity, turn on **Read/Write** in the model's import settings, turn the **Mesh Renderer off** and give it **no collider**, like a path.
+- Lanes join where one ends exactly where another starts, and where a lane starts or ends on the middle of another (an exit or an on-ramp), as the add-on's Check joins shows.
+
+A player's own lanes from the in-game lane tool win over the map's. The mod's log lists the lanes it read, and any it couldn't.
+
 ## A full example
 
 For a touge road called Akina, run downhill and uphill, with three sectors, race grids both ways and two speed traps:

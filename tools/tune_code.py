@@ -1,5 +1,5 @@
 """
-Python version of the TRC tune code (TuneFingerprint.cs, TuneFile.cs, TuneRules.cs, KndFile.cs).
+Python version of the TRC tune code (src/anticheat/TuneFingerprint.cs, src/data/TuneFile.cs, src/anticheat/TuneRules.cs, src/data/KndFile.cs).
 
 The Discord bot will use this to check codes that drivers submit, so it must produce exactly
 the same code as the mod. Run it on .trctune files, KINO .knd files, or .zip files of .knd files:
@@ -58,7 +58,7 @@ def is_usable(value: float) -> bool:
 
 
 def parse_number(text: str):
-    """The value as C#'s float.TryParse would store it, or None where TuneFile.cs skips the line."""
+    """The value as C#'s float.TryParse would store it, or None where src/data/TuneFile.cs skips the line."""
     if not NUMBER.fullmatch(text):
         return None
     try:
@@ -119,7 +119,7 @@ def trctune_code(path: str) -> str:
     return compute(normalize_id(info.get("car_id", "")), normalize_id(info.get("slot_id", "")), values)
 
 
-# ---- KINO .knd files (KndFile.cs) ----
+# ---- KINO .knd files (src/data/KndFile.cs) ----
 
 class _Reader:
     """Reads like .NET's BinaryReader; raises ValueError where it would throw."""

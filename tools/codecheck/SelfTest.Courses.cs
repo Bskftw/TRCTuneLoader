@@ -25,11 +25,16 @@ namespace TRC.TuneLoader.CodeCheck {
 			UphillIsDownhillReversed();
 			OffRoadIsStopped();
 			RecordedPathIsAdopted();
+			FilesTakenAgainMatchANewScan();
 			CircuitTests();
 			RaceTests();
 			ModeTests();
 			HomeTests();
 			DataFolderTests();
+			Stage1Tests();
+			SavedPathsTests();
+			MessagesTwiceTests();
+			TelemetryTests();
 		}
 
 		private static void UphillIsDownhillReversed() {
@@ -112,6 +117,69 @@ namespace TRC.TuneLoader.CodeCheck {
 					$"the map course takes the recorded path ({mapCourse.Length:0} m of {trueLength:0} m)");
 				Expect(uphill.HasPath && Math.Abs(uphill.Length - mapCourse.Length) < 0.5f, "the uphill twin takes the same path backwards");
 				Expect(!mapCourse.Official, "a path recorded on this PC is practice only");
+			} finally {
+				try {
+					Directory.Delete(folder, true);
+				} catch (Exception) {
+					// Left in the temp folder: harmless.
+				}
+			}
+		}
+
+		/// <summary>
+		/// docs/archive/OPTIMIZATION_REPORT.md item 1: after Record path, the map courses take the files again from copies of the
+		/// last scan instead of a new scan. They must come out exactly as a new scan's courses would.
+		/// </summary>
+		private static void FilesTakenAgainMatchANewScan() {
+			List<Vector3> road = Hairpin(200, 6, 0.5f);
+			Course Scanned() {
+				var c = new Course { Name = "Akina Downhill", MapKey = "test:pd", Source = CourseSource.Map };
+				CourseGate.TryMake(road[0], Vector3.forward, 12f, out c.Start);
+				CourseGate.TryMake(road[road.Count - 1], Vector3.back, 12f, out c.Finish);
+				c.Problems.Add(Course.NoPathProblem + " (test)");
+				c.Build();
+				return c;
+			}
+			string Describe(List<Course> courses) => string.Join(" | ", courses.Select(c =>
+				$"{c.Name} {c.Code} {c.HasPath} {c.PathFromPlayer} {c.Path.Count} {c.Length:0.00} {c.GridPath.Count} {string.Join(";", c.Problems)}"));
+
+			string folder = Path.Combine(Path.GetTempPath(), "trc_codecheck_" + Guid.NewGuid().ToString("N"));
+			try {
+				Course first = Scanned();
+				var library = new CourseLibrary();
+				library.LoadCustom(folder);
+				library.SetMapCourses("test:pd", new List<Course> { first, first.ReversedAs("Akina Uphill") });
+				Expect(!library.FromMap[0].HasPath, "before recording, the map course has no path");
+
+				// Record path, save it, then take the files again (what the mod now does) ...
+				var recorder = new PathRecorder(library.FromMap[0]);
+				recorder.Tick(road[0] - new Vector3(0, 0, 5));
+				foreach (Vector3 point in road) {
+					recorder.Tick(point);
+				}
+				recorder.Tick(road[road.Count - 1] + new Vector3(0, 0, -3));
+				CourseLibrary.SaveCustom(folder, recorder.Build("test"));
+				library.LoadCustom(folder);
+				Expect(library.TakeFilesAgain("test:pd"), "the files are taken again on the same map");
+				Expect(!library.TakeFilesAgain("test:other"), "another map's courses aren't (it scans instead)");
+				string again = Describe(library.ForMap("test:pd"));
+
+				// ... must equal a brand new scan with the same files.
+				Course fresh = Scanned();
+				var scannedAgain = new CourseLibrary();
+				scannedAgain.LoadCustom(folder);
+				scannedAgain.SetMapCourses("test:pd", new List<Course> { fresh, fresh.ReversedAs("Akina Uphill") });
+				string scan = Describe(scannedAgain.ForMap("test:pd"));
+				Expect(again == scan, $"taking the files again gives what a new scan gives: {again} vs {scan}");
+				Expect(library.FromMap[0].HasPath && library.FromMap[1].HasPath, "both directions took the recorded path");
+
+				// Deleting the file and taking the files again takes the path away again, as a new scan would.
+				foreach (string file in Directory.GetFiles(folder, "*", SearchOption.AllDirectories)) {
+					File.Delete(file);
+				}
+				library.LoadCustom(folder);
+				library.TakeFilesAgain("test:pd");
+				Expect(!library.FromMap[0].HasPath && library.FromMap[0].Problems.Count == 1, "without the file, the path is gone again (the scan's copy was never changed)");
 			} finally {
 				try {
 					Directory.Delete(folder, true);

@@ -58,7 +58,7 @@ namespace TRC.TuneLoader.CodeCheck {
 		/// <paramref name="step"/> runs every frame with the clock (seconds) so a test can press the host's buttons.
 		/// </summary>
 		private static List<Racer> RunRoom(Course course, RaceSettings settings, int count, Func<double, List<Racer>, bool> step,
-			double seconds = 300, Action<Racer, int> setUp = null) {
+			double seconds = 300, Action<Racer, int> setUp = null, double again = 0) {
 			var racers = new List<Racer>();
 			for (int i = 0; i < count; i++) {
 				var r = new Racer { Id = RaceHost + (ulong)i, Name = $"Driver {i + 1}", ClockOrigin = 1000 * i + 17, Delay = 0.03 + 0.01 * (i % 5) };
@@ -147,6 +147,9 @@ namespace TRC.TuneLoader.CodeCheck {
 						byte[] data = m.Encode();
 						foreach (Racer other in racers.Where(o => o != r)) {
 							wires.Add(new RaceWire { DeliverAt = t + r.Delay + other.Delay, Data = data, To = other });
+							if (again > 0) {
+								wires.Add(new RaceWire { DeliverAt = t + again + r.Delay + other.Delay, Data = data, To = other });
+							}
 						}
 					}
 				}

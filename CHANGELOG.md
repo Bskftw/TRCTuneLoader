@@ -2,6 +2,39 @@
 
 All versions of TRC Tune Loader, newest first. "Not tested in game yet" means the version builds and its automatic tests pass, but nobody has tried it in CarX yet.
 
+## 0.18.4 (Nov 12 2026)
+
+Partly tested in game: faster map loading and the traffic start. The rest builds and passes its automatic tests, but nobody has tried it in CarX yet. (0.18.3 was never released; its changes are here.)
+
+- Time attack: your best times now carry over between cars. In a car with no time on a track yet, the live delta, the sector pop-ups and the best line compare with your best on that track in any car. Before, they showed nothing.
+- Time attack: a bar under the timer shows the live delta (green when you're ahead, red when you're behind), with your predicted time beside the number.
+- New: telemetry (Options, While driving). A small panel over the track with your own car's throttle, brake, handbrake, clutch and steering, gear and RPM, a g-force dot, and each wheel's slip (green gripping, amber past its best grip, red well past it). Each part is off until you turn it on, and it can be moved with Arrange the screen.
+- New: Timing detail (Options, While driving). Simple works as before. Detailed also shows your best in the car you're in, each sector's gap to your best in any car and in this car, and at speed traps the fastest speed ever with the car that set it.
+- Speed traps: the Speed traps page shows which car set each trap's fastest speed. A sign set to "Fastest in this car" no longer shows another car's speed after you switch cars.
+- Traffic lab: five new traffic cars: AE86, RX7 FC, RX7 FD, Subaru and a van.
+- Traffic lab: joining someone's traffic is safer. Lanes far too big to be real are refused instead of freezing your game, and much bigger lane networks can be shared than before.
+- Traffic lab: joining someone with different lanes is about 10 times quicker (their lanes are sent much smaller). Everyone in the room needs 0.18.4.
+- Traffic lab: maps can now carry their own traffic lanes (see the map makers' guide).
+- Battles, 1v1 and Specs, Check my car: no more stutter every couple of seconds in a room.
+- Traffic lab: starting traffic no longer freezes the game for several seconds. The cars load one at a time, with a line saying which, and Cancel works while they do.
+- Time attack: maps with lots of tracks, like Project Dream, load several seconds faster from the second time on. The mod remembers each track's road, and reads it again only if the map changed. "Look for course objects again" always reads everything fresh.
+- Time attack: no more long freeze after Record path or Lay out grid (about 7 seconds on Project Dream).
+- Traffic lab: starting traffic again, or joining someone's, no longer stutters for a couple of seconds (your traffic cars stay loaded while you're on the same map).
+- Traffic lab: if the player whose traffic you follow crashes or leaves, their traffic stops on your screen after 5 seconds instead of driving on forever.
+- Traffic lab: joining someone's lanes is quicker, and the traffic page is lighter while it's open.
+- Smoother overall: less work every frame (speed traps, the race status, wheel buttons, My times), and the log file is written in batches.
+- New: search on Home. Type a page or a setting (ghosts, shortcut, colours) and press what it finds.
+- New: pin any page to Home from its title, up to 8.
+- New: Compare tunes (TRC spec). Two tunes for your car, or your car against a set, showing only what differs.
+- New: when you leave a map, Home shows your last session: time, distance, top speed, runs, laps, speed traps, battles and races.
+- Options is now four short pages in Tools: Keys and buttons, Look, While driving, Sharing and backups.
+- Players page: each report says how old it is, and an old one is greyed out.
+- Traffic lab: with two players running traffic, someone joining stays with one of them, and a host can swap to the other's with one press.
+- Traffic lab: crashes are sent twice, so a lost message no longer leaves players seeing different traffic.
+- Traffic lab: the page says when someone's traffic is on another version of the mod, and warns a follower when the host's updates are arriving unevenly.
+- Messages from other players only count from someone in the room, and floods of messages are cut.
+- The TRC Tune Loader window no longer opens by itself when you start CarX. After an update (or the first time) a short message on the garage screen says which key opens it.
+
 ## 0.18.2 (Nov 7 2026)
 
 Not tested in game yet. Fixes from the first traffic test with three players.

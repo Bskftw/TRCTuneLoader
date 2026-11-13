@@ -1,3 +1,4 @@
+// A course: its start and finish lines, path, sectors, speed traps and where it came from.
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -7,64 +8,11 @@ using System.Text;
 using UnityEngine;
 
 namespace TRC.TuneLoader {
-	/// <summary>Touge and highway run from a start line to a finish line; a circuit is a loop whose finish line is its start line.</summary>
-	public enum CourseKind { Touge, Highway, Circuit }
-
-	/// <summary>How cars line up for a race: two-wide and staggered, or one behind the other.</summary>
-	public enum GridLayout : byte { Grid, LineUp }
-
-	/// <summary>Where one car lines up for a race, and the way it faces.</summary>
-	public struct GridSpot {
-		public Vector3 Position;
-		public Vector3 Forward;
-	}
-
-	/// <summary>
-	/// Where a course comes from. Official courses are built into the mod (only bskftw ships them);
-	/// map courses come from TRC-named objects in the map itself; custom courses were made with the
-	/// placement tool on this PC and only count for practice.
-	/// </summary>
-	public enum CourseSource { Official, Map, Custom }
-
-	/// <summary>
-	/// A start or finish line: a line across the road through <see cref="Center"/>, <see cref="Width"/>
-	/// wide, crossed in the <see cref="Forward"/> direction.
-	/// </summary>
-	public sealed class CourseGate {
-		public Vector3 Center;
-
-		/// <summary>The way you drive through the line, level (no up or down) and one metre long.</summary>
-		public Vector3 Forward = Vector3.forward;
-		public float Width = CourseGeometry.DefaultWidth;
-
-		/// <summary>Level and to the right of <see cref="Forward"/>.</summary>
-		public Vector3 Right => new Vector3(Forward.z, 0f, -Forward.x);
-		public Vector3 LeftEnd => Center - Right * (Width / 2f);
-		public Vector3 RightEnd => Center + Right * (Width / 2f);
-
-		/// <summary>How far past the line a point is, along <see cref="Forward"/>; negative = behind it.</summary>
-		public float Ahead(Vector3 point) => Vector3.Dot(point - Center, Forward);
-
-		/// <summary>How far right of the middle of the line a point is; negative = left.</summary>
-		public float Across(Vector3 point) => Vector3.Dot(point - Center, Right);
-
-		/// <summary>A gate whose direction is <paramref name="direction"/> made level. False when it points straight up or down.</summary>
-		public static bool TryMake(Vector3 center, Vector3 direction, float width, out CourseGate gate) {
-			var level = new Vector3(direction.x, 0f, direction.z);
-			gate = new CourseGate { Center = center, Width = width > 0.5f ? width : CourseGeometry.DefaultWidth };
-			if (level.magnitude < 0.1f) {
-				return false;
-			}
-			gate.Forward = level.normalized;
-			return true;
-		}
-	}
-
 	/// <summary>
 	/// A course for time attack and battles: a start line, a finish line and a path along the middle of the
 	/// road between them. The path lets the mod tell how far along each car is, and catch shortcuts.
 	/// </summary>
-	public sealed class Course {
+	public sealed partial class Course {
 		public string Name = "";
 		public CourseKind Kind;
 		public CourseSource Source;
@@ -173,119 +121,6 @@ namespace TRC.TuneLoader {
 		/// <summary>The road at the start is too narrow for side by side: everyone lines up single file, and each driver's clock starts at the line.</summary>
 		public bool SingleFile => RoadWidth > 0f && RoadWidth < SideBySideWidth;
 
-		/// <summary>Grid rows: the first car this far (metres) behind the start line, then one every <see cref="GridStep"/> (two-wide: alternating sides).</summary>
-		public const float GridFirst = 4f;
-		public const float GridStep = 4f;
-		public const float LineUpStep = 8f;
-
-		/// <summary>
-		/// The spots for <paramref name="count"/> cars, pole first: the map's grid objects when it has them, else
-		/// along the grid path (or straight back from the start line). Two-wide grids put pole on the left or the
-		/// right (<paramref name="poleLeft"/>), the next car on the other side a little further back, and so on.
-		/// </summary>
-		public List<GridSpot> GridSpots(int count, bool poleLeft, GridLayout? layout = null) {
-			var spots = new List<GridSpot>();
-			GridLayout shape = layout ?? GridLayout;
-			for (int i = 0; i < count && i < GridObjects.Count; i++) {
-				spots.Add(GridObjects[i]);
-			}
-			if (spots.Count == count) {
-				return spots;
-			}
-			if (spots.Count > 0) {
-				// More cars than spots: on behind the last one, the way it faces.
-				GridSpot last = spots[spots.Count - 1];
-				for (int i = spots.Count, n = 1; i < count; i++, n++) {
-					spots.Add(new GridSpot { Position = last.Position - last.Forward * (shape == GridLayout.LineUp ? LineUpStep : GridStep * 2) * n, Forward = last.Forward });
-				}
-				return spots;
-			}
-
-			List<Vector3> back = GridLine();
-			float side = SideBySideGap / 2f;
-			for (int i = 0; i < count; i++) {
-				float behind = GridFirst + i * (shape == GridLayout.LineUp ? LineUpStep : GridStep);
-				CourseGeometry.AlongBack(back, behind, out Vector3 at, out Vector3 forward);
-				if (shape == GridLayout.Grid) {
-					bool left = (i % 2 == 0) == poleLeft;
-					Vector3 right = new Vector3(forward.z, 0f, -forward.x);
-					at += right * (left ? -side : side);
-				}
-				spots.Add(new GridSpot { Position = at, Forward = forward });
-			}
-			return spots;
-		}
-
-		/// <summary>
-		/// The line the grid is laid along, from the start line backwards: the grid path; on a circuit without one, the
-		/// end of the lap leading up to the line; else straight back from the line.
-		/// </summary>
-		private List<Vector3> GridLine() {
-			if (GridPath.Count >= 2) {
-				return GridPath;
-			}
-			if (IsCircuit && Path.Count >= 2) {
-				var back = new List<Vector3> { Start.Center };
-				for (int i = Path.Count - 1; i >= 0; i--) {
-					back.Add(Path[i]);
-				}
-				return back;
-			}
-			return new List<Vector3> { Start.Center, Start.Center - Start.Forward * 10f };
-		}
-
-		/// <summary>A full grid, for the map maker's grid path check.</summary>
-		public const int FullGrid = 16;
-
-		/// <summary>How far (metres) the grid path runs back from the start line, or 0 without one.</summary>
-		public float GridPathLength {
-			get {
-				if (!ReferenceEquals(gridLengthOf_, GridPath) || gridLengthCount_ != GridPath.Count) {
-					gridLengthOf_ = GridPath;
-					gridLengthCount_ = GridPath.Count;
-					gridLength_ = 0f;
-					for (int i = 1; i < GridPath.Count; i++) {
-						gridLength_ += Vector3.Distance(GridPath[i - 1], GridPath[i]);
-					}
-				}
-				return gridLength_;
-			}
-		}
-
-		private List<Vector3> gridLengthOf_;
-		private int gridLengthCount_;
-		private float gridLength_;
-
-		/// <summary>How far back (metres) the last of <paramref name="cars"/> lines up, two-wide or single file.</summary>
-		public static float GridDepthFor(int cars, GridLayout shape) => GridFirst + Math.Max(0, cars - 1) * (shape == GridLayout.LineUp ? LineUpStep : GridStep);
-
-		/// <summary>
-		/// How many cars fit on the grid path (more line up straight back from its end, which may not follow the road).
-		/// No limit with the map's own grid spots, or without a grid path (the grid isn't laid along one then).
-		/// </summary>
-		public int GridRoom(GridLayout shape) {
-			if (GridObjects.Count > 0 || GridPath.Count < 2) {
-				return int.MaxValue;
-			}
-			float length = GridPathLength;
-			return length < GridFirst ? 0 : 1 + (int)((length - GridFirst) / (shape == GridLayout.LineUp ? LineUpStep : GridStep));
-		}
-
-		/// <summary>
-		/// bskftw, Nov 2: a map path that doesn't run far enough back from the start line for a full grid. Races still
-		/// use it (as many cars as fit, the rest straight back from its end) until the map maker runs it on further.
-		/// "" when it fits a full grid single file, or there's no grid path.
-		/// </summary>
-		public string GridWarning() {
-			int two = GridRoom(GridLayout.Grid), line = GridRoom(GridLayout.LineUp);
-			if (line >= FullGrid) {
-				return "";
-			}
-			return $"The path runs {GridPathLength:0} m back from the start line: room for {Math.Min(two, FullGrid)} cars two-wide and {line} single file. " +
-				$"Run it on to {GridDepthFor(FullGrid, GridLayout.Grid):0} m behind the line for a full grid of {FullGrid} ({GridDepthFor(FullGrid, GridLayout.LineUp):0} m single file, " +
-				"for narrow roads). Until then, more cars line up straight back from its end.";
-		}
-
 		/// <summary>The point <paramref name="distance"/> metres along the path, and the way the road goes there.</summary>
 		public void PointAt(float distance, out Vector3 at, out Vector3 forward) {
 			at = Path.Count > 0 ? Path[0] : Start.Center;
@@ -362,6 +197,28 @@ namespace TRC.TuneLoader {
 		public Course WithTraps(IEnumerable<CourseGate> traps) {
 			var copy = (Course)MemberwiseClone();
 			copy.Traps = new List<CourseGate>(traps);
+			return copy;
+		}
+
+		/// <summary>
+		/// A copy that shares nothing the library or a run can change (lines, path, problems, grid, sectors, traps):
+		/// the scanned map courses are kept as copies, so they can be handed out fresh again (as a new scan would)
+		/// after the player's own course files changed (docs/archive/OPTIMIZATION_REPORT.md, item 1). The road colliders and the
+		/// map's start and finish objects are only read, so they're shared.
+		/// </summary>
+		public Course Copy() {
+			var copy = (Course)MemberwiseClone();
+			copy.Start = new CourseGate { Center = Start.Center, Forward = Start.Forward, Width = Start.Width };
+			copy.Finish = new CourseGate { Center = Finish.Center, Forward = Finish.Forward, Width = Finish.Width };
+			copy.Path = new List<Vector3>(Path);
+			copy.Problems = new List<string>(Problems);
+			copy.SectorPoints = new List<Vector3>(SectorPoints);
+			copy.ManualSectors = new List<Vector3>(ManualSectors);
+			copy.GridPath = new List<Vector3>(GridPath);
+			copy.RunOut = new List<Vector3>(RunOut);
+			copy.Traps = Traps.Select(t => new CourseGate { Center = t.Center, Forward = t.Forward, Width = t.Width }).ToList();
+			copy.GridObjects = new List<GridSpot>(GridObjects);
+			copy.gridLengthOf_ = null;
 			return copy;
 		}
 
@@ -471,48 +328,5 @@ namespace TRC.TuneLoader {
 		private static Vector3 RoundPoint(Vector3 point) => new Vector3(Rounded(point.x, 2), Rounded(point.y, 2), Rounded(point.z, 2));
 
 		private static float Rounded(float value, int decimals) => (float)Math.Round((double)value, decimals, MidpointRounding.AwayFromZero);
-	}
-
-	/// <summary>
-	/// The course code: SHA-256 of the map, the kind, both lines and the path, rounded so float noise
-	/// doesn't change it. Two drivers with the same code are on exactly the same course.
-	/// </summary>
-	public static class CourseCode {
-		public static string Compute(Course course) {
-			var text = new StringBuilder();
-			text.Append("map=").Append(course.MapKey ?? "").Append('\n');
-			text.Append("kind=").Append(Course.KindWord(course.Kind)).Append('\n');
-			AppendGate(text, "start", course.Start);
-			AppendGate(text, "finish", course.Finish);
-			text.Append("path=").Append(course.HasPath ? course.Path.Count.ToString(CultureInfo.InvariantCulture) : "none").Append('\n');
-			if (course.HasPath) {
-				foreach (Vector3 point in course.Path) {
-					text.Append(Round(point.x, 1)).Append(',').Append(Round(point.y, 1)).Append(',').Append(Round(point.z, 1)).Append('\n');
-				}
-			}
-
-			byte[] hash;
-			using (var sha = SHA256.Create()) {
-				hash = sha.ComputeHash(Encoding.UTF8.GetBytes(text.ToString()));
-			}
-			string hex = BitConverter.ToString(hash, 0, 4).Replace("-", "");
-			return $"CRS-{hex.Substring(0, 4)}-{hex.Substring(4, 4)}";
-		}
-
-		private static void AppendGate(StringBuilder text, string name, CourseGate gate) {
-			text.Append(name).Append('=')
-				.Append(Round(gate.Center.x, 1)).Append(',').Append(Round(gate.Center.y, 1)).Append(',').Append(Round(gate.Center.z, 1)).Append(',')
-				.Append(Round(gate.Forward.x, 3)).Append(',').Append(Round(gate.Forward.z, 3)).Append(',')
-				.Append(Round(gate.Width, 1)).Append('\n');
-		}
-
-		/// <summary>Rounded half away from zero, "-0" printed as "0", invariant culture.</summary>
-		public static string Round(float value, int decimals) {
-			double rounded = Math.Round((double)value, decimals, MidpointRounding.AwayFromZero);
-			if (rounded == 0) {
-				rounded = 0;
-			}
-			return rounded.ToString("F" + decimals.ToString(CultureInfo.InvariantCulture), CultureInfo.InvariantCulture);
-		}
 	}
 }

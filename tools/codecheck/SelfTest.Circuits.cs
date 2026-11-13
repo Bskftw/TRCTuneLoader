@@ -183,8 +183,10 @@ namespace TRC.TuneLoader.CodeCheck {
 		private static void DeltaComparesWithTheBestLap() {
 			Course course = MakeCircuit();
 			var run = new TimeAttackRun(course, laps: 2, flying: true);
-			double? halfway = null;
+			double? halfway = null, carHalfway = null;
+			SectorSplit? carSplit = null;
 			// Lap 1 at 25 m/s, lap 2 at 24 m/s: halfway round lap 2, it's (L/2)/24 - (L/2)/25 behind.
+			// This car's own best (Detailed timing) is lap 1 a tenth slower, so lap 2 is ahead of that one.
 			float lap = course.Length;
 			DriveCircle(run, t => {
 				double first = lap / 25.0;
@@ -192,9 +194,14 @@ namespace TRC.TuneLoader.CodeCheck {
 			}, before: 30f, onFrame: r => {
 				if (r.Reference == null && r.LapTimes.Count == 1) {
 					r.Reference = r.LapTimes[0].Trace;
+					r.CarReference = r.LapTimes[0].Trace.Select(s => s * 1.1f).ToArray();
 				}
 				if (r.Lap == 2 && halfway == null && r.Progress >= lap / 2f) {
 					halfway = r.Delta;
+					carHalfway = r.CarDelta;
+				}
+				if (r.Lap == 2 && r.LastSplit is SectorSplit s && s.Lap == 2 && carSplit == null) {
+					carSplit = s;
 				}
 				return 0f;
 			});
@@ -202,6 +209,10 @@ namespace TRC.TuneLoader.CodeCheck {
 			Expect(halfway.HasValue && Math.Abs(halfway.Value - expected) < 0.03,
 				$"the live delta shows how far behind the best lap this lap is ({(halfway.HasValue ? TimeAttackRun.FormatGap(halfway.Value) : "none")}, expected {TimeAttackRun.FormatGap(expected)})");
 			Expect(run.LapTimes.Count == 2 && run.LapTimes[0].Trace.Length >= (int)(lap / TimeAttackRun.TraceStep), "a lap keeps its time every 10 m for the delta");
+			double carExpected = lap / 2.0 / 24.0 - 1.1 * lap / 2.0 / 25.0;
+			Expect(carHalfway.HasValue && Math.Abs(carHalfway.Value - carExpected) < 0.05,
+				$"the delta to this car's best runs beside it ({(carHalfway.HasValue ? TimeAttackRun.FormatGap(carHalfway.Value) : "none")}, expected {TimeAttackRun.FormatGap(carExpected)})");
+			Expect(carSplit?.Delta > 0 && carSplit?.CarDelta < 0, $"a sector split has both gaps: behind the best in any car, ahead of this car's ({carSplit?.Delta} / {carSplit?.CarDelta})");
 		}
 
 		private static void PracticeSpoilsOnlyTheLap() {

@@ -11,7 +11,7 @@ A KSL mod for CarX Drift Racing Online, made for TRC (Touge Racing Community). B
 | | |
 | --- | --- |
 | **Tunes & TRC spec** | Put the official TRC tunes on your car in one click, and check your car, and every car in the room, for anything that isn't TRC spec. Every tune has a code the TRC Discord bot uses to verify leaderboard runs. |
-| **Time attack & course builder** | Make your own courses on any map by driving them, or race the official ones. 3-2-1-GO or flying starts, circuits with laps, sectors in purple, green and amber, a live delta, and your best line drawn on the road. Gantries at the start, finish and every sector light up with the countdown and show your gap to your PB, and the course shows on CarX's minimap and map. Drive to TRC spec, Open or one of your regulations. |
+| **Time attack & course builder** | Make your own courses on any map by driving them, or race the official ones. 3-2-1-GO or flying starts, circuits with laps, sectors in purple, green and amber, a live delta bar with your predicted time, and your best line drawn on the road. Your bests carry over between cars. Gantries at the start, finish and every sector light up with the countdown and show your gap to your PB, and the course shows on CarX's minimap and map. Drive to TRC spec, Open or one of your regulations. |
 | **Battles, races & tournaments** | Challenge anyone in the room: side by side, cat and mouse, or a Tokyo Xtreme Racer style highway battle. Races with qualifying and grids (no driver limit), then points series, knockouts and heats. Console players can race too, timed by a PC host. |
 | **Specs** | Make your own spec, a tune for each car like TRC's sets, for spec racing. Share it as a zip, install other players' specs, and race or time attack to it. |
 | **Regulations** | For communities that tune their own cars to rules: a most power, tyre widths per weight class, no swaps, one setup. Make one, share it, and run battles, races and tournaments to it, with its own Elo. |
@@ -22,7 +22,7 @@ A KSL mod for CarX Drift Racing Online, made for TRC (Touge Racing Community). B
 
 ![The four parts of TRC Tune Loader](docs/images/overview.png)
 
-**Version 0.18.2** (Nov 7 2026). What changed in each version: [CHANGELOG.md](CHANGELOG.md).
+**Version 0.18.4** (Nov 12 2026). What changed in each version: [CHANGELOG.md](CHANGELOG.md).
 
 **Still in testing.** The mod is new and still being tested, so bugs will happen, especially in the newest features (see "Tested in game" below). If something goes wrong, press **Report a bug** (Home, bottom right) and send bskftw the zip it puts on your Desktop.
 
@@ -163,7 +163,8 @@ Laps (circuits only) can be 1, 3, 5, 10 or **Unlimited**. Unlimited is practice:
 3. Standing start: hold still, and a **3-2-1-GO** countdown starts. Moving before GO is a **jump start**, and you stop and try again. Flying start: just drive through the line.
 4. A small timer shows your time (on a circuit, the lap time, with the lap, the total and your best lap under it) and a thin line for how far along you are.
 5. **Sectors:** every course is split into sectors (3, or more on long courses; maps can mark their own). They stay on the timer, coloured as you finish each one: **purple** great pace (the best that sector has ever been driven), **green** on pace (your best in this car), **amber** below pace. My times shows the sectors of your times too. Options can hide them.
-6. **Live delta:** once you have a best time in this car on this tune set, the timer shows how far ahead (green, minus) or behind (red, plus) you are right now.
+   **Timing detail** (Options): **Simple** compares with your best on the track in any car. **Detailed** also shows your best in the car you're in and each sector's gap to both.
+6. **Live delta:** once you have a best time on the track, in any car, the timer shows how far ahead (green, minus) or behind (red, plus) you are right now, with a bar under the time and your predicted time.
 7. Cross the finish line (on a circuit, after the last lap) to stop the clock. Your time, how it compares with your best, your sectors and whether it counts show for a few seconds. A circuit also shows the laps: the best, the average and how even they were. Then the run is ready for another go.
 
 A run is stopped if you take a shortcut, leave the course, reset the car, change car or the game speed changes (in unlimited-lap practice, only that lap doesn't count). On maps that mark their roads (like Project Dream), the whole car leaving the road for half a second stops it too. Part of the car still over the road, or flying over it off a jump, counts as on the road. **Stop time attack** ends it.
@@ -245,7 +246,7 @@ Tournaments can also be set to **No penalties**: the host can't add time penalti
 
 Circuits can also run as an **elimination race**: the last car each lap is out. **Lay out grid** in Tracks sets where cars line up: pick Two-wide or Line-up, drive back from the start line, turn round, and drive down the middle of the road up to the line and through it.
 
-**Best line:** during a time attack, where you drove on your best run (or best lap) in this car shows as dots on the road, coloured by speed (blue slow to red fast) or in one colour. Options can turn it off.
+**Best line:** during a time attack, where you drove on your best run (or best lap) on the track, in any car, shows as dots on the road, coloured by speed (blue slow to red fast) or in one colour. Options can turn it off.
 
 **Moving the timer:** while a time attack runs, open the window and drag the timer anywhere on the screen. It stays there; Options can put it back at the top.
 
@@ -337,7 +338,9 @@ Your courses are saved in `kino\mods\TRCTuneLoader\Courses`. In Tracks, **Edit**
 - **Best line**: speed colours, one colour, or off.
 - **Ghosts**: keep your 3 best, keep every run, or don't record; and how see-through they are.
 - **Speed trap signs**: your last speed through each trap, or your fastest.
-- **Screen layout**: **Arrange the screen** shows every box the mod draws over the track at once (the timer, the speed trap flash, pop-up notices, the TRC spec badge and the suspension overlay) so you can drag each where you want it. **Put everything back** resets them.
+- **Timing detail**: Simple, or Detailed (your best in this car too, each sector's gaps, and at speed traps the fastest ever with the car that set it).
+- **Telemetry** (each part off by default): a small panel over the track with your own car's **inputs** (throttle, brake, handbrake, clutch, steering, gear and RPM), a **g-force** dot, and each **wheel's slip** (green gripping, amber past its best grip, red well past it).
+- **Screen layout**: **Arrange the screen** shows every box the mod draws over the track at once (the timer, the speed trap flash, pop-up notices, the TRC spec badge, the suspension overlay and the telemetry) so you can drag each where you want it. **Put everything back** resets them.
 - **Share my tune values** (off by default): lets other TRC Tune Loader users see your tune's real values on their Players page. Off, they only see what you changed.
 - **Wheel and controller buttons**: **Pick a button**, then press it on your wheel or controller. The **TRC action** button does what fits right now: accepts a challenge, joins a race that just opened, runs the last battle or race back, or restarts your time attack. **Open the window** opens and closes this window. Pick buttons CarX doesn't use: CarX still sees every press.
 - **Report a bug**: the same as on Home.
@@ -426,4 +429,5 @@ Traffic cars: "Generic passenger car pack" by Comrade1280 (https://sketchfab.com
 | New menu (Home cards, parts and pages), controller in the menu, player specs, manual sectors, start key | 0.17.0 | Partly: the menu, Home, Look, gantry signs, My times |
 | Specs: Check my car and Players (specs checked like TRC spec), My car renamed TRC Tunes, diff types by name | 0.17.1 | Partly: the Specs pages, Home, diff types |
 | Traffic lab (very early testing), Random speed traps on every track, smoother Speed traps page | 0.18.0 | Partly: traffic on Project Dream with four players (before room sharing was fixed) |
+| Search and pinned pages, Compare tunes, session summary, Options pages, faster map loading and traffic start, bests across cars, delta bar, Timing detail, telemetry, new traffic cars | 0.18.4 | Partly: map loading and the traffic start |
 

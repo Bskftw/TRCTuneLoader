@@ -46,6 +46,7 @@ namespace TRC.TuneLoader.CodeCheck {
 			LiveSnapshotTests();
 			CourseTests();
 			BattleTests();
+			WireSnapshotTests();
 
 			Console.WriteLine(failures_ == 0 ? $"Self-test OK ({checks_} checks)" : $"Self-test FAILED: {failures_} of {checks_} checks");
 			return failures_ == 0 ? 0 : 1;

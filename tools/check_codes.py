@@ -1,8 +1,8 @@
 """
 Checks that the mod (C#) and the bot (Python) give the same tune code.
 
-Run it after changing src/TuneFingerprint.cs, src/TuneFile.cs, src/TuneRules.cs,
-src/KndFile.cs or tools/tune_code.py:
+Run it after changing src/anticheat/TuneFingerprint.cs, src/data/TuneFile.cs, src/anticheat/TuneRules.cs,
+src/data/KndFile.cs or tools/tune_code.py:
 
     python tools/check_codes.py
     python tools/check_codes.py "<CarX>/kino/mods/KN_Base/tunes"    (also check real KINO tunes)

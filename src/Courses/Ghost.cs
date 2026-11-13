@@ -1,3 +1,4 @@
+// A ghost: a recorded run (where the car was every 0.1 s), played back, and packed into bytes to save or share.
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -23,7 +24,7 @@ namespace TRC.TuneLoader {
 	/// physics, so it can't push, tow or slipstream anyone (KINO's ghost could be used for a slipstream). It also
 	/// gives the time at every point of the course, so a time attack can show the live delta and sectors against it.
 	/// </summary>
-	public sealed class Ghost {
+	public sealed partial class Ghost {
 		public const string Extension = ".trcghost";
 		public const float SampleSeconds = 0.1f;
 		private const string Magic = "TRCGHOST";
@@ -248,43 +249,6 @@ namespace TRC.TuneLoader {
 		private static string Clip(string text) {
 			string clean = new string((text ?? "").Where(c => !char.IsControl(c)).ToArray());
 			return clean.Length <= 80 ? clean : clean.Substring(0, 80);
-		}
-
-		// ---- The folder (Ghosts/<course code>/) ----
-
-		public static string FolderFor(string ghostsFolder, string courseCode) =>
-			Path.Combine(ghostsFolder, new string((courseCode ?? "").Select(c => char.IsLetterOrDigit(c) || c == '-' ? c : '_').ToArray()));
-
-		public void Save(string ghostsFolder) {
-			string folder = FolderFor(ghostsFolder, CourseCode);
-			Directory.CreateDirectory(folder);
-			if (FilePath.Length == 0) {
-				string name = new string($"{When.ToString("yyyy-MM-dd HHmmss", CultureInfo.InvariantCulture)} {Driver} {TimeAttackRun.FormatTime(Time).Replace(':', '.')}"
-					.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c).ToArray());
-				FilePath = Path.Combine(folder, name + Extension);
-			}
-			File.WriteAllBytes(FilePath, Encode());
-		}
-
-		/// <summary>Every ghost saved for a course, fastest first.</summary>
-		public static List<Ghost> LoadFor(string ghostsFolder, string courseCode) {
-			var list = new List<Ghost>();
-			string folder = FolderFor(ghostsFolder, courseCode);
-			if (!Directory.Exists(folder)) {
-				return list;
-			}
-			foreach (string path in Directory.GetFiles(folder, "*" + Extension)) {
-				try {
-					Ghost g = Decode(File.ReadAllBytes(path));
-					if (g != null && g.CourseCode == courseCode) {
-						g.FilePath = path;
-						list.Add(g);
-					}
-				} catch (Exception) {
-					// A file that can't be read is left out.
-				}
-			}
-			return list.OrderBy(g => g.Time).ToList();
 		}
 	}
 }
