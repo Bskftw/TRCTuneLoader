@@ -57,10 +57,10 @@ namespace TRC.TuneLoader {
 
 		private void NewRun() {
 			if (IsHighway) {
-				// No course: the battle is on SP, driven anywhere.
+				// No course: the battle is on pressure, driven anywhere.
 				Run = null;
-				MySp = FullSp;
-				PeerSp = FullSp;
+				MyPressure = FullPressure;
+				PeerPressure = FullPressure;
 			} else {
 				// A reset doesn't end a battle run: a driver who messes up can still win if the other does too.
 				Run = new TimeAttackRun(Course, Laps) { ExternalStart = true, AllowResets = true, KeepGoing = true, ClockFromLine = LinedUp };
@@ -88,8 +88,8 @@ namespace TRC.TuneLoader {
 		private void BackToGrid(string message) {
 			Run?.Restart();
 			if (IsHighway) {
-				MySp = FullSp;
-				PeerSp = FullSp;
+				MyPressure = FullPressure;
+				PeerPressure = FullPressure;
 				MyCar = null;
 				MyReady = false;
 				peerRan_ = false;

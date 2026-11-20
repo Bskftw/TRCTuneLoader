@@ -6,7 +6,7 @@ using System.Diagnostics;
 namespace TRC.TuneLoader {
 	/// <summary>
 	/// How many times a second something may happen, per key (a sender's Steam ID): a bucket of tokens for each, filled
-	/// at <c>perSecond</c> up to <c>burst</c>. Used on messages from the room (IMPROVEMENT_PLAN.md N7), with limits far above
+	/// at <c>perSecond</c> up to <c>burst</c>. Used on messages from the room (docs/archive/IMPROVEMENT_PLAN.md N7), with limits far above
 	/// anything the mod sends, so only a flood is cut. Safe from any thread (KSL may deliver packets off the main thread).
 	/// Nothing here knows about the game, so the self-test can drive it with its own clock.
 	/// </summary>

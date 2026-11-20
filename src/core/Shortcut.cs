@@ -19,6 +19,9 @@ namespace TRC.TuneLoader {
 		/// <summary>The time attack start key (the track open in Tracks): Ctrl + G.</summary>
 		public static readonly Shortcut StartDefault = new Shortcut(true, false, false, KeyCode.G);
 
+		/// <summary>The quick menu while driving: Ctrl + Q.</summary>
+		public static readonly Shortcut QuickDefault = new Shortcut(true, false, false, KeyCode.Q);
+
 		private static readonly KeyCode[] NotAllowed = {
 			KeyCode.None, KeyCode.Escape,
 			KeyCode.LeftControl, KeyCode.RightControl, KeyCode.LeftShift, KeyCode.RightShift,

@@ -87,9 +87,9 @@ namespace TRC.TuneLoader {
 			// The format is picked beside the page's title (Nav.DrawPageOptions); what it means is said here.
 			GUILayout.Label($"Format: {BattleFormats[pickedFormat_]}", Theme.SectionLabel);
 			GUILayout.Label(pickedFormat_ == 2
-				? $"Tokyo Xtreme Racer style, anywhere on the map, no course: drive alongside each other at speed, a rolling 3-2-1, then whoever's behind loses SP (faster the bigger the gap; a hit costs {BattleSession.HitSp:0}). Empty SP, or {BattleSession.LostMetres:0} m behind, loses."
+				? $"Anywhere on the map, no course: drive alongside each other at speed, a rolling 3-2-1, then whoever's behind loses pressure (faster the bigger the gap; a hit costs {BattleSession.HitPressure:0}). An empty pressure bar, or {BattleSession.LostMetres:0} m behind, loses."
 				: pickedFormat_ == 3
-				? "For fun, like Most Wanted: side by side from a standing start, and the higher total of every speed trap on the course wins (every lap on a circuit). You have to finish for yours to count. A course without traps of its own uses the free-roam traps along its road. It doesn't change your Elo."
+				? "For fun: side by side from a standing start, and the higher total of every speed trap on the course wins (every lap on a circuit). You have to finish for yours to count. A course without traps of its own uses the free-roam traps along its road. It doesn't change your Elo."
 				: pickedFormat_ == 1
 				? $"Runs swap who leads. The chaser wins a run by passing and staying ahead to the finish; the leader wins by finishing {BattleRules.LeaderGapSeconds:0.0} s or more ahead (1.0 s after both have led once, then 0.5 s). Otherwise swap and go again."
 				: "Side by side from a standing start. The faster time to the finish wins.", Theme.Small);

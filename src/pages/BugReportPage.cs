@@ -26,7 +26,7 @@ namespace TRC.TuneLoader {
 			GUILayout.BeginVertical(Theme.Card);
 			GUILayout.Label("Something didn't work? Say what happened (optional), then press Make a bug report. A zip lands on your Desktop with the mod's logs, " +
 				"what you were doing, your options and your mods. Send it to bskftw on Discord. It has the names of players you raced, and no tune values of anyone.", Theme.Small);
-			bugNote_ = GUILayout.TextArea(bugNote_ ?? "", 1000, Theme.Field, GUILayout.MinHeight(48));
+			bugNote_ = GUILayout.TextArea(bugNote_ ?? "", 1000, Theme.FieldWrapped, GUILayout.MinHeight(48), GUILayout.ExpandWidth(true));
 			GUILayout.BeginHorizontal();
 			if (NavButton("Make a bug report", Theme.ButtonPrimary)) {
 				MakeBugReport();

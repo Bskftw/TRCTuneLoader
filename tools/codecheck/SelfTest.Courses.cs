@@ -35,6 +35,14 @@ namespace TRC.TuneLoader.CodeCheck {
 			SavedPathsTests();
 			MessagesTwiceTests();
 			TelemetryTests();
+			HudPresetTests();
+			ResultCodeTests();
+			TrafficScoreTests();
+			CutShortTests();
+			MessageSealTests();
+			Stage6Tests();
+			HonestyTests();
+			LookTests();
 		}
 
 		private static void UphillIsDownhillReversed() {

@@ -158,6 +158,10 @@ namespace TRC.TuneLoader {
 			return false;
 		}
 
+		public string NoClipSign() => "";
+
+		public string CarPhysicsState() => "";
+
 		public bool TryMeasureRoadWidth(Vector3 centre, Vector3 right, ICollection<int> roadColliders, out float width) {
 			width = 0f;
 			return false;

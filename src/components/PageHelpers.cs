@@ -89,8 +89,18 @@ namespace TRC.TuneLoader {
 		/// <summary>A status with a coloured dot: green good, amber waiting or unsure, red not spec, grey unknown.</summary>
 		private static string Dot(string hex, string text) => $"<color={hex}><b>•</b></color> {text}";
 
-		/// <summary>A row of chips, one picked. Returns the picked index.</summary>
+		/// <summary>
+		/// A row of choices, one picked. Returns the picked index. Up to 4 short ones are a segmented strip (UI redesign
+		/// Stage 3); longer lists stay chips, which don't squeeze.
+		/// </summary>
 		private static int Choice(string[] labels, int picked) {
+			if (labels.Length >= 2 && labels.Length <= 4 && labels.Sum(l => l.Length) <= 44) {
+				GUILayout.BeginHorizontal();
+				picked = Segmented(labels, picked);
+				GUILayout.FlexibleSpace();
+				GUILayout.EndHorizontal();
+				return picked;
+			}
 			GUILayout.BeginHorizontal();
 			for (int i = 0; i < labels.Length; i++) {
 				if (NavButton(labels[i], i == picked ? Theme.ChipActive : Theme.Chip)) {
@@ -117,6 +127,13 @@ namespace TRC.TuneLoader {
 			return picked;
 		}
 
-		private static bool OnOff(bool on) => Choice(new[] { "On", "Off" }, on ? 0 : 1) == 0;
+		/// <summary>An on/off setting: a switch since the redesign's Stage 3 (it was two chips). Returns the new state.</summary>
+		private static bool OnOff(bool on) {
+			GUILayout.BeginHorizontal();
+			on = Switch(on);
+			GUILayout.FlexibleSpace();
+			GUILayout.EndHorizontal();
+			return on;
+		}
 	}
 }

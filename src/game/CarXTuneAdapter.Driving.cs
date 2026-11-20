@@ -33,6 +33,7 @@ namespace TRC.TuneLoader {
 				pose.SpeedKmh = raceCar.carX != null ? Mathf.Abs(raceCar.carX.speedKMH) : 0f;
 				pose.CarId = CarIdOf(raceCar);
 				pose.Rotation = body.rotation;
+				pose.Body = BodyBox(raceCar, body, pose.CarId);
 				return true;
 			} catch (Exception e) {
 				// Called every frame: log the first failure only.

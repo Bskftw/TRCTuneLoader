@@ -340,14 +340,14 @@ namespace TRC.TuneLoader.CodeCheck {
 		}
 
 		private static void CatAndMouseBattle() {
-			// Battle 2 is even: the host leads run 1. Same speed, so the chaser (16 m back) can't pass and isn't 1.5 s
-			// behind: no winner, swap. In run 2 the guest leads and the host (now chasing) is slow: the guest wins.
+			// The challenger (host) chases first: the guest leads run 1. Same speed, so the chaser (16 m back) can't pass and
+			// isn't 1.5 s behind: no winner, swap. In run 2 the host leads and is slow: the guest (now chasing) wins.
 			Course course = StraightCourse();
 			var (host, guest) = PlayBattle(course, BattleFormat.CatAndMouse, 2, open: true,
 				setUp: (h, g) => h.Acceleration = run => run == 0 ? 5 : 3);
 			BattleSession hs = host.Session, gs = guest.Session;
 			Expect(hs.Runs.Count == 2 && gs.Runs.Count == 2, $"cat and mouse goes to a second run after a run with no winner ({hs.Runs.Count} / {gs.Runs.Count} runs: {hs.Message})");
-			Expect(hs.Runs.Count == 2 && hs.Runs[0].Leader == HostId && hs.Runs[1].Leader == GuestId, "cat and mouse swaps who leads");
+			Expect(hs.Runs.Count == 2 && hs.Runs[0].Leader == GuestId && hs.Runs[1].Leader == HostId, "the challenger chases first, then cat and mouse swaps who leads");
 			Expect(hs.Winner == GuestId && gs.Winner == GuestId, $"both sides agree who won the cat and mouse ({hs.Message} / {gs.Message})");
 			Expect(!hs.Counted, "an Open battle doesn't count");
 		}

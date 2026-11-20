@@ -33,6 +33,19 @@ namespace TRC.TuneLoader.CodeCheck {
 			data[0] = 99;
 			Expect(RoomMessage.Decode(data) == null, "a room message of a kind this version doesn't know is ignored");
 			Expect(RoomMessage.Decode(new RoomMessage { Kind = RoomKind.Status, Detail = new string('x', 500) }.Encode()).Detail.Length == 80, "long text is clipped");
+			byte[] withTraffic = new RoomMessage { Kind = RoomKind.Status, Name = "Apok", Car = "AE86", Traffic = true, TrafficPoints = 12345f, TrafficBest = 20000f, TrafficCombo = 4, AttackId = 77, AttackSecondsLeft = 300f }.Encode();
+			RoomMessage traffic = RoomMessage.Decode(withTraffic);
+			Expect(traffic != null && traffic.Traffic && traffic.TrafficPoints == 12345f && traffic.TrafficCombo == 4 && traffic.AttackId == 77 && traffic.Car == "AE86",
+				"room board: a status carries the traffic score and score attack");
+			RoomMessage old = RoomMessage.Decode(new RoomMessage { Kind = RoomKind.Status, Name = "Apok", Car = "AE86", AsBefore019 = true }.Encode());
+			Expect(old != null && !old.Traffic && old.AttackId == 0 && old.Car == "AE86" && old.Features == "", "room board: a status from before 0.19 (no parts) still reads");
+			var both = RoomMessage.Decode(new RoomMessage { Kind = RoomKind.Status, Traffic = true, TrafficPoints = 5f, Features = "battle:5-7 lanes:5 sealed:1" }.Encode());
+			Expect(both != null && both.Traffic && both.Features == "battle:5-7 lanes:5 sealed:1", "room board: a status carries its features and the traffic part together");
+			const string mine = "battle:5-7 race:2 room:1 report:4 lanes:5 path:3 sealed:1";
+			Expect(RoomBoard.Missing(mine, mine).Count == 0, "features: the same version can do everything together");
+			List<string> older = RoomBoard.Missing(mine, "");
+			Expect(older.Count == 2 && older.Contains("highway traffic") && older.Contains("signed messages"), $"features: a 0.18 copy can't share highway traffic or sign ({string.Join(", ", older)})");
+			Expect(RoomBoard.Missing("battle:5-7", "battle:7-9").Count == 0 && RoomBoard.Missing("battle:5-6", "battle:7-9").Count == 1, "features: versions that overlap work, ones that don't are named");
 		}
 
 		private static void SharedCoursesTravel() {

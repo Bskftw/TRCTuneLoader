@@ -109,6 +109,34 @@ namespace TRC.TuneLoader {
 			}
 		}
 
+		private const string LastCompareFile = "last_compare.txt";
+
+		/// <summary>
+		/// Keeps the last run's Lap compare (its title, then both traces in milliseconds, comma separated) so My times still
+		/// shows it after CarX restarts (bskftw, Nov 19).
+		/// </summary>
+		public static void SaveLastCompare(string timesFolder, string title, float[] mine, float[] best) {
+			string Row(float[] t) => string.Join(",", t.Select(s => ((long)Math.Round(s * 1000.0, MidpointRounding.AwayFromZero)).ToString(CultureInfo.InvariantCulture)));
+			string folder = Path.Combine(timesFolder, FolderName);
+			Directory.CreateDirectory(folder);
+			File.WriteAllText(Path.Combine(folder, LastCompareFile), $"{(title ?? "").Replace('\n', ' ')}\n{Row(mine)}\n{Row(best)}\n", new UTF8Encoding(false));
+		}
+
+		/// <summary>The saved last Lap compare, or null.</summary>
+		public static (string Title, float[] Mine, float[] Best)? LoadLastCompare(string timesFolder) {
+			try {
+				string path = Path.Combine(timesFolder, FolderName, LastCompareFile);
+				if (!File.Exists(path)) {
+					return null;
+				}
+				string[] lines = File.ReadAllLines(path, Encoding.UTF8);
+				float[] Parse(string row) => row.Split(',').Select(f => long.Parse(f, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture) / 1000f).ToArray();
+				return lines.Length >= 3 ? (lines[0], Parse(lines[1]), Parse(lines[2])) : ((string, float[], float[])?)null;
+			} catch (Exception) {
+				return null; // a broken file just means no card
+			}
+		}
+
 		/// <summary>Keeps <paramref name="trace"/> when it's faster than the saved one (or there's none). True when it was saved.</summary>
 		public static bool SaveIfFaster(string timesFolder, string key, float[] trace, long timeMs) {
 			if (trace == null || trace.Length < 2) {

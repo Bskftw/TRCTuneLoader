@@ -41,8 +41,7 @@ namespace TRC.TuneLoader {
 		private OwnCheck carStatus_;
 		private float nextStatusRefresh_;
 
-		private static readonly GUIStyle ContentArea = new GUIStyle { padding = new RectOffset(14, 14, 10, 14) };
-		private static readonly GUIStyle HeaderArea = new GUIStyle { padding = new RectOffset(12, 8, 10, 10) };
+		private static readonly GUIStyle ContentArea = new GUIStyle { padding = new RectOffset(18, 14, 14, 14) };
 		private static readonly GUIStyle TabArea = new GUIStyle { padding = new RectOffset(8, 8, 0, 0) };
 
 		private void SetupWindow() {
@@ -170,12 +169,18 @@ namespace TRC.TuneLoader {
 				arranging_ = false;
 			}
 			// While arranging the screen, only the sample boxes show (the real ones would sit on top of them).
-			bool hud = !windowOpen_ && OnTrack && (showBadge_ || autoCheck_);
-			bool courseHud = (CourseHudVisible || NoticeVisible) && !arranging_;
+			// Hide HUD (Tools > HUD, the quick menu) takes away every box over the track; the window, the speed trap signs on
+			// the road and the quick menu stay.
+			bool shown = !hudHidden_;
+			bool hud = shown && !windowOpen_ && OnTrack && (showBadge_ || autoCheck_);
+			bool courseHud = shown && (CourseHudVisible || NoticeVisible) && !arranging_;
 			bool signs = TrapSignsVisible;
-			bool suspension = SuspensionOverlayVisible && !arranging_;
-			bool telemetry = TelemetryOverlayVisible && !arranging_;
-			if (!windowOpen_ && !hud && !courseHud && !signs && !suspension && !telemetry) {
+			bool suspension = shown && SuspensionOverlayVisible && !arranging_;
+			bool telemetry = shown && TelemetryOverlayVisible && !arranging_;
+			bool trafficScore = shown && TrafficScoreVisible && !arranging_;
+			bool tandem = shown && TandemVisible && !arranging_;
+			bool places = shown && MapPlacesVisible && !arranging_;
+			if (!windowOpen_ && !hud && !courseHud && !signs && !suspension && !telemetry && !trafficScore && !tandem && !places && !quickOpen_) {
 				return;
 			}
 
@@ -186,7 +191,7 @@ namespace TRC.TuneLoader {
 				GUI.skin = Theme.Skin;
 				GUI.depth = -100;
 
-				float scale = (Kino.UI.Scale > 0.1f ? Kino.UI.Scale : 1f) * windowScale_;
+				float scale = FittedScale();
 				GUI.matrix = Matrix4x4.TRS(Vector3.zero, Quaternion.identity, new Vector3(scale, scale, 1f));
 				float screenWidth = Screen.width / scale;
 				float screenHeight = Screen.height / scale;
@@ -194,32 +199,51 @@ namespace TRC.TuneLoader {
 				if (signs) {
 					DrawTrapSigns(scale);
 				}
+				// The boxes over the track at the HUD's own size (Tools > HUD), on top of the window size.
+				float hudScale = scale * hudSize_;
+				GUI.matrix = Matrix4x4.TRS(Vector3.zero, Quaternion.identity, new Vector3(hudScale, hudScale, 1f));
+				float hudWidth = Screen.width / hudScale;
+				float hudHeight = Screen.height / hudScale;
 				if (courseHud) {
-					DrawCourseHud(screenWidth, screenHeight, scale);
+					DrawCourseHud(hudWidth, hudHeight, hudScale);
 				}
 				if (hud) {
-					DrawHud(screenWidth, screenHeight);
+					DrawHud(hudWidth, hudHeight);
 				}
 				if (suspension) {
-					DrawSuspensionOverlay(screenWidth, screenHeight);
+					DrawSuspensionOverlay(hudWidth, hudHeight);
 				}
 				if (telemetry) {
-					DrawTelemetryOverlay(screenWidth, screenHeight);
+					DrawTelemetryOverlay(hudWidth, hudHeight);
 				}
-				DrawNotice(screenWidth, screenHeight);
+				if (trafficScore) {
+					DrawTrafficScore(hudWidth, hudHeight);
+				}
+				if (tandem) {
+					DrawTandem(hudWidth, hudHeight);
+				}
+				if (places) {
+					DrawMapPlaces(hudScale);
+				}
+				if (shown || windowOpen_) {
+					DrawNotice(hudWidth, hudHeight);
+				}
+				DrawQuickMenu(hudWidth, hudHeight);
 				if (!windowOpen_) {
 					return;
 				}
 				if (arranging_) {
-					DrawArranging(screenWidth, screenHeight);
+					DrawArranging(hudWidth, hudHeight);
 					return;
 				}
+				GUI.matrix = Matrix4x4.TRS(Vector3.zero, Quaternion.identity, new Vector3(scale, scale, 1f));
 
 				if (windowRect_.width <= 0) {
 					windowRect_ = new Rect((screenWidth - WindowWidth) / 2f, (screenHeight - WindowHeight) / 2f, WindowWidth, WindowHeight);
 				}
 				windowRect_.width = WindowWidth;
 				windowRect_.height = Mathf.Min(WindowHeight, screenHeight - 20f);
+				LogScreenFit(scale, screenWidth, screenHeight);
 				windowRect_.x = Mathf.Clamp(windowRect_.x, 0f, Mathf.Max(0f, screenWidth - windowRect_.width));
 				windowRect_.y = Mathf.Clamp(windowRect_.y, 0f, Mathf.Max(0f, screenHeight - windowRect_.height));
 
@@ -233,14 +257,54 @@ namespace TRC.TuneLoader {
 			}
 		}
 
+		private string screenFitLogged_ = "", screenFitSeen_ = "";
+		private float screenFitSince_;
+
+		/// <summary>
+		/// KSL's UI scale times the window size, made smaller when the window wouldn't fit in 90% of the screen's height
+		/// and 92% of its width (bskftw, Nov 19: at 1280x720 with KSL's 1.40 the window filled the screen). Everything
+		/// drawn (window and HUD) shrinks with it; a big screen keeps the full scale. Never below 0.6, so text stays readable.
+		/// </summary>
+		private float FittedScale() {
+			float wanted = (Kino.UI.Scale > 0.1f ? Kino.UI.Scale : 1f) * windowScale_;
+			float fit = Mathf.Min(1f, Mathf.Min(Screen.height * 0.9f / (WindowHeight * wanted), Screen.width * 0.92f / (WindowWidth * wanted)));
+			return Mathf.Max(0.6f, wanted * fit);
+		}
+
+		/// <summary>
+		/// Once per screen size and scale (UI redesign Stage 6, the 720p / ultrawide / 4K check): the screen, the scale and
+		/// whether the window fits, in the log. A window cut short or too wide for the screen says so.
+		/// </summary>
+		private void LogScreenFit(float scale, float screenWidth, float screenHeight) {
+			string key = $"{Screen.width}x{Screen.height}@{scale:0.00}";
+			// Once the size has settled for a second: dragging a window's edge changed it every frame (80 lines in a second, Nov 19).
+			if (key != screenFitSeen_) {
+				screenFitSeen_ = key;
+				screenFitSince_ = Time.unscaledTime;
+				return;
+			}
+			if (key == screenFitLogged_ || Time.unscaledTime - screenFitSince_ < 1f) {
+				return;
+			}
+			screenFitLogged_ = key;
+			float shortBy = WindowHeight - windowRect_.height;
+			float wideBy = WindowWidth - screenWidth;
+			string fit = shortBy > 0.5f ? $"cut {shortBy:0} px short (the page scrolls)" : wideBy > 0.5f ? $"{wideBy:0} px wider than the screen" : "fits";
+			TrcLog.Info($"Menu: screen {Screen.width}x{Screen.height}, scale {scale:0.00} (KSL {Kino.UI.Scale:0.00} x window {windowScale_:0.00}{(scale < (Kino.UI.Scale > 0.1f ? Kino.UI.Scale : 1f) * windowScale_ - 0.001f ? ", made smaller to fit" : "")}), " +
+				$"window {WindowWidth:0}x{windowRect_.height:0} of {screenWidth:0}x{screenHeight:0}: {fit}.");
+		}
+
 		private void DrawWindow(int id) {
 			BeginNavFrame();
 			try {
 				FrogInput();
-				DrawNavHeader();
-
+				// Stage 2 of the redesign: the rail on the left, the page with its top line on the right.
+				GUILayout.BeginHorizontal(GUILayout.ExpandHeight(true));
+				DrawRail();
 				GUILayout.BeginVertical(ContentArea, GUILayout.ExpandHeight(true));
+				DrawPageTop();
 				DrawInviteBanner();
+				DrawStartInviteBanner();
 				bool showTab = tourStep_ < 0 || DrawTourCard();
 				if (!showTab) {
 					GUILayout.FlexibleSpace();
@@ -250,6 +314,7 @@ namespace TRC.TuneLoader {
 					DrawCategoryPage(DrawOpenTab);
 				}
 				GUILayout.EndVertical();
+				GUILayout.EndHorizontal();
 				DrawPadBar();
 				DrawFrog();
 			} finally {
@@ -327,6 +392,9 @@ namespace TRC.TuneLoader {
 				case SpecPlayersTab: DrawSpecPlayersPage(); break;
 				case BugTab: DrawBugTab(); break;
 				case AboutTab: DrawAboutTab(); break;
+				case HudTab: DrawHudTab(); break;
+				case HostToolsTab: DrawHostToolsTab(); break;
+				case StatsTab: DrawStatsTab(); break;
 				default:
 					bool drawn = false;
 					DrawDevPage(tab_, ref drawn);

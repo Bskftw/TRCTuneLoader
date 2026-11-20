@@ -77,7 +77,7 @@ namespace TRC.TuneLoader {
 							if (NavButton("Delete them", Theme.ButtonPrimary)) {
 								DeleteTrapGroup(title);
 							}
-							if (NavButton("Keep", Theme.Button)) {
+							if (NavButton("Keep", Theme.ButtonQuiet)) {
 								trapGroupDeletePending_ = "";
 							}
 						} else if (NavButton("Delete this group", Theme.Button)) {
@@ -214,13 +214,13 @@ namespace TRC.TuneLoader {
 				if (NavButton("Delete it", Theme.ButtonPrimary)) {
 					DeleteFreeRoamTrap(trap);
 				}
-				if (NavButton("Keep", Theme.Button)) {
+				if (NavButton("Keep", Theme.ButtonQuiet)) {
 					trapDeletePending_ = null;
 				}
 			} else if (NavButton("Delete", Theme.Button)) {
 				trapDeletePending_ = trap;
 			}
-			if (NavButton("Cancel", Theme.Button)) {
+			if (NavButton("Cancel", Theme.ButtonQuiet)) {
 				trapEditing_ = null;
 				trapDeletePending_ = null;
 			}

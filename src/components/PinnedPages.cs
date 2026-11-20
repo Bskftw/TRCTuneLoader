@@ -9,16 +9,23 @@ using UnityEngine;
 namespace TRC.TuneLoader {
 	public partial class TRCTuneLoaderMod {
 		private const string PinnedPref = "pinned_pages";
+		private const string PinnedLayoutPref = "pinned_pages_layout";
 		private const int MostPinned = 8;
 		private readonly List<string> pinnedKeys_ = new List<string>();
 		private readonly List<NavPage> pinnedShown_ = new List<NavPage>();
 
 		private void LoadPins() {
 			pinnedKeys_.Clear();
-			foreach (string key in (Kino.Prefs.Get(PinnedPref, "") ?? "").Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)) {
-				if (pinnedKeys_.Count < MostPinned && !pinnedKeys_.Contains(key)) {
+			string[] saved = (Kino.Prefs.Get(PinnedPref, "") ?? "").Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries);
+			int.TryParse(Kino.Prefs.Get(PinnedLayoutPref, "1"), NumberStyles.Integer, CultureInfo.InvariantCulture, out int layout);
+			// Pages renumbered since they were pinned (src/data/PageKeys.cs) still open the same page.
+			foreach (string key in PageKeys.Migrate(saved, layout)) {
+				if (pinnedKeys_.Count < MostPinned) {
 					pinnedKeys_.Add(key);
 				}
+			}
+			if (layout != PageKeys.Layout && saved.Length > 0) {
+				SavePins();
 			}
 		}
 
@@ -26,7 +33,12 @@ namespace TRC.TuneLoader {
 			if (!pinnedKeys_.Remove(page.Key) && pinnedKeys_.Count < MostPinned) {
 				pinnedKeys_.Add(page.Key);
 			}
+			SavePins();
+		}
+
+		private void SavePins() {
 			SavePref(PinnedPref, string.Join(";", pinnedKeys_));
+			SavePref(PinnedLayoutPref, PageKeys.Layout.ToString(CultureInfo.InvariantCulture));
 		}
 	}
 }

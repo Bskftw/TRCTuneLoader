@@ -51,7 +51,13 @@ namespace TRC.TuneLoader {
 			/// <summary>Engine, gearbox or drivetrain values changed outside CarX's tuning (KINO swaps, other mods); 0 = none.</summary>
 			public int DrivetrainDifferences;
 			public List<ModEntry> Mods = new List<ModEntry>();
+
+			/// <summary>Their staff pass (Nov 19; "" when none). Signed by itself, so it rides after the seal, where older copies stop reading.</summary>
+			public string StaffPass = "";
 			public DateTime ReceivedAt;
+
+			/// <summary>It came with a good seal (0.19 and newer; MessageSeal). False: an older version's report.</summary>
+			public bool Signed;
 
 			/// <summary>
 			/// The player lets others see their tune's values (Options, off by default). Sent last, so reports from
@@ -90,7 +96,7 @@ namespace TRC.TuneLoader {
 
 		// 2: added the matched tune set. 3: added the stance check. 4: added the engine & drivetrain check.
 		// Players on different protocol versions don't see each other's reports.
-		private const byte ProtocolVersion = 4;
+		public const byte ProtocolVersion = 4;
 		private const int MaxMods = 64;
 		private const int MaxText = 160;
 		private static readonly TimeSpan MinReportGap = TimeSpan.FromSeconds(3);
@@ -101,7 +107,7 @@ namespace TRC.TuneLoader {
 
 		/// <summary>
 		/// Reports are answers, at most one every 3 s from each player: more than that from one sender, or a flood from made-up
-		/// ones, is cut (IMPROVEMENT_PLAN.md N7), and no more than <see cref="MaxReports"/> are kept. A report only ever shows
+		/// ones, is cut (docs/archive/IMPROVEMENT_PLAN.md N7), and no more than <see cref="MaxReports"/> are kept. A report only ever shows
 		/// for a player CarX lists in the room (the Players page asks by their Steam ID), so nothing here decides who's real.
 		/// </summary>
 		private readonly ChannelLimit reportLimit_ = new ChannelLimit("trc_report", 2, 8, 60, 240);
@@ -122,6 +128,7 @@ namespace TRC.TuneLoader {
 		}
 
 		public void Start() {
+			MessageSeal.EnsureKey();
 			try {
 				if (!Kino.Sync.IsAvailable) {
 					Status = "Sharing with other players needs KSL's KSL.CarX extension.";
@@ -286,6 +293,14 @@ namespace TRC.TuneLoader {
 				packet.WriteBool(own.Regulations[i].Ok);
 			}
 
+			// The seal (0.19, MessageSeal), over the report as it's read back: on the end, where older copies stop reading.
+			var seal = MessageSeal.Make("trc_report", ReportBody(own));
+			packet.WriteInt64(seal.Ticks);
+			packet.WriteUInt32(seal.Counter);
+			packet.WriteBytes(seal.Tag);
+			packet.WriteBytes(MessageSeal.Magic);
+			packet.WriteString(own.StaffPass.Length <= TuneLoader.StaffPass.MaxLength ? own.StaffPass : "");
+
 			Kino.Sync.SendToAll(packet);
 			PerfLog.Packet("trc_report", true);
 			lastSent_ = DateTime.UtcNow;
@@ -356,6 +371,21 @@ namespace TRC.TuneLoader {
 				} catch (Exception) {
 					// Before 0.17: no specs or regulations in the report.
 				}
+				var seal = MessageSeal.ReadSeal(packet.ReadInt64, packet.ReadUInt32, packet.ReadBytes);
+				MessageSeal.Result sealed_ = MessageSeal.Check("trc_report", ReportBody(report), seal.Ticks, seal.Counter, seal.Tag, sender, guard_, DateTime.UtcNow.Ticks);
+				if (sealed_ == MessageSeal.Result.Unsigned) {
+					MessageSeal.NoteUnsigned(sender, "TRC reports");
+				} else if (sealed_ != MessageSeal.Result.Good) {
+					MessageSeal.NoteRefused(sender, "A TRC report", sealed_);
+					return;
+				}
+				report.Signed = sealed_ == MessageSeal.Result.Good;
+				try {
+					string pass = packet.ReadString() ?? "";
+					report.StaffPass = pass.Length <= TuneLoader.StaffPass.MaxLength ? pass : "";
+				} catch (Exception) {
+					// Before Nov 19, or no pass: nothing after the seal.
+				}
 
 				if (report.SteamId != 0) {
 					lock (lock_) {
@@ -370,5 +400,57 @@ namespace TRC.TuneLoader {
 		}
 
 		private static string Clip(string text) => MessageText.Clip(text, MaxText);
+
+		private readonly MessageSeal.Guard guard_ = new MessageSeal.Guard();
+
+		/// <summary>A report's fields as they're sent and read (clipped and capped the same), for its seal.</summary>
+		private static byte[] ReportBody(Report r) {
+			var body = new System.IO.MemoryStream();
+			using (var w = new System.IO.BinaryWriter(body, System.Text.Encoding.UTF8)) {
+				w.Write(r.SteamId);
+				w.Write(Clip(r.LoaderVersion));
+				w.Write(r.ProtectedMode);
+				w.Write(r.AllVerified);
+				w.Write(r.CarId);
+				w.Write(r.SlotId);
+				w.Write(Clip(r.SetupCode));
+				w.Write(r.SetupOfficial);
+				w.Write(Clip(r.SetupSet));
+				w.Write(r.SetupDifferences);
+				w.Write(r.LiveStatus);
+				w.Write(r.LiveDifferences);
+				w.Write(r.StanceDifferences);
+				w.Write(Clip(r.Engine));
+				w.Write(Clip(r.Drivetrain));
+				w.Write(r.DrivetrainDifferences);
+				int mods = Math.Min(r.Mods.Count, MaxMods);
+				w.Write(mods);
+				for (int i = 0; i < mods; i++) {
+					w.Write(Clip(r.Mods[i].Name));
+					w.Write(Clip(r.Mods[i].Version));
+					w.Write(Clip(r.Mods[i].Author));
+					w.Write(Clip(r.Mods[i].Type));
+				}
+				w.Write(r.ShareValues);
+				w.Write(r.EloTouge);
+				w.Write(r.EloHighway);
+				w.Write(r.EloCircuit);
+				w.Write(r.Safety);
+				w.Write(r.License);
+				int specs = Math.Min(r.Specs.Count, MaxRules);
+				w.Write(specs);
+				for (int i = 0; i < specs; i++) {
+					w.Write(Clip(r.Specs[i]));
+				}
+				int rules = Math.Min(r.Regulations.Count, MaxRules);
+				w.Write(rules);
+				for (int i = 0; i < rules; i++) {
+					w.Write(Clip(r.Regulations[i].Code));
+					w.Write(Clip(r.Regulations[i].Name));
+					w.Write(r.Regulations[i].Ok);
+				}
+			}
+			return body.ToArray();
+		}
 	}
 }

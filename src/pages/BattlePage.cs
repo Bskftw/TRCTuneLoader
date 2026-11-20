@@ -19,6 +19,7 @@ namespace TRC.TuneLoader {
 			if (!string.IsNullOrEmpty(battleResult_)) {
 				GUILayout.Label(battleResult_, Theme.Body);
 			}
+			DrawResultCode();
 			foreach (var (challenge, _) in invites_.ToList()) {
 				DrawInvite(challenge);
 			}

@@ -39,6 +39,9 @@ namespace TRC.TuneLoader {
 						ShowNotice($"<b>TRC Tune Loader {m.Version} is out</b> (you have {Version})\n<color={Theme.MutedHex}>Turn on automatic updates for it in KSL, then restart CarX</color>", 15f);
 					}
 				}
+				if (m.Kind == RoomKind.Invite) {
+					OnStartInvite(m);
+				}
 				RoomBoard.SharedTraps traps = roomBoard_.ReceiveTraps(m, now, MySteamId);
 				if (traps != null) {
 					ShowNotice($"<b>{traps.FromName} shared {traps.Traps.Count} speed trap(s){(traps.JustForMe ? " with you" : "")}</b>\n" +
@@ -67,12 +70,18 @@ namespace TRC.TuneLoader {
 				}
 			}
 			UpdateWheel();
+			UpdateQuickMenu();
 			if (whatsNewPending_ && !windowOpen_ && !whatsNewShownThisSession_ && tourStep_ < 0) {
 				OpenWhatsNewWhenReady();
 			}
 		}
 
 		// ---- Room board ----
+
+		/// <summary>What this copy speaks, each channel's versions (N3), in every status.</summary>
+		private static readonly string MyFeatures =
+			$"battle:{BattleMessage.Protocol}-{BattleMessage.RuleProtocol} race:{RaceMessage.Protocol} room:{RoomMessage.Protocol} report:{TrcSync.ProtocolVersion} " +
+			$"lanes:{TrafficLaneShare.Protocol} path:{TrafficShare.Protocol} sealed:1";
 
 		/// <summary>What this player is doing, for the room board.</summary>
 		private RoomMessage MyStatus() {
@@ -85,6 +94,8 @@ namespace TRC.TuneLoader {
 				MapKey = map_?.Key ?? "",
 				Car = car_?.CarName ?? "",
 			};
+			s.Features = MyFeatures;
+			AddTrafficStatus(s);
 			if (race_ != null && !race_.Ended) {
 				string where = race_.IsGame ? RoomModeNames[(int)race_.Settings.Mode] : race_.Course?.Name ?? race_.CourseCode;
 				switch (race_.Phase) {
@@ -115,6 +126,8 @@ namespace TRC.TuneLoader {
 				s.Activity = RoomActivity.Building;
 			} else if (car_ != null && !car_.InGarage) {
 				s.Activity = RoomActivity.FreeRoam;
+				// Parked at a meet point (F14): the room sees where.
+				s.Detail = parkedAt_;
 			} else {
 				s.Activity = RoomActivity.Garage;
 			}

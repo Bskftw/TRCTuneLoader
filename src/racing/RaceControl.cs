@@ -17,7 +17,7 @@ namespace TRC.TuneLoader {
 	/// <summary>
 	/// Notices incidents from this car alone: a sudden loss of speed (much harder than braking) is a hit, "possible
 	/// contact" with whoever was right next to it, or "hit something" with nobody near (a wall, a barrier). No blame:
-	/// like iRacing, everyone near a contact gets one. A few seconds go by before the next counts.
+	/// everyone near a contact gets one. A few seconds go by before the next counts.
 	/// </summary>
 	public sealed class ContactWatcher {
 		/// <summary>
@@ -62,7 +62,7 @@ namespace TRC.TuneLoader {
 	}
 
 	/// <summary>
-	/// Highway cut-up points, like Assetto Corsa's overtake servers: getting past another car closely and much faster
+	/// Highway cut-up points: getting past another car closely and much faster
 	/// scores, more the faster and closer, times a combo that builds while you keep passing. The combo is lost after a
 	/// while without a pass, or on an incident.
 	/// </summary>

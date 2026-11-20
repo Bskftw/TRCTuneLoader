@@ -199,7 +199,7 @@ namespace TRC.TuneLoader {
 			var record = new SpeedTrapRecord {
 				When = DateTime.Now, TrapKey = trap.Key, TrapName = trap.Name, MapName = map_?.Name ?? "", Kmh = kmh, CarId = pose_.CarId,
 				Car = car_?.CarName ?? "", TuneSet = carStatus_?.Matched == true ? carStatus_.Official.Name : "",
-				Spec = carStatus_ != null && StateOf(carStatus_) == SpecState.Spec && modCheck_.Flags.Count == 0, Context = context, Rule = TrapRule(),
+				Spec = carStatus_ != null && StateOf(carStatus_) == SpecState.Spec && BlockingFlags == 0, Context = context, Rule = TrapRule(),
 			};
 			trapRecords_.Add(record);
 			try {

@@ -79,6 +79,18 @@
     <Compile Include="..\..\src\racing\Ratings.cs" Link="src\racing\Ratings.cs" />
     <Compile Include="..\..\src\data\RatingsFile.cs" Link="src\data\RatingsFile.cs" />
     <Compile Include="..\..\src\anticheat\RatingSeal.cs" Link="src\anticheat\RatingSeal.cs" />
+    <Compile Include="..\..\src\anticheat\ResultCode.cs" Link="src\anticheat\ResultCode.cs" />
+    <Compile Include="..\..\src\racing\TrafficScore.cs" Link="src\racing\TrafficScore.cs" />
+    <Compile Include="..\..\src\racing\TrafficBusy.cs" Link="src\racing\TrafficBusy.cs" />
+    <Compile Include="..\..\src\network\MessageSeal.cs" Link="src\network\MessageSeal.cs" />
+    <Compile Include="..\..\src\racing\TandemWatch.cs" Link="src\racing\TandemWatch.cs" />
+    <Compile Include="..\..\src\anticheat\RunHonesty.cs" Link="src\anticheat\RunHonesty.cs" />
+    <Compile Include="..\..\src\anticheat\StaffPass.cs" Link="src\anticheat\StaffPass.cs" />
+    <Compile Include="..\..\src\data\PageKeys.cs" Link="src\data\PageKeys.cs" />
+    <Compile Include="..\..\src\components\LookTokens.cs" Link="src\components\LookTokens.cs" />
+    <Compile Include="..\..\src\courses\LapCompare.cs" Link="src\courses\LapCompare.cs" />
+    <Compile Include="..\..\src\data\Challenges.cs" Link="src\data\Challenges.cs" />
+    <Compile Include="..\..\src\data\DriverStats.cs" Link="src\data\DriverStats.cs" />
     <Compile Include="..\..\src\anticheat\Regulation.cs" Link="src\anticheat\Regulation.cs" />
     <Compile Include="..\..\src\anticheat\RegulationParts.cs" Link="src\anticheat\RegulationParts.cs" />
     <Compile Include="..\..\src\anticheat\RegulationText.cs" Link="src\anticheat\RegulationText.cs" />
@@ -91,11 +103,13 @@
     <Compile Include="..\..\src\suspension\SuspensionLog.cs" Link="src\suspension\SuspensionLog.cs" />
     <Compile Include="..\..\src\suspension\SuspensionFrames.cs" Link="src\suspension\SuspensionFrames.cs" />
     <Compile Include="..\..\src\suspension\TelemetryFrame.cs" Link="src\suspension\TelemetryFrame.cs" />
+    <Compile Include="..\..\src\data\HudPresetText.cs" Link="src\data\HudPresetText.cs" />
     <Compile Include="..\..\src\suspension\SuspensionLog.Advice.cs" Link="src\suspension\SuspensionLog.Advice.cs" />
     <Compile Include="..\..\src\data\SuspensionCsv.cs" Link="src\data\SuspensionCsv.cs" />
     <Compile Include="..\..\src\courses\CourseScanner.cs" Link="src\courses\CourseScanner.cs" />
     <Compile Include="..\..\src\courses\CourseScanner.Sharing.cs" Link="src\courses\CourseScanner.Sharing.cs" />
     <Compile Include="..\..\src\courses\MapLanes.cs" Link="src\courses\MapLanes.cs" />
+    <Compile Include="..\..\src\courses\MapPlaces.cs" Link="src\courses\MapPlaces.cs" />
     <Compile Include="..\..\src\courses\CourseScanner.Names.cs" Link="src\courses\CourseScanner.Names.cs" />
     <Compile Include="..\..\src\courses\CourseScanner.Building.cs" Link="src\courses\CourseScanner.Building.cs" />
     <Compile Include="..\..\src\courses\CourseScanner.PathKeys.cs" Link="src\courses\CourseScanner.PathKeys.cs" />

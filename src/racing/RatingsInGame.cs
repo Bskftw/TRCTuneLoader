@@ -10,6 +10,7 @@ namespace TRC.TuneLoader {
 		private void SetupRatings() {
 			try {
 				RatingSeal.LoadEmbeddedKey();
+				ResultCode.LoadEmbeddedKey();
 				if (!RatingSeal.HasPrivateKey) {
 					TrcLog.Warning("This build has no private ratings key (ratings.key), so ratings files use the development key.");
 				}
@@ -78,7 +79,9 @@ namespace TRC.TuneLoader {
 			CourseKind kind = b.IsHighway ? CourseKind.Highway : b.Course.Kind;
 			string rule = b.Regulation?.Code ?? "";
 			bool driven = (b.IsTrcSpec || b.Regulation != null) && b.State == BattleSession.Phase.Finished && b.Runs.Count > 0;
-			if (b.Counted && driven && !b.IsSpeedTraps) {
+			// Stage 3.3: our own check of their car disagreed, so the result is unverified (once DoubtStopsRatings is on).
+			bool unverified = DoubtStopsRatings && BattleDoubted(b);
+			if (b.Counted && driven && !b.IsSpeedTraps && !unverified) {
 				// Speed trap battles are for fun: no Elo.
 				if (b.Regulation != null) {
 					ratings_.RuleNames[rule] = b.Regulation.Name;
@@ -112,7 +115,7 @@ namespace TRC.TuneLoader {
 			RaceSettings settings = race_.Settings;
 			bool counts = !settings.Fun && (settings.IsTrcSpec || settings.Regulation != null) && race_.MyDriver?.Racer == true;
 			string rule = settings.Regulation?.Code ?? "";
-			if (counts && race_.Results.Count >= 2) {
+			if (counts && race_.Results.Count >= 2 && !(DoubtStopsRatings && RaceDoubted)) {
 				if (settings.Regulation != null) {
 					ratings_.RuleNames[rule] = settings.Regulation.Name;
 				}

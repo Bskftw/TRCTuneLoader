@@ -87,7 +87,8 @@ namespace TRC.TuneLoader {
 			if (recording_ == null || recordingRun_ == null) {
 				return;
 			}
-			if (recordingRun_.State == TimeAttackRun.Phase.Finished && recordingRun_.Result > 0) {
+			// A time attack thrown out quietly (RunHonesty) keeps no ghost either.
+			if (recordingRun_.State == TimeAttackRun.Phase.Finished && recordingRun_.Result > 0 && (recordingRun_ != run_ || honesty_.Clean)) {
 				recording_.Time = recordingRun_.Result;
 				recording_.Sectors = recordingRun_.Course.IsCircuit ? new List<double>() : recordingRun_.CurrentSectors;
 				recording_.TrapTotal = recordingRun_.TrapTotal;

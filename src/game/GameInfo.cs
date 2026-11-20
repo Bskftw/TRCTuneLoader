@@ -34,6 +34,9 @@ namespace TRC.TuneLoader {
 
 		/// <summary>The car's rotation (for ghosts).</summary>
 		public Quaternion Rotation;
+
+		/// <summary>The box round the car's body in its own space (x across, z along); empty when it isn't known.</summary>
+		public Bounds Body;
 	}
 
 	/// <summary>Where another player's car is, as CarX shows it here (for console players the host times).</summary>

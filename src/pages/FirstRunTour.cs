@@ -50,9 +50,9 @@ namespace TRC.TuneLoader {
 			},
 			new TourStep {
 				Title = "Home",
-				Text = "Home has a card for each part of the mod: TRC spec, Specs, Time attack, Battles and Free roam. Click a card (or one of the buttons on it) to go in; " +
-					"inside, the parts are across the top and each one's pages are down the left, and the logo brings you back here. Under the cards is anything waiting for you " +
-					"and the room board: what every TRC Tune Loader player in the room is doing. The tools are along the bottom, with Report a bug. " +
+				Text = "Home has a tile for each part of the mod: TRC spec, Specs, Time attack, Battles, Free roam and Tools. Click a tile (or a page on it) to go in. " +
+					"Under them are your last run and today's challenge, then anything waiting for you and the room board. Search pages and settings at the top right. " +
+					"The parts are down the left, each one's pages open under it, Options is at the bottom, and Home or the logo brings you back here. " +
 					"On a controller: the D-pad moves, A presses, B goes back, LB and RB change part.",
 				Tab = HomeTab,
 			},
@@ -104,7 +104,7 @@ namespace TRC.TuneLoader {
 			},
 			new TourStep {
 				Title = "Battles, races and fun games",
-				Text = "Battles has 1v1 battles (side by side, cat and mouse, or a Tokyo Xtreme Racer style highway battle on SP), Races and Tournaments " +
+				Text = "Battles has 1v1 battles (side by side, cat and mouse, or a highway battle on pressure bars), Races and Tournaments " +
 					"(qualifying, grids, points series, knockouts, heats, and speed trap races; console players can race too), and Fun games: cops and runners, tag, infected, king of the hill, keep-up, convoy and highway cut-up. " +
 					"Run any of them to TRC spec, a regulation (Specs, Regulations) or Open, and just for fun if you like. When it's over, Run it back plays it again.",
 				Tab = BattlesTab,
@@ -118,7 +118,7 @@ namespace TRC.TuneLoader {
 			new TourStep {
 				Title = "Options",
 				Text = $"Change the shortcut, the restart key, the start key ({startShortcut_}: starts the track open in Tracks), wheel or controller buttons, the window size, the colours and text size (Look), " +
-					"the badge and track check, sectors (and your own manual ones) and best line, and how many backups to keep, or take this tour again. Report a bug is in Tools. See you on the touge!",
+					"the badge and track check, sectors (and your own manual ones) and best line, and how many backups to keep, or take this tour again. Options is at the bottom of the left side; Report a bug is in Tools. See you on the touge!",
 				Tab = OptionsTab,
 			},
 		};
@@ -193,7 +193,7 @@ namespace TRC.TuneLoader {
 				EndTour();
 			}
 			GUILayout.FlexibleSpace();
-			if (tourStep_ > 0 && NavButton("Back", Theme.Button)) {
+			if (tourStep_ > 0 && NavButton("Back", Theme.ButtonQuiet)) {
 				GoToTourStep(tourStep_ - 1);
 			}
 			if (NavButton(last ? "Finish" : "Next", Theme.ButtonPrimary)) {

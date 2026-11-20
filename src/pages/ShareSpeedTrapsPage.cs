@@ -100,7 +100,7 @@ namespace TRC.TuneLoader {
 				if (NavButton("Add them", Theme.ButtonPrimary)) {
 					AddSharedTraps(shared);
 				}
-				if (NavButton("Dismiss", Theme.Button)) {
+				if (NavButton("Dismiss", Theme.ButtonQuiet)) {
 					roomBoard_.SharedTrapSets.Remove(shared);
 				}
 				GUILayout.EndHorizontal();

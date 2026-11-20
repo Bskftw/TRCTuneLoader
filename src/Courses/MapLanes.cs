@@ -10,13 +10,16 @@ namespace TRC.TuneLoader {
 	public static partial class CourseScanner {
 		/// <summary>
 		/// A traffic lane placed in the map (bskftw, Nov 8: lanes stored in the map, so the traffic comes with it): a thin strip
-		/// mesh named <c>TRC Lane &lt;name&gt; [speed N] [exit N]</c>, made by the Blender add-on's "Make map lane meshes", with
+		/// mesh named <c>TRC Lane &lt;name&gt; [speed N] [exit N] [traffic none|less|more]</c>, made by the Blender add-on's "Make map lane meshes", with
 		/// Read/Write on. Its UVs' first number is the distance along the lane, which gives the order and the direction
 		/// (Unity may reorder a mesh's vertices on import; the UVs stay with them).
 		/// </summary>
 		public sealed class MapLane {
 			public string Name = "";
 			public int SpeedKmh, ExitShare;
+
+			/// <summary>[traffic none|less|normal|more]: 0 to 3, or -1 when the name doesn't say (normal).</summary>
+			public int Amount = -1;
 			public List<Vector3> Points = new List<Vector3>();
 		}
 
@@ -31,6 +34,11 @@ namespace TRC.TuneLoader {
 		private static readonly System.Text.RegularExpressions.Regex LaneTag =
 			new System.Text.RegularExpressions.Regex(@"\[\s*(speed|exit)\s+(\d+)\s*\]", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
+		private static readonly System.Text.RegularExpressions.Regex AmountTag =
+			new System.Text.RegularExpressions.Regex(@"\[\s*traffic\s+(none|less|normal|more)\s*\]", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+		private static readonly string[] AmountWords = { "none", "less", "normal", "more" };
+
 		private static void ReadLanes(List<(string Name, int Copy, Transform Transform)> objects) {
 			foreach (var (bare, copy, transform) in objects.OrderBy(o => o.Name, StringComparer.Ordinal).ThenBy(o => o.Copy)) {
 				int at = bare.IndexOf("lane", bare.IndexOf("trc", StringComparison.OrdinalIgnoreCase) + 3, StringComparison.OrdinalIgnoreCase);
@@ -44,7 +52,11 @@ namespace TRC.TuneLoader {
 						lane.ExitShare = Math.Min(100, value);
 					}
 				}
-				lane.Name = LaneTag.Replace(rest, "").Trim(' ', '_', '\t');
+				System.Text.RegularExpressions.Match amount = AmountTag.Match(rest);
+				if (amount.Success) {
+					lane.Amount = Array.FindIndex(AmountWords, w => w.Equals(amount.Groups[1].Value, StringComparison.OrdinalIgnoreCase));
+				}
+				lane.Name = AmountTag.Replace(LaneTag.Replace(rest, ""), "").Trim(' ', '_', '\t');
 				if (copy > 0) {
 					lane.Name += $" {copy + 1}";
 				}

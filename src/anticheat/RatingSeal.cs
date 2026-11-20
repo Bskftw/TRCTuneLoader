@@ -38,6 +38,7 @@ namespace TRC.TuneLoader {
 			if (key.Length >= 32) {
 				secret_ = Encoding.UTF8.GetBytes(key);
 				HasPrivateKey = true;
+				MessageSeal.UseSecret(secret_);
 			}
 		}
 

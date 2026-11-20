@@ -18,6 +18,16 @@ namespace TRC.TuneLoader {
 
 		private float teleportReadyAt_;
 
+		/// <summary>No-clip and the game's clock, watched through each run (src/anticheat/RunHonesty.cs).</summary>
+		private readonly RunHonesty honesty_ = new RunHonesty();
+		private float honestyCheckAt_;
+
+		/// <summary>The car's physics as last logged, and how many lines that has made (a cap so the log can't fill up).</summary>
+		private string carPhysicsLogged_ = "";
+		private int carPhysicsLines_;
+		private readonly RunHonesty carMoves_ = new RunHonesty();
+		private float carPhysicsAt_;
+
 		/// <summary>Record path on a map course, while it runs (and for a few seconds after it's saved).</summary>
 		private PathRecorder pathRecorder_;
 		private float pathDoneUntil_;
@@ -132,6 +142,9 @@ namespace TRC.TuneLoader {
 				now = run_.State;
 			}
 
+			if (now == TimeAttackRun.Phase.Running) {
+				WatchRunHonesty();
+			}
 			HandleRunProgress();
 			if (before == TimeAttackRun.Phase.Running && now == TimeAttackRun.Phase.Finished) {
 				FinishRun();
@@ -151,11 +164,46 @@ namespace TRC.TuneLoader {
 			}
 		}
 
+		/// <summary>Four times a second during a run: no-clip and the clock. Only the log hears about it (bskftw: "just don't count it").</summary>
+		private void WatchRunHonesty() {
+			if (Time.unscaledTime < honestyCheckAt_) {
+				return;
+			}
+			honestyCheckAt_ = Time.unscaledTime + RunHonesty.CheckSeconds;
+			bool was = honesty_.Clean;
+			string moved = honesty_.MovedWithoutSpeed(pose_.Position, Time.unscaledTimeAsDouble, pose_.SpeedKmh);
+			string sign = adapter_.NoClipSign();
+			honesty_.NoClip(sign.Length > 0 ? sign : moved);
+			honesty_.Clock(Time.realtimeSinceStartupAsDouble, DateTime.UtcNow);
+			if (was && !honesty_.Clean) {
+				TrcLog.Info($"Time attack on {run_.Course.Name}: this run won't count ({honesty_.ThrownOut}).");
+			}
+		}
+
+		/// <summary>
+		/// Twice a second, anywhere: the car's physics in the log when they change (bskftw flew with no-clip on Nov 18 and the
+		/// log had nothing, since the check only ran in a time attack). shortcut: kept until the no-clip sign is known; at most 200 lines.
+		/// </summary>
+		private void WatchCarPhysics() {
+			if (!hasPose_ || carPhysicsLines_ >= 200 || Time.unscaledTime < carPhysicsAt_) {
+				return;
+			}
+			carPhysicsAt_ = Time.unscaledTime + 0.5f;
+			string moved = carMoves_.MovedWithoutSpeed(pose_.Position, Time.unscaledTimeAsDouble, pose_.SpeedKmh);
+			string state = adapter_.CarPhysicsState() + (moved.Length > 0 ? ", MOVING WITHOUT SPEED" : "");
+			if (state.Length == 0 || state == carPhysicsLogged_) {
+				return;
+			}
+			carPhysicsLogged_ = state;
+			carPhysicsLines_++;
+			TrcLog.Info($"Car physics: {state}{(moved.Length > 0 ? $" ({moved})" : "")} ({pose_.SpeedKmh:0} km/h at {pose_.Position.x:0}, {pose_.Position.y:0}, {pose_.Position.z:0}).");
+		}
+
 		private RunCheck CheckRunCar() {
 			var check = new RunCheck { CarId = pose_.CarId };
 			try {
 				modCheck_.Refresh();
-				check.Flagged = modCheck_.Flags.Count;
+				check.Flagged = BlockingFlags;
 				if (RefreshCar()) {
 					check.Car = car_.CarName;
 					check.Setup = car_.SlotName;
@@ -174,6 +222,15 @@ namespace TRC.TuneLoader {
 		}
 
 		private void FinishRun() {
+			if (!honesty_.Clean) {
+				// Thrown out quietly: the time shows as if nothing happened, but nothing is saved, ranked or shared.
+				signRank_ = 0;
+				signBest_ = false;
+				runResultText_ = $"<b>{TimeAttackRun.FormatTime(run_.Result)}</b>";
+				runResultUntil_ = Time.unscaledTime + ResultSeconds;
+				TrcLog.Info($"Time attack on {run_.Course.Name}: {TimeAttackRun.FormatTime(run_.Result)}, not counted ({honesty_.ThrownOut}).");
+				return;
+			}
 			RunCheck end = CheckRunCar();
 			RunCheck start = runStart_ ?? end;
 			Course course = run_.Course;
@@ -194,6 +251,10 @@ namespace TRC.TuneLoader {
 			TimeKind kind = RunKind(run_);
 			TimeAttackRecord best = TimeAttackLog.BestFor(times_, course.Code, record.CarId, record.TuneSet, record.IsSpec, kind);
 			SaveRecord(record);
+			NoteChallenge(course, record.TimeMs);
+			if (only != null) {
+				NoteLapCompare(course, only.Trace, run_.Reference, record.TimeMs);
+			}
 			// For the finish gantry: this time's place among the car's times on the course, started the same way.
 			signRank_ = 1 + times_.Count(r => r != record && !r.IsLap && r.CourseCode == course.Code && r.CarId == record.CarId && r.TuneSet == record.TuneSet &&
 				r.Flying == record.Flying && r.Laps == record.Laps && r.Rule == record.Rule && r.TimeMs < record.TimeMs);

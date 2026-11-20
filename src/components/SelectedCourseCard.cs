@@ -17,8 +17,8 @@ namespace TRC.TuneLoader {
 		private void DrawSelectedCourse(Course course) {
 			EnsureNavStyles();
 			GUILayout.BeginVertical(Theme.Card);
-			GUILayout.Label("SELECTED COURSE", kicker_);
-			GUILayout.Label(course.Name.ToUpperInvariant(), courseTitle_);
+			GUILayout.Label("Selected course", kicker_);
+			GUILayout.Label(course.Name, courseTitle_);
 			string sectors = course.Usable ? $" · {course.SectorEnds.Length} sectors{(course.ManualSectorsOn ? " (manual)" : "")}" : "";
 			GUILayout.Label($"{course.KindName} · {(course.Usable ? TimeAttackRun.Distance(course.Length) : "can't be used yet")}{sectors} · {course.SourceName.ToLowerInvariant()}", Theme.Small);
 

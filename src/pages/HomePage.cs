@@ -70,11 +70,12 @@ namespace TRC.TuneLoader {
 			}
 			DrawHomeSearch();
 
-			// A card for each part of the mod, in its colour (bskftw, Nov 3: the "hub tiles" picture).
+			// A tile for each part of the mod, in its colour (bskftw, Nov 3: the "hub tiles" picture; redesigned Nov 18).
 			DrawHomeCards();
+			DrawHomePair();
 			GUILayout.Space(6);
 
-			// What the last visit to a map added up to (IMPROVEMENT_PLAN.md F5), until it's hidden or the next one ends.
+			// What the last visit to a map added up to (docs/archive/IMPROVEMENT_PLAN.md F5), until it's hidden or the next one ends.
 			if (lastSession_ != null) {
 				GUILayout.Label("Your last session", Theme.SectionLabel);
 				GUILayout.BeginVertical(Theme.Card);
@@ -83,7 +84,7 @@ namespace TRC.TuneLoader {
 					GUILayout.Label($"• {lastSession_[i]}", Theme.Small);
 				}
 				GUILayout.BeginHorizontal();
-				bool hide = NavButton("Hide", Theme.Chip);
+				bool hide = NavButton("Hide", Theme.ButtonQuiet);
 				GUILayout.FlexibleSpace();
 				GUILayout.EndHorizontal();
 				GUILayout.EndVertical();
@@ -128,8 +129,6 @@ namespace TRC.TuneLoader {
 			DrawRoomBoard();
 			DrawSharedCourses();
 			GUILayout.EndScrollView();
-			DividerLine();
-			GUILayout.Space(4);
 			DrawToolsRow();
 		}
 	}

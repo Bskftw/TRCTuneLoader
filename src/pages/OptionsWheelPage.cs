@@ -11,14 +11,28 @@ using UnityEngine;
 namespace TRC.TuneLoader {
 	public partial class TRCTuneLoaderMod {
 		private void DrawWheelOptions() {
-			GUILayout.Label("Wheel and controller buttons", Theme.SectionLabel);
-			GUILayout.BeginVertical(Theme.Card);
-			GUILayout.Label("Pick buttons CarX doesn't use: CarX still sees every press. The <b>TRC action</b> button accepts a challenge, joins a race that just opened, " +
-				"runs the last battle or race back, or restarts your time attack, whichever fits.", Theme.Small);
-			void Row(string label, ref WheelButtons.Binding binding, int which, string pref) {
-				GUILayout.BeginHorizontal();
-				GUILayout.Label($"<b>{label}</b>  <color={Theme.MutedHex}>{(capturingWheel_ == which ? "press a button on your wheel or controller…" : binding.ToString())}</color>", Theme.Body);
-				GUILayout.FlexibleSpace();
+			BeginSection("Wheel and controller buttons", "Buttons CarX doesn't use. CarX still sees every press.");
+			WheelRow("TRC action", "Accepts a challenge, joins a race that just opened, runs it back, or restarts your time attack", wheelAction_, 1,
+				() => { wheelAction_ = WheelButtons.Binding.None; SavePref(WheelActionPref, ""); }, first: true);
+			WheelRow("Open the window", "", wheelWindow_, 2, () => { wheelWindow_ = WheelButtons.Binding.None; SavePref(WheelWindowPref, ""); });
+			WheelRow("Quick menu", "Press again to move along; it happens once you stop pressing", wheelQuick_, 3,
+				() => { wheelQuick_ = WheelButtons.Binding.None; SavePref(WheelQuickPref, ""); });
+			if (wheel_.Problem.Length > 0) {
+				GUILayout.Label(wheel_.Problem, Theme.PillWarn);
+			} else if (capturingWheel_ != 0 && wheel_.Devices.Count == 0) {
+				GUILayout.Label("CarX doesn't see a wheel or controller right now.", Theme.SectionNote);
+			}
+			EndSection();
+			DrawPadOptions();
+		}
+
+		/// <summary>One wheel button: what it's set to, Pick a button (or Cancel while waiting) and Clear, as before.</summary>
+		private void WheelRow(string label, string note, WheelButtons.Binding binding, int which, Action clear, bool first = false) {
+			string now = capturingWheel_ == which ? "Press a button on your wheel or controller…" : binding.ToString();
+			SettingRow(label, note.Length > 0 ? $"{now}. {note}" : now, () => {
+				if (binding.IsSet && capturingWheel_ != which && NavButton("Clear", Theme.ButtonQuiet)) {
+					clear();
+				}
 				if (NavButton(capturingWheel_ == which ? "Cancel" : "Pick a button", Theme.Button)) {
 					if (capturingWheel_ == which) {
 						capturingWheel_ = 0;
@@ -29,49 +43,37 @@ namespace TRC.TuneLoader {
 						optionsResult_ = "";
 					}
 				}
-				if (binding.IsSet && NavButton("Clear", Theme.Button)) {
-					binding = WheelButtons.Binding.None;
-					SavePref(pref, "");
-				}
-				GUILayout.EndHorizontal();
-			}
-			Row("TRC action", ref wheelAction_, 1, WheelActionPref);
-			Row("Open the window", ref wheelWindow_, 2, WheelWindowPref);
-			if (wheel_.Problem.Length > 0) {
-				GUILayout.Label(wheel_.Problem, Theme.PillWarn);
-			} else if (capturingWheel_ != 0 && wheel_.Devices.Count == 0) {
-				GUILayout.Label("CarX doesn't see a wheel or controller right now.", Theme.Small);
-			}
-			GUILayout.Space(6);
-			DrawPadOptions();
-			GUILayout.EndVertical();
+			}, first: first);
 		}
 
 		private void DrawPadOptions() {
-			GUILayout.Label("<b>Controller in the menu</b>: the D-pad moves between buttons, A presses, B goes back (or closes on Home), LB and RB change category. " +
-				"Open the menu from the pad with a button set under Wheel and controller buttons.", Theme.Body);
-			bool on = OnOff(padMenuOn_);
-			if (on != padMenuOn_) {
-				padMenuOn_ = on;
-				SavePref(PadMenuPref, on);
-				if (!on) {
-					ReleasePad();
+			BeginSection("Controller in the menu", "The D-pad moves between buttons, A presses, B goes back, LB and RB change part.");
+			SettingRow("Use the controller here", "Open the menu from the pad with a button above", () => {
+				bool on = Switch(padMenuOn_);
+				if (on != padMenuOn_) {
+					padMenuOn_ = on;
+					SavePref(PadMenuPref, on);
+					if (!on) {
+						ReleasePad();
+					}
 				}
-			}
-			GUILayout.Label("While the menu has the controller, keep the car still (CarX doesn't get the pad's buttons until the menu closes):", Theme.Small);
-			bool hold = OnOff(padHoldCar_);
-			if (hold != padHoldCar_) {
-				padHoldCar_ = hold;
-				SavePref(PadHoldPref, hold);
-				if (!hold) {
-					ReleasePad();
+			}, first: true);
+			SettingRow("Keep the car still", "While the menu has the controller (CarX gets the pad back when it closes)", () => {
+				bool hold = Switch(padHoldCar_);
+				if (hold != padHoldCar_) {
+					padHoldCar_ = hold;
+					SavePref(PadHoldPref, hold);
+					if (!hold) {
+						ReleasePad();
+					}
 				}
-			}
+			});
 			if (pad_.Devices.Count > 0) {
-				GUILayout.Label($"Controllers seen: {string.Join(", ", pad_.Devices)}{(padSeen_ ? "" : " (none with an A button yet)")}.", Theme.Small);
+				GUILayout.Label($"Controllers seen: {string.Join(", ", pad_.Devices)}{(padSeen_ ? "" : " (none with an A button yet)")}.", Theme.SectionNote);
 			} else if (!pad_.Available && pad_.Problem.Length > 0) {
-				GUILayout.Label(pad_.Problem, Theme.Small);
+				GUILayout.Label(pad_.Problem, Theme.SectionNote);
 			}
+			EndSection();
 		}
 	}
 }

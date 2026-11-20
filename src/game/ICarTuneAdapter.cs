@@ -119,6 +119,12 @@ namespace TRC.TuneLoader {
 		/// </summary>
 		bool TryCheckOverRoad(ICollection<int> roadColliders, out bool overRoad);
 
+		/// <summary>What shows the player's own car passes through things (no-clip), or "" when it collides as it should.</summary>
+		string NoClipSign();
+
+		/// <summary>The car's physics in a line for the log (collisions, kinematic, colliders, layers), or "".</summary>
+		string CarPhysicsState();
+
 		/// <summary>
 		/// Nov 2: how wide these road colliders (instance IDs) are across <paramref name="centre"/>, along
 		/// <paramref name="right"/> (metres), by looking straight down every 25 cm out to each side. False when the

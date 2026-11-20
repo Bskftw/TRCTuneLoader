@@ -47,7 +47,31 @@ namespace TRC.TuneLoader {
 		}
 
 		/// <summary>
-		/// Home's first rows: a search box (type a page or a setting, press what it finds) and the pages pinned from their
+		/// Home's search box, on the right of the page's top line (bskftw, Nov 19: "move the search ... to the top right").
+		/// Its hint shows inside it while it's empty; Clear empties it. What it finds is listed under the top line.
+		/// </summary>
+		private void DrawSearchBox() {
+			if (hintVersion_ != Theme.Version) {
+				hintVersion_ = Theme.Version;
+				hintStyle_ = null; // the colours or text size changed
+			}
+			GUILayout.BeginHorizontal();
+			if ((menuSearch_ ?? "").Length > 0 && NavButton("Clear", Theme.ButtonQuiet)) {
+				menuSearch_ = "";
+			}
+			menuSearch_ = GUILayout.TextField(menuSearch_ ?? "", 30, Theme.Field, GUILayout.Width(230));
+			if ((menuSearch_ ?? "").Length == 0 && Event.current.type == EventType.Repaint) {
+				Rect field = GUILayoutUtility.GetLastRect();
+				GUI.Label(new Rect(field.x + 10f, field.y, field.width - 12f, field.height), "Search pages and settings", hintStyle_ ??= new GUIStyle(Theme.SectionNote) { alignment = TextAnchor.MiddleLeft, wordWrap = false });
+			}
+			GUILayout.EndHorizontal();
+		}
+
+		private GUIStyle hintStyle_;
+		private int hintVersion_ = -1;
+
+		/// <summary>
+		/// Home's first rows under the top line: what the search box finds, or the pinned pages (type a page or a setting, press what it finds) and the pages pinned from their
 		/// titles. What's drawn is decided in the layout pass only, so typing never changes the rows between a frame's passes.
 		/// </summary>
 		private void DrawHomeSearch() {
@@ -66,18 +90,6 @@ namespace TRC.TuneLoader {
 				}
 			}
 			bool searching = searchShownFor_.Trim().Length >= 2;
-			GUILayout.BeginHorizontal();
-			GUILayout.Label($"<color={Theme.MutedHex}><b>SEARCH</b></color>", Theme.Small, GUILayout.Width(58));
-			menuSearch_ = GUILayout.TextField(menuSearch_ ?? "", 30, Theme.Field, GUILayout.Width(220));
-			if (searchShownFor_.Length > 0) {
-				if (NavButton("Clear", Theme.Chip)) {
-					menuSearch_ = "";
-				}
-			} else {
-				GUILayout.Label($"<color={Theme.MutedHex}>A page or a setting: ghosts, shortcut, colours, backups...</color>", Theme.Small);
-			}
-			GUILayout.FlexibleSpace();
-			GUILayout.EndHorizontal();
 			if (searching) {
 				if (searchShown_.Count == 0) {
 					GUILayout.Label($"<color={Theme.MutedHex}>Nothing called that. Try one word, like traps or colours.</color>", Theme.Small);
@@ -95,7 +107,7 @@ namespace TRC.TuneLoader {
 				GUILayout.Space(6);
 			} else if (pinnedShown_.Count > 0) {
 				GUILayout.BeginHorizontal();
-				GUILayout.Label($"<color={Theme.MutedHex}><b>PINNED</b></color>", Theme.Small, GUILayout.Width(58));
+				GUILayout.Label("Pinned", Theme.SectionLabel, GUILayout.Width(58));
 				NavPage open = null;
 				foreach (NavPage page in pinnedShown_) {
 					if (NavButton(page.Name, Theme.Button)) {

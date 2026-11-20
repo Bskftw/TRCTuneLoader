@@ -147,6 +147,7 @@ namespace TRC.TuneLoader {
 					ProtectedMode = modCheck_.ProtectedMode,
 					AllVerified = modCheck_.AllVerified,
 					Mods = modCheck_.Entries.ToList(),
+					StaffPass = staffPass_,
 				};
 
 				if (car_ != null) {

@@ -46,34 +46,15 @@ namespace TRC.TuneLoader {
 		}
 
 		private void DrawStartKeyOption() {
-			GUILayout.Space(6);
-			GUILayout.Label(capturingStart_
-				? "Press the new start key now. Press Esc to cancel."
-				: $"<b>{startShortcut_}</b> starts a time attack on the track open in Tracks (or the last one you drove) and puts you on its start line, flying or standing as picked in Tracks.", Theme.Body);
-			GUILayout.BeginHorizontal();
-			if (capturingStart_) {
-				if (NavButton("Cancel", Theme.Button)) {
-					capturingStart_ = false;
-					optionsResult_ = "Start key not changed.";
-				}
-			} else {
-				if (NavButton("Change start key", Theme.Button)) {
-					capturingStart_ = true;
-					capturingShortcut_ = false;
-					capturingRestart_ = false;
-					optionsResult_ = "";
-				}
-				if (!startShortcut_.SameAs(Shortcut.StartDefault) && NavButton($"Reset to {Shortcut.StartDefault}", Theme.Button)) {
-					SetStartShortcut(Shortcut.StartDefault);
-				}
-			}
-			GUILayout.FlexibleSpace();
-			GUILayout.EndHorizontal();
+			KeyRow("Start a time attack", "On the track open in Tracks (or the last one), flying or standing as picked there", startShortcut_.ToString(), capturingStart_,
+				() => { capturingStart_ = true; capturingShortcut_ = false; capturingRestart_ = false; capturingQuick_ = false; optionsResult_ = ""; },
+				() => { capturingStart_ = false; optionsResult_ = "Start key not changed."; },
+				!startShortcut_.SameAs(Shortcut.StartDefault), () => SetStartShortcut(Shortcut.StartDefault));
 		}
 
 		private void SetStartShortcut(Shortcut shortcut) {
 			capturingStart_ = false;
-			if (shortcut.SameAs(shortcut_) || shortcut.SameAs(restartShortcut_)) {
+			if (shortcut.SameAs(shortcut_) || shortcut.SameAs(restartShortcut_) || shortcut.SameAs(quickShortcut_)) {
 				optionsResult_ = $"{shortcut} is already used: pick another key to start.";
 				return;
 			}

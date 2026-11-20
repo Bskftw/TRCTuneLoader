@@ -91,7 +91,7 @@ namespace TRC.TuneLoader {
 			scannedMapKey_ = map_.Key;
 			try {
 				long began = PerfLog.Begin();
-				// Paths remembered from earlier loads of this map (IMPROVEMENT_PLAN.md P1), unless asked to read them all again.
+				// Paths remembered from earlier loads of this map (docs/archive/IMPROVEMENT_PLAN.md P1), unless asked to read them all again.
 				string pathsFile = Path.Combine(CoursesFolder, TuneBackups.SafeFileName(map_.Key.Replace(':', '_')), SavedPaths.FileName);
 				string loadError = "";
 				SavedPaths saved = freshScan_ ? new SavedPaths(Version) : SavedPaths.Load(pathsFile, Version, out loadError);

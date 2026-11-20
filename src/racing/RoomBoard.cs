@@ -191,7 +191,8 @@ namespace TRC.TuneLoader {
 
 		/// <summary>Whether to send this status now (it changed, it's been a while, or someone new needs it).</summary>
 		public bool ShouldSend(RoomMessage mine, double now) {
-			string signature = $"{(byte)mine.Activity}|{mine.Detail}|{mine.UpForBattle}|{mine.OpenRaceId}|{mine.MapKey}|{mine.Car}";
+			// The traffic score in hundreds, so the board stays fresh while someone scores (still at most one status every MinGapSeconds).
+			string signature = $"{(byte)mine.Activity}|{mine.Detail}|{mine.UpForBattle}|{mine.OpenRaceId}|{mine.MapKey}|{mine.Car}|{mine.Traffic}|{(int)(mine.TrafficPoints / 100f)}|{mine.TrafficCombo}|{mine.AttackId}";
 			double since = now - lastSentAt_;
 			if (since < MinGapSeconds) {
 				return false;
@@ -220,7 +221,7 @@ namespace TRC.TuneLoader {
 			string detail = s.Detail.Length > 0 ? s.Detail : "";
 			switch (s.Activity) {
 				case RoomActivity.Garage: return "In the garage";
-				case RoomActivity.FreeRoam: return "Free roam";
+				case RoomActivity.FreeRoam: return detail.Length > 0 ? $"Free roam, at {detail}" : "Free roam";
 				case RoomActivity.TimeAttack: return detail.Length > 0 ? $"Time attack on {detail}" : "Time attack";
 				case RoomActivity.Battle: return detail.Length > 0 ? $"Battling {detail}" : "In a battle";
 				case RoomActivity.Race: return detail.Length > 0 ? $"Racing on {detail}" : "In a race";
@@ -230,6 +231,45 @@ namespace TRC.TuneLoader {
 				case RoomActivity.Building: return "Making a course";
 				default: return "";
 			}
+		}
+
+		/// <summary>What copies before 0.19 speak: they send no features, so this is what they're taken to have.</summary>
+		public const string Before019 = "battle:5-7 race:2 room:1 report:4 lanes:4 path:3";
+
+		private static readonly Dictionary<string, string> FeatureNames = new Dictionary<string, string> {
+			["battle"] = "battles", ["race"] = "races", ["room"] = "the room board", ["report"] = "player checks",
+			["lanes"] = "highway traffic", ["path"] = "track traffic", ["sealed"] = "signed messages",
+		};
+
+		/// <summary>"battle:5-7 race:2" as each name's lowest and highest version (a bad entry is left out).</summary>
+		public static Dictionary<string, (int Low, int High)> ParseFeatures(string text) {
+			var features = new Dictionary<string, (int, int)>(StringComparer.OrdinalIgnoreCase);
+			foreach (string item in (text ?? "").Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries)) {
+				string[] parts = item.Split(':');
+				if (parts.Length != 2) {
+					continue;
+				}
+				string[] range = parts[1].Split('-');
+				if (int.TryParse(range[0], out int low) && int.TryParse(range[range.Length - 1], out int high) && low <= high) {
+					features[parts[0]] = (low, high);
+				}
+			}
+			return features;
+		}
+
+		/// <summary>
+		/// What another player can't do with this one, in plain words ("highway traffic", "signed messages"): a feature this copy
+		/// has that theirs lacks, or whose versions don't overlap. Their features "" means a copy before 0.19.
+		/// </summary>
+		public static List<string> Missing(string mine, string theirs) {
+			Dictionary<string, (int Low, int High)> a = ParseFeatures(mine), b = ParseFeatures(string.IsNullOrEmpty(theirs) ? Before019 : theirs);
+			var missing = new List<string>();
+			foreach (var pair in a) {
+				if (!b.TryGetValue(pair.Key, out var other) || other.High < pair.Value.Low || other.Low > pair.Value.High) {
+					missing.Add(FeatureNames.TryGetValue(pair.Key, out string name) ? name : pair.Key);
+				}
+			}
+			return missing;
 		}
 
 		/// <summary>Free to battle right now (not busy in something that has them).</summary>

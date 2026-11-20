@@ -10,6 +10,11 @@ dist/
 
 # The ratings file's private key (RatingSeal): built into the player version, never commit or share
 ratings.key
+results.key
+
+# Staff passes: the signing key stays on bskftw's PC; passes are made per player
+staff.key
+staff.pass
 
 # Official TRC tunes: built into the encrypted mod, never published in the repo
 official_tunes/
@@ -23,6 +28,7 @@ Resources/*
 !Resources/gantry_glow.png
 !Resources/gantry_font.txt
 !Resources/frog.png
+!Resources/icon_*.png
 
 # Local images, PDFs and downloads (kept on this PC, not in git)
 media/

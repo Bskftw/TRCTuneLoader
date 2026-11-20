@@ -44,6 +44,7 @@ namespace TRC.TuneLoader {
 
 				case BattleKind.Answer:
 					if (IsHost && State == Phase.Inviting) {
+						challengerChases_ |= message.ChallengerChases;
 						if (message.Accept) {
 							BeginGridding(now);
 						} else {
@@ -62,6 +63,7 @@ namespace TRC.TuneLoader {
 				case BattleKind.Heartbeat:
 					// The guest only sends these once it accepted: covers a lost answer.
 					if (IsHost && State == Phase.Inviting) {
+						challengerChases_ |= message.ChallengerChases;
 						BeginGridding(now);
 					}
 					OnHeartbeat(message, now);
@@ -122,7 +124,7 @@ namespace TRC.TuneLoader {
 					peerRan_ = true;
 				}
 				if (peerRan_) {
-					PeerSp = message.Sp;
+					PeerPressure = message.Pressure;
 				}
 			}
 			if (sameRun) {
@@ -173,7 +175,7 @@ namespace TRC.TuneLoader {
 			beat.Position = myPosition_;
 			beat.Heading = myForward_;
 			beat.Kmh = myKmh_;
-			beat.Sp = MySp;
+			beat.Pressure = MyPressure;
 			beat.RuleOk = MyCar?.RuleOk ?? false;
 			beat.Elo = MyElo;
 			outbox_.Add(beat);

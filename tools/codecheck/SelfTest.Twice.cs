@@ -4,7 +4,7 @@ using System.Linq;
 
 namespace TRC.TuneLoader.CodeCheck {
 	/// <summary>
-	/// Every message arriving twice (IMPROVEMENT_PLAN.md N8: a big message sent again, like a challenge every 3 s, can be
+	/// Every message arriving twice (docs/archive/IMPROVEMENT_PLAN.md N8: a big message sent again, like a challenge every 3 s, can be
 	/// put together and delivered twice): whole battles and races must end exactly as they do when each arrives once.
 	/// </summary>
 	internal static partial class SelfTest {

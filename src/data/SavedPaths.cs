@@ -11,7 +11,7 @@ namespace TRC.TuneLoader {
 	/// Each map course's path as the scan worked it out, with the problems it found, under a fingerprint of everything
 	/// that went into it (the path meshes' exact data, the start and finish lines, the mod build: see
 	/// <c>CourseScanner.PathKey</c>). A path whose fingerprint matches is used as it is; anything changed in the map
-	/// gives a new fingerprint, so that path is read again (IMPROVEMENT_PLAN.md P1: reading Project Dream's paths took
+	/// gives a new fingerprint, so that path is read again (docs/archive/IMPROVEMENT_PLAN.md P1: reading Project Dream's paths took
 	/// 6.7 s of a 7.6 s freeze on every load). The points are kept exactly, so a course's code is the same either way.
 	/// </summary>
 	public sealed class SavedPaths {

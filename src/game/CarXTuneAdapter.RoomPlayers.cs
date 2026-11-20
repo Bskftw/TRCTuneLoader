@@ -213,7 +213,7 @@ namespace TRC.TuneLoader {
 						IsConsole = IsConsole(shared.PlayerID.platform),
 						Pose = new CarPose {
 							Position = body.position, Forward = body.forward, Rotation = body.rotation, CarId = shared.CarId,
-							SpeedKmh = car.carX != null ? Mathf.Abs(car.carX.speedKMH) : 0f,
+							SpeedKmh = car.carX != null ? Mathf.Abs(car.carX.speedKMH) : 0f, Body = BodyBox(car, body, shared.CarId),
 						},
 					});
 				}

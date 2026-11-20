@@ -12,18 +12,20 @@ namespace TRC.TuneLoader {
 	public partial class TRCTuneLoaderMod {
 		private const string WheelActionPref = "wheel_action";
 		private const string WheelWindowPref = "wheel_window";
+		private const string WheelQuickPref = "wheel_quick";
 
 		private readonly WheelButtons wheel_ = new WheelButtons();
 
 		private WheelButtons.Binding wheelAction_ = WheelButtons.Binding.None;
 		private WheelButtons.Binding wheelWindow_ = WheelButtons.Binding.None;
+		private WheelButtons.Binding wheelQuick_ = WheelButtons.Binding.None;
 
-		/// <summary>0 = not picking, 1 = picking the action button, 2 = the window button.</summary>
+		/// <summary>0 = not picking, 1 = picking the action button, 2 = the window button, 3 = the quick menu button.</summary>
 		private int capturingWheel_;
 		private float captureWheelUntil_;
 
 		private void UpdateWheel() {
-			if (capturingWheel_ == 0 && !wheelAction_.IsSet && !wheelWindow_.IsSet) {
+			if (capturingWheel_ == 0 && !wheelAction_.IsSet && !wheelWindow_.IsSet && !wheelQuick_.IsSet) {
 				return;
 			}
 			wheel_.Poll();
@@ -35,22 +37,30 @@ namespace TRC.TuneLoader {
 				}
 				if (wheel_.Pressed.Count > 0) {
 					WheelButtons.Binding picked = wheel_.Pressed[0];
+					// One job per button: the one picked comes off the other two.
+					if (capturingWheel_ != 1 && wheelAction_.Save() == picked.Save()) {
+						wheelAction_ = WheelButtons.Binding.None;
+						SavePref(WheelActionPref, "");
+					}
+					if (capturingWheel_ != 2 && wheelWindow_.Save() == picked.Save()) {
+						wheelWindow_ = WheelButtons.Binding.None;
+						SavePref(WheelWindowPref, "");
+					}
+					if (capturingWheel_ != 3 && wheelQuick_.Save() == picked.Save()) {
+						wheelQuick_ = WheelButtons.Binding.None;
+						SavePref(WheelQuickPref, "");
+					}
 					if (capturingWheel_ == 1) {
 						wheelAction_ = picked;
 						SavePref(WheelActionPref, picked.Save());
-						if (wheelWindow_.Save() == picked.Save()) {
-							wheelWindow_ = WheelButtons.Binding.None;
-							SavePref(WheelWindowPref, "");
-						}
-					} else {
+					} else if (capturingWheel_ == 2) {
 						wheelWindow_ = picked;
 						SavePref(WheelWindowPref, picked.Save());
-						if (wheelAction_.Save() == picked.Save()) {
-							wheelAction_ = WheelButtons.Binding.None;
-							SavePref(WheelActionPref, "");
-						}
+					} else {
+						wheelQuick_ = picked;
+						SavePref(WheelQuickPref, picked.Save());
 					}
-					optionsResult_ = $"{(capturingWheel_ == 1 ? "TRC action" : "Open the window")}: {picked}.";
+					optionsResult_ = $"{(capturingWheel_ == 1 ? "TRC action" : capturingWheel_ == 2 ? "Open the window" : "Quick menu")}: {picked}.";
 					TrcLog.Info($"Wheel button set: {optionsResult_}");
 					capturingWheel_ = 0;
 				}
@@ -64,6 +74,9 @@ namespace TRC.TuneLoader {
 			}
 			if (wheel_.WasPressed(wheelAction_)) {
 				WheelAction();
+			}
+			if (wheel_.WasPressed(wheelQuick_)) {
+				QuickPress();
 			}
 		}
 

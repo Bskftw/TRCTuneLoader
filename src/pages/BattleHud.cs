@@ -8,7 +8,7 @@ using UnityEngine;
 
 namespace TRC.TuneLoader {
 	public partial class TRCTuneLoaderMod {
-		/// <summary>A highway battle: the rolling countdown, then both SP bars (yours and theirs) and the gap.</summary>
+		/// <summary>A highway battle: the rolling countdown, then both pressure bars (yours and theirs) and the gap.</summary>
 		private void DrawHighwayHud(float screenWidth, float screenHeight, BattleSession b) {
 			if (b.State == BattleSession.Phase.Countdown && b.Message.Length > 0) {
 				GUI.Label(new Rect(0f, screenHeight * 0.3f, screenWidth, 160f), b.Message, Theme.HudBig);
@@ -26,16 +26,16 @@ namespace TRC.TuneLoader {
 				return;
 			}
 			GUI.Box(rect, GUIContent.none, Theme.HudPanel);
-			void Bar(float y, string who, float sp, Texture2D fill) {
+			void Bar(float y, string who, float pressure, Texture2D fill) {
 				GUI.Label(new Rect(rect.x + 12f, y, 90f, 18f), who, Theme.HudSmall);
 				var back = new Rect(rect.x + 100f, y + 5f, rect.width - 150f, 8f);
 				GUI.DrawTexture(back, Theme.ProgressBack);
-				GUI.DrawTexture(new Rect(back.x, back.y, back.width * Mathf.Clamp01(sp / BattleSession.FullSp), back.height), fill);
-				GUI.Label(new Rect(back.xMax + 6f, y, 40f, 18f), $"{sp:0}", Theme.HudSmall);
+				GUI.DrawTexture(new Rect(back.x, back.y, back.width * Mathf.Clamp01(pressure / BattleSession.FullPressure), back.height), fill);
+				GUI.Label(new Rect(back.xMax + 6f, y, 40f, 18f), $"{pressure:0}", Theme.HudSmall);
 			}
-			Bar(rect.y + 8f, "You", b.MySp, Theme.AccentLine);
-			Bar(rect.y + 30f, b.PeerName, b.PeerSp, Theme.FinishLine);
-			string gap = Mathf.Abs(b.HighwayGap) < 3f ? "Side by side" : b.HighwayGap > 0 ? $"Ahead by {b.HighwayGap:0} m" : $"Behind by {-b.HighwayGap:0} m: losing SP";
+			Bar(rect.y + 8f, "You", b.MyPressure, Theme.AccentLine);
+			Bar(rect.y + 30f, b.PeerName, b.PeerPressure, Theme.FinishLine);
+			string gap = Mathf.Abs(b.HighwayGap) < 3f ? "Side by side" : b.HighwayGap > 0 ? $"Ahead by {b.HighwayGap:0} m" : $"Behind by {-b.HighwayGap:0} m: losing pressure";
 			GUI.Label(new Rect(rect.x, rect.y + 52f, rect.width, 20f), gap, Theme.HudSmall);
 			DrawMoveHint(rect);
 		}

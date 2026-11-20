@@ -15,7 +15,7 @@ namespace TRC.TuneLoader {
 		/// <summary>Each path mesh's fingerprint, made once per scan (a shared path serves several courses).</summary>
 		private static readonly Dictionary<MeshFilter, byte[]> meshPrints_ = new Dictionary<MeshFilter, byte[]>();
 
-		// Where the path time goes (IMPROVEMENT_PLAN.md P1, step 3): the strips' centre lines, putting the points in order,
+		// Where the path time goes (docs/archive/IMPROVEMENT_PLAN.md P1, step 3): the strips' centre lines, putting the points in order,
 		// and the fingerprints.
 		private static readonly Stopwatch centreTimer_ = new Stopwatch();
 		private static readonly Stopwatch orderTimer_ = new Stopwatch();

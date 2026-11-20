@@ -12,17 +12,17 @@ A KSL mod for CarX Drift Racing Online, made for TRC (Touge Racing Community). B
 | --- | --- |
 | **Tunes & TRC spec** | Put the official TRC tunes on your car in one click, and check your car, and every car in the room, for anything that isn't TRC spec. Every tune has a code the TRC Discord bot uses to verify leaderboard runs. |
 | **Time attack & course builder** | Make your own courses on any map by driving them, or race the official ones. 3-2-1-GO or flying starts, circuits with laps, sectors in purple, green and amber, a live delta bar with your predicted time, and your best line drawn on the road. Your bests carry over between cars. Gantries at the start, finish and every sector light up with the countdown and show your gap to your PB, and the course shows on CarX's minimap and map. Drive to TRC spec, Open or one of your regulations. |
-| **Battles, races & tournaments** | Challenge anyone in the room: side by side, cat and mouse, or a Tokyo Xtreme Racer style highway battle. Races with qualifying and grids (no driver limit), then points series, knockouts and heats. Console players can race too, timed by a PC host. |
+| **Battles, races & tournaments** | Challenge anyone in the room: side by side, cat and mouse, or a highway battle on pressure bars. Races with qualifying and grids (no driver limit), then points series, knockouts and heats. Console players can race too, timed by a PC host. |
 | **Specs** | Make your own spec, a tune for each car like TRC's sets, for spec racing. Share it as a zip, install other players' specs, and race or time attack to it. |
 | **Regulations** | For communities that tune their own cars to rules: a most power, tyre widths per weight class, no swaps, one setup. Make one, share it, and run battles, races and tournaments to it, with its own Elo. |
 | **Suspension** | Data logging like a real race team: how far each wheel compresses, the tyre's load, when it leaves the road, packing down over bumps, bottoming, and a damper speed histogram, with a live overlay. Off unless you turn it on. |
 | **Ghosts & shared runs** | Your best time attacks are kept as ghosts. Race a ghost, yours or one someone shared, with the live delta and sectors against it. Ghosts have no physics, so no slipstream. |
-| **Traffic lab (very early testing)** | AI traffic on Project Dream's highways and on any track's path, shared with everyone in the room: the same cars and the same crashes. In Tools. Expect bugs and big changes. |
+| **Traffic lab (very early testing)** | AI traffic on Project Dream's highways and on any track's path, shared with everyone in the room: the same cars and the same crashes. In Free roam. Expect bugs and big changes. |
 | **Speed traps, room games & ratings** | Speed traps in free roam and on courses with a floating SPEED CHECK sign, random traps on any track, speed trap races, fun games (cops and runners, tag, infected, king of the hill, highway cut-up and more), and an Elo rating, Safety Rating and license (still being tested). |
 
 ![The four parts of TRC Tune Loader](docs/images/overview.png)
 
-**Version 0.18.4** (Nov 12 2026). What changed in each version: [CHANGELOG.md](CHANGELOG.md).
+**Version 0.19.0** (Nov 19 2026). What changed in each version: [CHANGELOG.md](CHANGELOG.md).
 
 **Still in testing.** The mod is new and still being tested, so bugs will happen, especially in the newest features (see "Tested in game" below). If something goes wrong, press **Report a bug** (Home, bottom right) and send bskftw the zip it puts on your Desktop.
 
@@ -42,7 +42,7 @@ Either way, the mod keeps its files (times, courses, backups, logs) in one folde
 - Press **Ctrl + T** (you can change this in Options), or
 - open the KSL menu and click **TRCTuneLoader**, then **Open the TRC Tune Loader window**.
 
-The window opens on **Home**: a big card for each part of the mod, in its colour. Click one to go in. Inside, the parts are across the top (**TRC spec**, **Specs**, **Time attack**, **Battles**, **Free roam**, **Tools**) and each part's pages are down the left. The logo takes you back to Home. While your mouse is over the window, clicks don't go through to the game.
+The window opens on **Home**: a tile for each part of the mod, in its colour. Click one to go in. The parts are down the left (**TRC spec**, **Specs**, **Time attack**, **Battles**, **Free roam**, **Tools**), each one's pages open under it, and **Options** sits at the bottom. **Home** or the logo takes you back. While your mouse is over the window, clicks don't go through to the game.
 
 **On a controller:** the D-pad moves between buttons, **A** presses one, **B** goes back to Home (or closes the window), and **LB** / **RB** change part. While the menu has the controller, the car keeps still. To open the window from the pad, pick a button for it in Options (Wheel and controller buttons).
 
@@ -56,8 +56,10 @@ The window opens on **Home**: a big card for each part of the mod, in its colour
 
 The window opens on Home:
 
-- **The cards:** TRC spec, Specs, Time attack, Battles and Free roam, each with a line about what's going on (your car's spec, a challenge waiting, your last time today) and buttons to its pages.
-- **Tools** along the bottom: Mod check, Suspension logger, Options, About, Arrange screen and Report a bug.
+- **The tiles:** TRC spec, Specs, Time attack, Battles, Free roam and Tools, each with a line about what's going on (your car's spec, a challenge waiting, your last time today) and links to its pages.
+- **Your last run** with **Go again**, and **today's challenge** with its gold, silver and bronze times.
+- **Search** at the top right: type a page or a setting (ghosts, shortcut, colours...).
+- **Arrange the screen** and **Report a bug** along the bottom.
 - **Waiting for you:** challenges to answer and races you can join. A challenge also shows at the top of every tab, with **Answer**.
 - **In this room:** the room board. Every TRC Tune Loader player in the room (0.14 or newer) and what they're doing: in the garage, free roam, a time attack, battling, racing, in a race lobby, a room game or making a course, with their car and rating. Tick **I'm up for a battle** so others know you're free. **Challenge** takes you to the battle form with them picked; **Join** joins their race.
 - **Courses shared with the room:** courses other players sent, with **Save** to keep them as your own (speed traps and grid included).
@@ -132,7 +134,13 @@ Time attack shows the map you're driving on, with three pages down the left: **T
 
 **Tracks** lists every course on this map, one line each with its kind, length and your best: click one to open it. An open track shows its name big, your best, your theoretical best (your best sectors added up) and how many runs you've done, with **Teleport & start**, Ghosts, Record path, Sectors and Edit. On a map with lots of tracks, **Find a track** narrows the list as you type.
 
+**Challenges** (its own page): a daily and a weekly challenge, a track picked from the date (the same for everyone on the map), with bronze, silver and gold times. Today's challenge also shows on Home.
+
+**Lap compare:** after a run or lap, My times shows where you lost time against your best, stretch by stretch, with your speed and the best's. It's kept when you restart the game.
+
 **Start key:** **Ctrl + G** starts a time attack on the track open in Tracks (or the last one you drove) and puts you on its start line, without opening the window. Change it in Options.
+
+**Quick menu:** **Ctrl + Q** (or a wheel or controller button you pick in Options) opens a strip of actions while you drive: **Restart run**, **Start track**, **Traffic on/off**, **Hide HUD** and **Mark clip**. Press the key or button again to move to the next one: it happens once you stop pressing, so you never let go of the wheel. **Mark clip** writes the time, map, track, run time, car and speed to `kino\mods\TRCTuneLoader\clips.csv`, to find the moment later in a recording.
 
 **Manual sectors:** open a sprint or circuit and press **Sectors**. Drive to where a sector should end and press **Add sector end here**; do that for each one. They replace the automatic sectors. On your own courses they're saved in the course file, so they go with it when you share it. On map courses, **Copy sectors code** and **Paste sectors code** pass them to a friend. Options can turn manual sectors off. The course code stays the same.
 
@@ -163,7 +171,7 @@ Laps (circuits only) can be 1, 3, 5, 10 or **Unlimited**. Unlimited is practice:
 3. Standing start: hold still, and a **3-2-1-GO** countdown starts. Moving before GO is a **jump start**, and you stop and try again. Flying start: just drive through the line.
 4. A small timer shows your time (on a circuit, the lap time, with the lap, the total and your best lap under it) and a thin line for how far along you are.
 5. **Sectors:** every course is split into sectors (3, or more on long courses; maps can mark their own). They stay on the timer, coloured as you finish each one: **purple** great pace (the best that sector has ever been driven), **green** on pace (your best in this car), **amber** below pace. My times shows the sectors of your times too. Options can hide them.
-   **Timing detail** (Options): **Simple** compares with your best on the track in any car. **Detailed** also shows your best in the car you're in and each sector's gap to both.
+   **Timing detail** (Tools, HUD): **Simple** compares with your best on the track in any car. **Detailed** also shows your best in the car you're in and each sector's gap to both.
 6. **Live delta:** once you have a best time on the track, in any car, the timer shows how far ahead (green, minus) or behind (red, plus) you are right now, with a bar under the time and your predicted time.
 7. Cross the finish line (on a circuit, after the last lap) to stop the clock. Your time, how it compares with your best, your sectors and whether it counts show for a few seconds. A circuit also shows the laps: the best, the average and how even they were. Then the run is ready for another go.
 
@@ -185,6 +193,10 @@ Battles has three pages down the left: **1v1 battles**, **Races** and **Tourname
 
 Every battle, race and tournament has **rules**: **TRC spec** (every car on an official tune, same tune set, no flagged mods), a **regulation** (see Regulations below), or **Open** (any setup). Any of them can also be **just for fun**: nobody's Elo or Safety Rating changes.
 
+**Your own check of the other cars:** in TRC spec and regulation battles and races, your mod also checks the other drivers' cars itself, from what CarX shares about them (like the Players page), at the countdown and at the finish. If a car doesn't match what that driver's mod says, you get a warning on screen. For now it's only a warning; later such a result won't change ratings.
+
+**Result code:** after a battle or race, **Copy result code** (on the 1v1 battles page and under a race's results) copies a code for the Project Dream season bot. Paste it into `/report-race` with your clip or screenshot: the bot checks it came from the mod unchanged.
+
 **1v1 battles** challenge another player in the same online room:
 
 1. Pick the opponent, a course on this map, the format, the laps (on a circuit) and the rules, and press **Challenge**. They see the challenge on screen and press the shortcut to answer it. A course of your own, or your recorded path, is sent to them with the challenge: a long course can take up to a minute to get there, so give it time. You see when it gets to them, and why if they can't accept it. If you both challenge each other at once to the same course, format and mode, it becomes one battle by itself. The room board on Home shows who's up for a battle.
@@ -196,8 +208,8 @@ Every battle, race and tournament has **rules**: **TRC spec** (every car on an o
 | --- | --- |
 | Side-by-side race | The faster time. Closer than 0.1 s is a dead heat: run it again. |
 | Cat and mouse | The chaser wins a run by passing and staying ahead to the finish. The leader wins by finishing far enough ahead: 1.5 s while you both have your first lead, 1 s for your second, then 0.5 s. Otherwise you swap places and go again; the first run with a winner wins. |
-| Highway battle (SP) | Tokyo Xtreme Racer style, anywhere on the map, no course. Drive alongside each other at speed for a rolling 3-2-1, then whoever's behind loses SP, faster the bigger the gap. A hit costs SP too. Empty SP, or 600 m behind, loses. |
-| Speed traps | For fun, like Most Wanted: side by side from a standing start, and the higher total of every speed trap on the course wins (every lap on a circuit), whoever gets to the finish first. You have to finish for yours to count. A course without traps of its own uses the free-roam traps along its road. Your total and theirs show live while you drive. It doesn't change your Elo, and both of you need 0.15.1 or newer. |
+| Highway battle (pressure) | Anywhere on the map, no course. Drive alongside each other at speed for a rolling 3-2-1, then whoever's behind loses pressure, faster the bigger the gap. A hit costs pressure too. An empty pressure bar, or 600 m behind, loses. |
+| Speed traps | For fun: side by side from a standing start, and the higher total of every speed trap on the course wins (every lap on a circuit), whoever gets to the finish first. You have to finish for yours to count. A course without traps of its own uses the free-roam traps along its road. Your total and theirs show live while you drive. It doesn't change your Elo, and both of you need 0.15.1 or newer. |
 
 A driver who doesn't finish loses the run to one who does. When it's over, **Run it back** challenges them again with the same course and format. After a battle against someone else's course, **Save this course** keeps it in your courses, to practise on. **TRC spec** battles need both cars TRC spec on the same tune set, with no flagged mods, at every start and finish; **regulation** battles need both cars to meet the regulation at every start and finish; **Open** battles take any setup and don't count. After ten runs without a winner it's a draw. If the other driver leaves or stops answering for 10 seconds, the battle ends. Every battle is saved in `kino\mods\TRCTuneLoader\TimeAttack\battles.csv`.
 
@@ -228,7 +240,7 @@ Tournaments can also be set to **No penalties**: the host can't add time penalti
 | Heats and final | Heats of 4 to 8 drivers; the top of each goes through to one final race. |
 | Shootout | A timed session of time attacks: the best time wins. |
 
-**Speed trap races**, like Need for Speed Most Wanted: pick **Race for: Speed traps**. The highest total of every speed trap on the course wins (on a circuit, every lap's traps count again). You have to finish for yours to count. The course's own traps are used, or, when it has none, the free-roam traps along its road. Everyone in the race scores the same traps. While you drive, every trap flashes your speed and your total so far, and the timer shows your total, your place on the traps and the top three totals, live.
+**Speed trap races**: pick **Race for: Speed traps**. The highest total of every speed trap on the course wins (on a circuit, every lap's traps count again). You have to finish for yours to count. The course's own traps are used, or, when it has none, the free-roam traps along its road. Everyone in the race scores the same traps. While you drive, every trap flashes your speed and your total so far, and the timer shows your total, your place on the traps and the top three totals, live.
 
 **Race control:** the mod notices when your car suddenly loses a lot of speed: next to another car it's **contact**, anywhere else a **hit**. A light touch in close racing is only noted, never counted. The host sees each driver's incidents and can give +5 s, +10 s or a disqualification in the results (or clear it). A **yellow flag** shows when a car ahead is stopped or off the road, a **blue flag** when a car a lap ahead is right behind you.
 
@@ -303,7 +315,7 @@ Each spec is a folder in `kino\mods\TRCTuneLoader\specs`: a `spec.txt` with its 
 
 For communities that don't run TRC tunes but keep things balanced with rules, like a tournament where everyone tunes their own car but has to stay under 600 hp, on tyres no wider than 300, with no drivetrain swaps.
 
-- **Make or edit** a regulation. Everything to do with tuning can be a rule:
+- Everything is on one page, laid out like My specs: your regulations down the left, with **New regulation** and **Paste from clipboard**. Pick one to check it, share it, edit or delete it. Everything to do with tuning can be a rule:
   - which setups are allowed (Stock, Turbo, Race, Drift, Ultimate, Ultimate Pro)
   - which cars
   - the most power, the least and most weight, and power to weight (the least kg per hp)
@@ -335,29 +347,50 @@ Your courses are saved in `kino\mods\TRCTuneLoader\Courses`. In Tracks, **Edit**
 
 - **Shortcut**: press **Change shortcut**, then the keys you want (for example Ctrl + T or F8). Ctrl, Shift and Alt can be combined with any key. **Reset** goes back to Ctrl + T. The shortcut doesn't fire while you're typing in CarX's chat.
 - **Restart key** (Ctrl + R): during a time attack, sends your car back to the start line, ready to go again. **Change restart key** picks another.
+- **Quick menu key** (Ctrl + Q): opens the quick menu while you drive. **Change quick menu key** picks another.
 - **Best line**: speed colours, one colour, or off.
 - **Ghosts**: keep your 3 best, keep every run, or don't record; and how see-through they are.
 - **Speed trap signs**: your last speed through each trap, or your fastest.
-- **Timing detail**: Simple, or Detailed (your best in this car too, each sector's gaps, and at speed traps the fastest ever with the car that set it).
-- **Telemetry** (each part off by default): a small panel over the track with your own car's **inputs** (throttle, brake, handbrake, clutch, steering, gear and RPM), a **g-force** dot, and each **wheel's slip** (green gripping, amber past its best grip, red well past it).
-- **Screen layout**: **Arrange the screen** shows every box the mod draws over the track at once (the timer, the speed trap flash, pop-up notices, the TRC spec badge, the suspension overlay and the telemetry) so you can drag each where you want it. **Put everything back** resets them.
 - **Share my tune values** (off by default): lets other TRC Tune Loader users see your tune's real values on their Players page. Off, they only see what you changed.
-- **Wheel and controller buttons**: **Pick a button**, then press it on your wheel or controller. The **TRC action** button does what fits right now: accepts a challenge, joins a race that just opened, runs the last battle or race back, or restarts your time attack. **Open the window** opens and closes this window. Pick buttons CarX doesn't use: CarX still sees every press.
+- **Wheel and controller buttons**: **Pick a button**, then press it on your wheel or controller. The **TRC action** button does what fits right now: accepts a challenge, joins a race that just opened, runs the last battle or race back, or restarts your time attack. **Open the window** opens and closes this window. **Quick menu** opens the quick menu. Pick buttons CarX doesn't use: CarX still sees every press.
 - **Report a bug**: the same as on Home.
 - **Window size**: 80% to 150%. Also sizes the badge and the pop-up.
 - **Look**: the text size (90% to 150%, on top of the window size) and every colour of the menu:
   - **Window:** background, text, second text (notes and labels).
   - **Highlights:** accent (page titles, note boxes, lines) and buttons.
-  - **Parts:** TRC spec, Specs, Time attack, Battles, Free roam and Tools (their names across the top and their cards on Home).
+  - **Parts:** TRC spec, Specs, Time attack, Battles, Free roam and Tools (their icons in the menu and their tiles on Home).
   
-  Click a colour from the row, or press **Custom** to type a hex code or use the hue, colour and brightness sliders. Pick a ready look (TRC, Darker, Midnight, Grey, High contrast, Light) for the window and highlights. **Reset all colours** puts everything back.
-- **TRC spec badge** (off by default): a small tag in a corner while you drive. Green "TRC SPEC" with your set, amber for the few seconds before the car you're driving has been checked, red "NOT TRC SPEC". Pick the corner it sits in.
+  Click a colour from the row, or press **Custom** to type a hex code or use the hue, colour and brightness sliders. Pick a ready look (TRC Night, Carbon, Deep Blue, Sakura, High Contrast) for the window and highlights. **Reset all colours** puts everything back. If your colours make the text hard to read, the page says so and **Fix it** sorts it.
+- **Font**: road sign (Bahnschrift, the default) or classic, and heavier headings.
+- **Over the track**: how solid the boxes over the track are (40% to 100%), and whether they follow the menu's colours or stay classic dark.
 - **Time attack timer**: drag it while the window is open during a run. **Put the timer back at the top** resets it.
 - **Check my car on the track** (off by default): a few seconds after you reach the track, and whenever your car changes while you drive, it's checked. A short message pops up only if something isn't TRC spec. Click it or press the shortcut for details.
 - **Backups**: keep all of them, or only the last 5, 10 or 20 for each car and setup. Older ones are deleted when a new backup is saved. **Clean up now** shows how many would go and asks again before deleting.
 - **Take the tour**: the first-run tour again.
 
 Options are saved with KSL, so they stay when you restart the game or update the mod.
+
+### Tools
+
+- **Host tools**: everyone in the room at a glance (version, TRC spec, ready in your race), the session's buttons in one place, and **Invite everyone** to any track's start on the map. Each player gets a **Go** button, and nobody's car moves unless they press it.
+- **Tandem aids** (off until switched on): the gap to the car next to you, body to body (door to door when you're alongside), both cars' drift angles, and how long you've held it close.
+- **Driver stats**: kilometres per car (counted from 0.19.0 on), your favourite track and car, battle wins and win rate, races and podiums.
+- **HUD**, **Mod check**, the **Suspension logger** and the lane tool are in Tools too.
+
+**TRC staff** who need a tool like Unity Explorer loaded can be given a staff pass by TRC, so their runs and battles still count. Their car is still checked, and the Players page shows "TRC staff exemption".
+
+### HUD
+
+Tools, **HUD** has everything the mod shows over the track in one place:
+
+- **Hide HUD**: takes every box away (for clips and streams). The quick menu brings it back.
+- **Size**: 80% to 150% for everything over the track, on top of the window size.
+- **Arrange the screen**: shows every box at once (the timer, the pop-ups, notices, the TRC spec badge, the suspension overlay and the telemetry) so you can drag each where you want it. **Put everything back** resets them.
+- **Sector times** on the timer, **Timing detail** (Simple, or Detailed: your best in this car too, each sector's gaps, and at speed traps the fastest ever with the car that set it), the **sector pop-up** and the **speed trap pop-up**.
+- **TRC spec badge** (off by default): a small tag in a corner while you drive. Green "TRC SPEC" with your set, amber for the few seconds before the car you're driving has been checked, red "NOT TRC SPEC". Pick the corner it sits in.
+- **Telemetry** (each part off by default): a small panel over the track with your own car's **inputs** (throttle, brake, handbrake, clutch, steering, gear and RPM), a **g-force** dot, and each **wheel's slip** (green gripping, amber past its best grip, red well past it).
+- **Suspension overlay**: shown while the suspension logger runs.
+- **Presets**: **Racing**, **Cruising** and **Streaming** switch things on and off and set the size. **Save as a preset** keeps everything on the page and where every box is under your own name (up to 12).
 
 ### About
 
@@ -386,12 +419,19 @@ The mod writes what it does to its own log, `kino\mods\TRCTuneLoader\TRCTuneLoad
 
 ## Traffic lab (very early testing)
 
-Tools > Traffic lab. Nothing runs until you press **Start traffic**, and stopping it removes everything.
+Free roam > Traffic lab. Nothing runs until you press **Start traffic**, and stopping it removes everything.
 
 - **Highway lanes**: on Project Dream, cars drive the highway lanes around you. They come in out of sight, merge, change lanes, take exits, and go when nobody is near. Pick how busy, the speed limit, the side of the road, and **Realistic** or **Cut-up** (even speeds, always a gap through).
 - **Track paths**: on any track with a path, cars drive it one way or both ways.
-- **Crashes**: hit a car and it's knocked out of the traffic. The cars behind it go round it.
-- **In a room**: one player starts the traffic. Everyone else opens the Traffic lab page and presses **Join** next to that player's name, under "Traffic in this room". Everyone needs this version.
+- **Crashes**: bump a car and it's shoved, then keeps driving. A big hit (80 km/h or more) knocks it out of the traffic, and the cars behind go round it.
+- **Traffic score**: while traffic runs, getting past a car closely and much faster is a **near miss**, and past cars on both sides at once a **tight squeeze** (double points). Each one builds your combo. It's lost after 8 s without one, when you stop, or when you crash. The player running the traffic picks what a crash costs: the combo, the whole score, or no points for 5 s. Your best on each map is kept. The score box is at the top of the screen; switch it off in Tools > HUD. It's just for fun: it's never rated.
+- **Scores in the room**: Home shows everyone's traffic score under the room board. Press **Start a 10-minute score attack** there: everyone who presses **Join** next to your name starts from 0 too, and whoever's highest after 10 minutes wins.
+- **Rush hour**: on lanes, pick Steady, Quiet, Rush hour, or rush hour coming and going every 20 minutes.
+- **Presets**: Late-night cruise, Cut-up run, Sunday drive and Rush hour set the road in one click, or save your own (they keep which traffic cars are in too).
+- **Lights**: on lane traffic, a car's lights glow red when it brakes or stands, and blink amber after a bump (hazards). Turn them off under Drawing.
+- **In a room**: one player starts the traffic. Everyone else opens the Traffic lab page and presses **Join** next to that player's name, under "Traffic in this room". Everyone needs this version. If the player running the traffic leaves, someone following it carries it on, with the same cars. The Traffic lab shows your ping to them.
+- **Per-lane traffic**: in Tools > Lane tool, each lane's **Traffic** button sets how much traffic comes in on it (none, less, normal, more).
+- **Driving numbers**: `kino\mods\TRCTuneLoader\TrafficLab\driving.txt` (made the first time you run traffic) holds how the traffic drives: grip in bends, braking, how keen on lane changes, gaps. Change one, start traffic again, and everyone following you uses yours.
 
 It's very early: expect bugs, and things to change a lot.
 
@@ -429,5 +469,6 @@ Traffic cars: "Generic passenger car pack" by Comrade1280 (https://sketchfab.com
 | New menu (Home cards, parts and pages), controller in the menu, player specs, manual sectors, start key | 0.17.0 | Partly: the menu, Home, Look, gantry signs, My times |
 | Specs: Check my car and Players (specs checked like TRC spec), My car renamed TRC Tunes, diff types by name | 0.17.1 | Partly: the Specs pages, Home, diff types |
 | Traffic lab (very early testing), Random speed traps on every track, smoother Speed traps page | 0.18.0 | Partly: traffic on Project Dream with four players (before room sharing was fixed) |
-| Search and pinned pages, Compare tunes, session summary, Options pages, faster map loading and traffic start, bests across cars, delta bar, Timing detail, telemetry, new traffic cars | 0.18.4 | Partly: map loading and the traffic start |
+| Search and pinned pages, Compare tunes, session summary, Options pages, faster map loading and traffic start, bests across cars, delta bar, Timing detail, telemetry, new traffic cars | 0.18.4 | Partly: map loading, the traffic start, telemetry, and battles with a friend |
+| New look, one regulations page, HUD page and presets, quick menu, host tools and Invite everyone, tandem aids, lap compare, driver stats, challenges, map boards and meet points, signed messages, checking other drivers' cars, result codes, staff passes, lighter traffic together | 0.19.0 | Partly: the new look, regulations, quick menu and HUD, and the solo tools (not yet with other players) |
 

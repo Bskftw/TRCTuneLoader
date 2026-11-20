@@ -79,7 +79,7 @@ namespace TRC.TuneLoader {
 
 		/// <summary>
 		/// A warning said once a session per <paramref name="key"/>: for something that fails quietly and often (a game call
-		/// every frame after a CarX update), so the log names it without filling up (IMPROVEMENT_PLAN.md C5).
+		/// every frame after a CarX update), so the log names it without filling up (docs/archive/IMPROVEMENT_PLAN.md C5).
 		/// </summary>
 		public static void Once(string key, string message) {
 			lock (once_) {

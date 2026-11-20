@@ -10,16 +10,21 @@ namespace TRC.TuneLoader {
 	/// Since 0.15.0 the player can pick the background, accent and text colours and a text size (Options):
 	/// <see cref="Configure"/> works out the other shades from those and builds the styles again.
 	/// </summary>
-	internal static class Theme {
-		public static readonly Color DefaultBackground = Hex(0x16161A);
-		public static readonly Color DefaultAccent = Hex(0xD4537E);
-		public static readonly Color DefaultText = Hex(0xEDEDED);
+	internal static partial class Theme {
+		// TRC Night (UI redesign, Nov 18: docs/archive/ui-redesign-plan.md). Players who never picked colours get it.
+		public static readonly Color DefaultBackground = Hex(0x1A1D27);
+		public static readonly Color DefaultAccent = Hex(0xE0628F);
+		public static readonly Color DefaultText = Hex(0xE9EAF0);
 
 		public static Color Background = DefaultBackground;
-		public static Color Panel = Hex(0x1D1D22);
-		public static Color Border = Hex(0x2E2E35);
-		public static Color Control = Hex(0x3A3A42);
-		public static Color Hover = Hex(0x26262C);
+		public static Color Panel = Hex(0x1D2029);
+		public static Color Border = Hex(0x363C52);
+		public static Color Control = Hex(0x434A62);
+		public static Color Hover = Hex(0x2B3042);
+
+		/// <summary>The redesign's layers: the menu rail (darker than the window), and raised controls (lighter than a panel).</summary>
+		public static Color Rail = Hex(0x15171F);
+		public static Color Raised = Hex(0x2B3042);
 		public static Color Text = DefaultText;
 		public static Color Muted = Hex(0x9A9AA3);
 		public static Color Accent = DefaultAccent;
@@ -55,55 +60,118 @@ namespace TRC.TuneLoader {
 		/// <param name="muted">The second text colour (notes, labels, the grey text), or null to work it out from the text.</param>
 		public static void Configure(Color background, Color accent, Color text, float textScale, Color? muted = null, Color? button = null) {
 			TextScale = Mathf.Clamp(textScale, 0.8f, 1.6f);
-			bool standard = Same(background, DefaultBackground) && Same(accent, DefaultAccent) && Same(text, DefaultText);
-			if (standard) {
-				Background = DefaultBackground;
-				Panel = Hex(0x1D1D22);
-				Border = Hex(0x2E2E35);
-				Control = Hex(0x3A3A42);
-				Hover = Hex(0x26262C);
-				Text = DefaultText;
-				Muted = Hex(0x9A9AA3);
-				Accent = DefaultAccent;
-				AccentHover = Hex(0xE0668F);
-				AccentSoft = Hex(0x4B1528);
-				AccentText = Hex(0xF4C0D1);
-			} else {
-				background.a = 1f;
-				accent.a = 1f;
-				text.a = 1f;
-				Color toward = Luminance(background) > 0.5f ? Color.black : Color.white;
-				Background = background;
-				Panel = Color.Lerp(background, toward, 0.04f);
-				Hover = Color.Lerp(background, toward, 0.07f);
-				Border = Color.Lerp(background, toward, 0.12f);
-				Control = Color.Lerp(background, toward, 0.17f);
-				Text = text;
-				Muted = Color.Lerp(text, background, 0.38f);
-				Accent = accent;
-				AccentHover = Color.Lerp(accent, Color.white, 0.12f);
-				AccentSoft = Color.Lerp(background, accent, 0.28f);
-				AccentText = Color.Lerp(accent, toward == Color.white ? Color.white : Color.black, 0.6f);
+			// The default look's own muted grey; anyone else's is worked out from their text (LookTokens).
+			if (muted == null && Same(background, DefaultBackground) && Same(text, DefaultText)) {
+				muted = LookTokens.Default.Muted;
 			}
-			if (muted is Color own) {
-				own.a = 1f;
-				Muted = own;
-			}
-			if (button is Color mine) {
-				mine.a = 1f;
-				ButtonColour = mine;
-				ButtonHover = Color.Lerp(mine, Color.white, 0.12f);
-				ButtonSoft = Color.Lerp(Background, mine, 0.28f);
-			} else {
-				ButtonColour = Accent;
-				ButtonHover = AccentHover;
-				ButtonSoft = AccentSoft;
-			}
-			ButtonText = Luminance(ButtonColour) > 0.6f ? new Color(0.08f, 0.08f, 0.09f) : Color.white;
+			LookTokens look = LookTokens.From(background, accent, text, muted, button);
+			Background = look.Night;
+			Rail = look.Rail;
+			Panel = look.Panel;
+			Raised = look.Raised;
+			Hover = look.Raised;
+			Border = look.Line;
+			Control = Color.Lerp(look.Line, look.Text, 0.12f);
+			Text = look.Text;
+			Muted = look.Muted;
+			Accent = look.Accent;
+			AccentHover = look.AccentHover;
+			AccentSoft = look.AccentSoft;
+			AccentText = look.AccentText;
+			ButtonColour = look.Button;
+			ButtonHover = look.ButtonHover;
+			ButtonSoft = look.ButtonSoft;
+			ButtonText = look.ButtonText;
 			MutedHex = ToHex(Muted);
 			ready_ = false;
 			Version++;
 		}
+
+		// ---- Fonts (UI redesign, Nov 18) ----
+
+		/// <summary>"Road sign" (Bahnschrift for headings, buttons and numbers, Segoe UI for text) or false for Unity's own font.</summary>
+		public static bool RoadSign { get; private set; } = true;
+
+		/// <summary>The fonts in use (null: Unity's own), and a line for the log and the Look page saying which.</summary>
+		public static Font SignFont, SignBold, BodyFont;
+		public static string FontNote { get; private set; } = "";
+		private static bool fontsTried_;
+
+		// Letters a font lacks come from the next in the list: Bahnschrift has no Japanese, Korean or Cyrillic (risk 3).
+		private static readonly string[] Fallbacks = { "Segoe UI", "Yu Gothic UI", "Meiryo", "Malgun Gothic", "Microsoft YaHei", "Arial" };
+
+		/// <summary>
+		/// Headings and buttons in Unity's bold of Bahnschrift instead of its regular (bskftw's PC has no SemiBold family,
+		/// Nov 18). The ui_font_bold pref; tried on the Look book.
+		/// </summary>
+		public static bool HeavyHeadings { get; private set; }
+
+		public static void UseHeavyHeadings(bool on) {
+			if (on != HeavyHeadings) {
+				HeavyHeadings = on;
+				ready_ = false;
+				Version++;
+			}
+		}
+
+		/// <summary>The weight strong text is drawn in: the sign font's own, or Unity's bold when asked for (or with Unity's font).</summary>
+		private static FontStyle StrongWeight => SignStrong == null || HeavyHeadings ? FontStyle.Bold : FontStyle.Normal;
+
+		/// <summary>The HUD plates' opacity, 0.4 to 1 (Options > Look, "Over the track"; the hud_opacity pref).</summary>
+		public static float HudOpacity { get; private set; } = 0.86f;
+
+		/// <summary>True: the plates are the menu's own background colour. False: classic dark, whatever the menu looks like.</summary>
+		public static bool HudFollowsMenu { get; private set; } = true;
+
+		public static void UseHud(float opacity, bool followMenu) {
+			opacity = Mathf.Clamp(opacity, 0.4f, 1f);
+			if (Mathf.Abs(opacity - HudOpacity) > 0.001f || followMenu != HudFollowsMenu) {
+				HudOpacity = opacity;
+				HudFollowsMenu = followMenu;
+				ready_ = false;
+				Version++;
+			}
+		}
+
+		public static void UseRoadSign(bool on) {
+			if (on != RoadSign) {
+				RoadSign = on;
+				ready_ = false;
+				Version++;
+			}
+		}
+
+		/// <summary>
+		/// Windows' own fonts, made once. Missing ones (an old Windows, Proton on Linux) leave Unity's font, said once
+		/// in the log (risk 4). The semibold is its own family name, so bold isn't smeared from the regular (risk 5).
+		/// </summary>
+		private static void LoadFonts() {
+			if (fontsTried_) {
+				return;
+			}
+			fontsTried_ = true;
+			try {
+				var installed = new System.Collections.Generic.HashSet<string>(Font.GetOSInstalledFontNames(), System.StringComparer.OrdinalIgnoreCase);
+				Font Make(params string[] first) {
+					string[] have = System.Linq.Enumerable.ToArray(System.Linq.Enumerable.Where(first, installed.Contains));
+					return have.Length == 0 ? null : Font.CreateDynamicFontFromOSFont(System.Linq.Enumerable.ToArray(System.Linq.Enumerable.Concat(have, Fallbacks)), 14);
+				}
+				SignFont = Make("Bahnschrift");
+				SignBold = Make("Bahnschrift SemiBold", "Bahnschrift");
+				BodyFont = Make("Segoe UI");
+				FontNote = SignFont != null
+					? $"Road sign fonts: Bahnschrift{(installed.Contains("Bahnschrift SemiBold") ? " (and SemiBold)" : "")}, {(BodyFont != null ? "Segoe UI" : "Unity's font for text")}."
+					: "Bahnschrift isn't on this PC, so the menu uses Unity's own font.";
+			} catch (System.Exception e) {
+				SignFont = SignBold = BodyFont = null;
+				FontNote = $"The road sign fonts couldn't be loaded ({e.Message}), so the menu uses Unity's own font.";
+			}
+			TrcLog.Info($"Menu: {FontNote}");
+		}
+
+		private static Font Sign => RoadSign ? SignFont : null;
+		private static Font SignStrong => RoadSign ? (SignBold ?? SignFont) : null;
+		private static Font TextFont => RoadSign ? BodyFont : null;
 
 		public static float Luminance(Color c) => 0.2126f * c.r + 0.7152f * c.g + 0.0722f * c.b;
 
@@ -149,12 +217,12 @@ namespace TRC.TuneLoader {
 
 		public static GUIStyle Window, Title, Subtitle, Tab, TabActive, Close;
 		public static GUIStyle Heading, Body, Small, SectionLabel, Group;
-		public static GUIStyle Chip, ChipActive, Button, ButtonPrimary;
+		public static GUIStyle Chip, ChipActive, Button, ButtonPrimary, ButtonQuiet;
 		public static GUIStyle Row, RowSelected, Card, Guide;
 		public static GUIStyle PillGood, PillBad, PillWarn, PillNeutral;
 		public static GUIStyle BadgeGood, BadgeBad, BadgeWarn, Popup;
 		public static GUIStyle ScrollBar, ScrollThumb;
-		public static GUIStyle Field;
+		public static GUIStyle Field, FieldWrapped;
 		public static GUIStyle HudPanel, HudPill, HudOutline, HudSmall, HudTimer, HudBig, MarkerStart, MarkerFinish;
 		public static Texture2D AccentLine, Divider, StartLine, FinishLine, ProgressBack, GoodFill, BadFill;
 
@@ -173,19 +241,23 @@ namespace TRC.TuneLoader {
 				}
 			}
 			made_.Clear();
+			tiles_.Clear();
+			LoadFonts();
 
 			Window = Box(Rounded(Background, Border, 10), 10, new RectOffset(0, 0, 0, 0));
 
-			Title = TextStyle(16, Theme.Text, FontStyle.Bold);
+			Title = Strong(TextStyle(16, Theme.Text, FontStyle.Bold));
 			Subtitle = TextStyle(11, Muted);
-			Heading = TextStyle(16, Theme.Text, FontStyle.Bold);
+			Heading = Strong(TextStyle(16, Theme.Text, FontStyle.Bold));
 			Body = TextStyle(13, Theme.Text);
 			Small = TextStyle(12, Muted);
-			SectionLabel = TextStyle(12, Muted);
-			Group = TextStyle(12, AccentText, FontStyle.Bold);
+			// Stage 4: the label over a card reads as its section's title (98 uses), in the text colour.
+			SectionLabel = Strong(TextStyle(13, Theme.Text, FontStyle.Bold));
+			SectionLabel.margin = new RectOffset(0, 0, 10, 4);
+			Group = Strong(TextStyle(12, AccentText, FontStyle.Bold));
 			Group.margin = new RectOffset(0, 0, 10, 2);
 
-			Tab = TextStyle(13, Muted);
+			Tab = SignStyle(TextStyle(13, Muted));
 			Tab.wordWrap = false;
 			Tab.padding = new RectOffset(10, 10, 9, 9);
 			Tab.hover.textColor = Theme.Text;
@@ -198,26 +270,29 @@ namespace TRC.TuneLoader {
 			Close.fixedHeight = 28;
 
 			// The choices not picked are in the second text colour, so Look changes them too (bskftw, Nov 3).
-			Chip = Clickable(Rounded(Color.clear, Control, 12), Rounded(Hover, Control, 12), 12, Muted, new RectOffset(12, 12, 4, 5));
+			Chip = SignStyle(Clickable(Rounded(Raised, Border, 12), Rounded(Color.Lerp(Raised, Theme.Text, 0.06f), Control, 12), 12, Muted, new RectOffset(12, 12, 4, 5)));
 			Chip.hover.textColor = Theme.Text;
-			ChipActive = Clickable(Rounded(ButtonColour, ButtonColour, 12), Rounded(ButtonHover, ButtonHover, 12), 12, ButtonText, new RectOffset(12, 12, 4, 5));
-			ChipActive.fontStyle = FontStyle.Bold;
+			ChipActive = Strong(Clickable(Rounded(ButtonColour, ButtonColour, 12), Rounded(ButtonHover, ButtonHover, 12), 12, ButtonText, new RectOffset(12, 12, 4, 5)));
+			ChipActive.fontStyle = StrongWeight;
 
-			Button = Clickable(Rounded(Color.clear, Control, 6), Rounded(Hover, Control, 6), 13, Theme.Text, new RectOffset(14, 14, 8, 8));
-			ButtonPrimary = Clickable(Rounded(ButtonColour, ButtonColour, 6), Rounded(ButtonHover, ButtonHover, 6), 13, ButtonText, new RectOffset(14, 14, 8, 8));
-			ButtonPrimary.fontStyle = FontStyle.Bold;
+			// Three kinds of button (the plan's components): Primary filled, Button raised with an edge, Quiet just text.
+			Button = Strong(Clickable(Rounded(Raised, Border, 6), Rounded(Color.Lerp(Raised, Theme.Text, 0.06f), Control, 6), 13, Theme.Text, new RectOffset(14, 14, 8, 8)));
+			ButtonPrimary = Strong(Clickable(Rounded(ButtonColour, ButtonColour, 6), Rounded(ButtonHover, ButtonHover, 6), 13, ButtonText, new RectOffset(14, 14, 8, 8)));
+			ButtonPrimary.fontStyle = StrongWeight;
+			ButtonQuiet = Strong(Clickable(Rounded(Color.clear, Color.clear, 6), Rounded(Raised, Raised, 6), 13, Muted, new RectOffset(8, 8, 8, 8)));
+			ButtonQuiet.hover.textColor = Theme.Text;
 
 			Row = Clickable(Rounded(Color.clear, Color.clear, 6), Rounded(Hover, Color.clear, 6), 13, Theme.Text, new RectOffset(10, 10, 6, 6));
 			Row.alignment = TextAnchor.MiddleLeft;
 			Row.richText = true;
 			Row.wordWrap = true;
 			RowSelected = new GUIStyle(Row) {
-				normal = { background = Rounded(ButtonSoft, ButtonColour, 6), textColor = Theme.Text },
+				normal = { background = Rounded(ButtonSoft, Color.Lerp(ButtonSoft, ButtonColour, 0.6f), 6), textColor = Theme.Text },
 				hover = { background = Rounded(ButtonSoft, ButtonHover, 6), textColor = Theme.Text },
 			};
 
-			Card = Box(Rounded(Panel, Border, 8), 8, new RectOffset(10, 10, 8, 8));
-			Guide = Box(Rounded(AccentSoft, Accent, 8), 8, new RectOffset(14, 14, 10, 10));
+			Card = Box(Rounded(Panel, Border, 8), 8, new RectOffset(12, 12, 10, 10));
+			Guide = Box(Rounded(AccentSoft, Color.Lerp(AccentSoft, Accent, 0.55f), 8), 8, new RectOffset(14, 14, 10, 10));
 			Guide.margin = new RectOffset(0, 0, 0, 10);
 
 			PillGood = Pill(Good, GoodText);
@@ -229,6 +304,7 @@ namespace TRC.TuneLoader {
 			BadgeBad = Badge(Bad, BadText);
 			BadgeWarn = Badge(Warn, WarnText);
 			Popup = Box(Rounded(Bad, BadText, 8), 8, new RectOffset(16, 16, 12, 12));
+			Popup.font = TextFont;
 			Popup.fontSize = Size(14);
 			Popup.wordWrap = true;
 			Popup.richText = true;
@@ -243,6 +319,7 @@ namespace TRC.TuneLoader {
 			ScrollThumb = new GUIStyle { normal = { background = Rounded(Control, Control, 3) }, border = new RectOffset(4, 4, 4, 4), fixedWidth = 8 };
 
 			Field = Box(Rounded(Panel, Control, 6), 6, new RectOffset(10, 10, 7, 7));
+			Field.font = TextFont;
 			Field.fontSize = Size(13);
 			Field.normal.textColor = Theme.Text;
 			Field.hover.background = Rounded(Panel, Muted, 6);
@@ -252,10 +329,15 @@ namespace TRC.TuneLoader {
 			Field.clipping = TextClipping.Clip;
 			Field.margin = new RectOffset(0, 6, 3, 3);
 
-			// Over the track while time attack or the course tool runs.
-			Texture2D hudBackground = Rounded(new Color(Background.r, Background.g, Background.b, 0.78f), new Color(Border.r, Border.g, Border.b, 0.78f), 8);
+			// For boxes you write a few lines in (the bug report note): the text goes onto the next line instead of off the right.
+			FieldWrapped = new GUIStyle(Field) { wordWrap = true };
+
+			// Over the track (Stage 5): one plate for every box, the menu's colour (or classic dark) at the player's opacity, a faint light edge.
+			Color plate = HudFollowsMenu ? Background : Hex(0x14161E);
+			Texture2D hudBackground = Rounded(new Color(plate.r, plate.g, plate.b, HudOpacity), new Color(1f, 1f, 1f, 0.08f), 8);
 			HudPanel = Box(hudBackground, 8, new RectOffset(0, 0, 0, 0));
 			HudPill = Box(hudBackground, 8, new RectOffset(14, 14, 8, 9));
+			HudPill.font = TextFont;
 			HudPill.fontSize = Size(13);
 			HudPill.wordWrap = true;
 			HudPill.richText = true;
@@ -270,6 +352,10 @@ namespace TRC.TuneLoader {
 			HudBig = TextStyle(110, AccentText, FontStyle.Bold);
 			HudBig.alignment = TextAnchor.MiddleCenter;
 			HudBig.wordWrap = false;
+			// Stage 5: numbers in the sign font (all digits one width, so a running time doesn't jiggle), words in the text font.
+			HudTimer = Strong(HudTimer);
+			HudBig = Strong(HudBig);
+			MakeRedesignStyles();
 			MarkerStart = Badge(Good, GoodText);
 			MarkerFinish = Badge(AccentSoft, AccentText);
 
@@ -289,6 +375,9 @@ namespace TRC.TuneLoader {
 			Skin.verticalScrollbarDownButton = new GUIStyle { name = "verticalscrollbardownbutton", fixedHeight = 0 };
 			Skin.horizontalScrollbar = new GUIStyle { name = "horizontalscrollbar", fixedHeight = 0 };
 			Skin.scrollView = new GUIStyle { name = "scrollview" };
+			if (TextFont != null) {
+				Skin.font = TextFont;
+			}
 			ready_ = true;
 		}
 
@@ -297,6 +386,7 @@ namespace TRC.TuneLoader {
 
 		private static GUIStyle TextStyle(int size, Color color, FontStyle style = FontStyle.Normal) =>
 			new GUIStyle {
+				font = TextFont,
 				fontSize = Size(size),
 				fontStyle = style,
 				wordWrap = true,
@@ -312,9 +402,27 @@ namespace TRC.TuneLoader {
 				padding = padding,
 			};
 
+		/// <summary>The sign font on a style (headings, labels), regular weight.</summary>
+		private static GUIStyle SignStyle(GUIStyle style) {
+			if (Sign != null) {
+				style.font = Sign;
+			}
+			return style;
+		}
+
+		/// <summary>The sign font's semibold on a style: its own weight, so "bold" isn't smeared on top (risk 5).</summary>
+		private static GUIStyle Strong(GUIStyle style) {
+			if (SignStrong != null) {
+				style.font = SignStrong;
+				style.fontStyle = StrongWeight;
+			}
+			return style;
+		}
+
 		private static GUIStyle Clickable(Texture2D normal, Texture2D hover, int fontSize, Color textColor, RectOffset padding) {
 			int border = normal.width / 2 - 1;
 			return new GUIStyle {
+				font = TextFont,
 				fontSize = Size(fontSize),
 				alignment = TextAnchor.MiddleCenter,
 				normal = { background = normal, textColor = textColor },
@@ -328,6 +436,7 @@ namespace TRC.TuneLoader {
 
 		private static GUIStyle Pill(Color fill, Color text) {
 			GUIStyle style = Box(Rounded(fill, fill, 6), 6, new RectOffset(10, 10, 8, 8));
+			style.font = TextFont;
 			style.fontSize = Size(13);
 			style.wordWrap = true;
 			style.richText = true;
@@ -338,9 +447,9 @@ namespace TRC.TuneLoader {
 
 		/// <summary>A one-line pill for the on-screen TRC spec badge, bordered so it stands out over the track.</summary>
 		private static GUIStyle Badge(Color fill, Color text) {
-			GUIStyle style = Box(Rounded(fill, text, 6), 6, new RectOffset(12, 12, 6, 7));
+			GUIStyle style = Strong(Box(Rounded(fill, text, 6), 6, new RectOffset(12, 12, 6, 7)));
 			style.fontSize = Size(13);
-			style.fontStyle = FontStyle.Bold;
+			style.fontStyle = SignStrong != null ? StrongWeight : FontStyle.Bold;
 			style.wordWrap = false;
 			style.normal.textColor = text;
 			return style;

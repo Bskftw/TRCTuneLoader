@@ -168,10 +168,11 @@ namespace TRC.TuneLoader {
 				string code = r.Code;
 				SaveRegulation(r, $"Saved {r.Name} ({code}).");
 				editingRegulation_ = null;
+				pickedRegulation_ = code;
 				regulationsView_ = 0;
 			}
 			GUI.enabled = enabled;
-			if (NavButton("Cancel", Theme.Button)) {
+			if (NavButton("Cancel", Theme.ButtonQuiet)) {
 				editingRegulation_ = null;
 				regulationsView_ = 0;
 			}

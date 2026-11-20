@@ -301,7 +301,7 @@ namespace TRC.TuneLoader {
 		public static TimeAttackRecord BestFor(IEnumerable<TimeAttackRecord> records, string courseCode, int carId, string tuneSet, bool specOnly) =>
 			BestFor(records, courseCode, carId, tuneSet, specOnly, new TimeKind { Laps = 1 });
 
-		private static string Quote(string field) {
+		internal static string Quote(string field) {
 			field = (field ?? "").Replace("\r", " ").Replace("\n", " ");
 			return field.IndexOfAny(new[] { ',', '"' }) >= 0 ? "\"" + field.Replace("\"", "\"\"") + "\"" : field;
 		}

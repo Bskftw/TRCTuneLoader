@@ -91,6 +91,7 @@ namespace TRC.TuneLoader {
 			lapFlashUntil_ = 0;
 			referenceLoaded_ = false;
 			ghostReferenceFor_ = null;
+			honesty_.Reset();
 		}
 
 		/// <summary>The kind of time a run's whole result is, and the kind its laps are (circuits).</summary>
@@ -155,6 +156,13 @@ namespace TRC.TuneLoader {
 		private void LapDone(LapTime lap) {
 			RunCheck start = runStart_ ?? new RunCheck { CarId = pose_.CarId };
 			long ms = (long)Math.Round(lap.Time * 1000.0, MidpointRounding.AwayFromZero);
+			if (!honesty_.Clean) {
+				// Thrown out quietly (RunHonesty): shown, never saved or kept as a best.
+				lapFlash_ = $"<b>Lap {lap.Number} {TimeAttackRun.FormatTime(lap.Time)}</b>";
+				lapFlashUntil_ = Time.unscaledTime + FlashSeconds;
+				TrcLog.Info($"Time attack on {run_.Course.Name}: lap {lap.Number} {TimeAttackRun.FormatTime(lap.Time)}, not counted ({honesty_.ThrownOut}).");
+				return;
+			}
 			if (!lap.Valid) {
 				lapFlash_ = $"<color={Theme.BadHex}>Lap {lap.Number} {TimeAttackRun.FormatTime(lap.Time)}: doesn't count ({lap.Invalid})</color>";
 				lapFlashUntil_ = Time.unscaledTime + FlashSeconds;
@@ -173,6 +181,7 @@ namespace TRC.TuneLoader {
 				record.LapNumber = lap.Number;
 				record.SectorMs = lap.Sectors.Select(s => (long)Math.Round(s * 1000.0, MidpointRounding.AwayFromZero)).ToArray();
 				SaveRecord(record);
+				NoteLapCompare(run_.Course, lap.Trace, run_.Reference, ms);
 				string key = TimeAttackTraces.Key(run_.Course.Code, start.CarId, start.Set, RunLapKind);
 				if (TimeAttackTraces.SaveIfFaster(TimesFolder, key, lap.Trace, ms)) {
 					KeepLapAsBest(lap, key, ms);

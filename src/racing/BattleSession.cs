@@ -99,9 +99,9 @@ namespace TRC.TuneLoader {
 		/// <summary>Laps per run on a circuit (1 on any other course).</summary>
 		public int Laps { get; }
 
-		/// <summary>Highway battles: both drivers' SP (100 at the start; empty loses), and where the other car is.</summary>
-		public float MySp { get; private set; } = FullSp;
-		public float PeerSp { get; private set; } = FullSp;
+		/// <summary>Highway battles: both drivers' pressure (100 at the start; empty loses), and where the other car is.</summary>
+		public float MyPressure { get; private set; } = FullPressure;
+		public float PeerPressure { get; private set; } = FullPressure;
 		public Vector3 PeerPosition { get; private set; }
 		public Vector3 PeerHeading { get; private set; }
 		public float PeerKmh { get; private set; }
@@ -110,20 +110,20 @@ namespace TRC.TuneLoader {
 		/// <summary>The gap (metres) to the other car along the way you're both going: plus when you're ahead.</summary>
 		public float HighwayGap { get; private set; }
 
-		public const float FullSp = 100f;
+		public const float FullPressure = 100f;
 
 		/// <summary>Highway battles start rolling: both this close and at least this fast, for a moment.</summary>
 		public const float HighwayStartMetres = 30f;
 		public const float HighwayStartKmh = 50f;
 
-		/// <summary>Behind by more than this (metres), SP drains; faster the bigger the gap, up to a limit. Further than the last, it's over.</summary>
+		/// <summary>Behind by more than this (metres), pressure drains; faster the bigger the gap, up to a limit. Further than the last, it's over.</summary>
 		public const float DrainFromMetres = 5f;
-		public const float DrainMetresPerSp = 8f;
+		public const float DrainMetresPerPressure = 8f;
 		public const float MaxDrainPerSecond = 25f;
 		public const float LostMetres = 600f;
 
-		/// <summary>A hit (a wall or the other car) costs this much SP.</summary>
-		public const float HitSp = 15f;
+		/// <summary>A hit (a wall or the other car) costs this much pressure.</summary>
+		public const float HitPressure = 15f;
 		private const double HighwayMaxSeconds = 600;
 
 		private Vector3 myPosition_;
@@ -134,7 +134,7 @@ namespace TRC.TuneLoader {
 		/// <summary>Highway battles: the mod saw this car hit something.</summary>
 		public void Hit() {
 			if (IsHighway && State == Phase.Running) {
-				MySp = Math.Max(0f, MySp - HitSp);
+				MyPressure = Math.Max(0f, MyPressure - HitPressure);
 			}
 		}
 
@@ -245,6 +245,8 @@ namespace TRC.TuneLoader {
 		/// <summary>Both drivers agreed and lined up at least once: worth saving to the battle log.</summary>
 		public bool Started { get; private set; }
 
+		/// <summary>True once both copies know the challenger (the host) chases first; an older copy keeps the battle ID rule.</summary>
+		private bool challengerChases_;
 		private readonly Func<BattleCar> checkMyCar_;
 		private readonly List<BattleMessage> outbox_ = new List<BattleMessage>();
 		private readonly List<double> offsets_ = new List<double>();
@@ -320,6 +322,7 @@ namespace TRC.TuneLoader {
 				Regulation = challenge.Regulation,
 				Fun = challenge.Fun,
 				SingleFile = challenge.SingleFile,
+				challengerChases_ = challenge.ChallengerChases,
 			};
 			session.Counted = challenge.Regulation != null || !challenge.Open;
 			session.Message = $"{session.PeerName} challenges you";
@@ -373,11 +376,14 @@ namespace TRC.TuneLoader {
 
 		private BattleMessage New(BattleKind kind) => new BattleMessage { Kind = kind, BattleId = Id, From = Me, To = Peer };
 
-		/// <summary>The leader of a run: the first run's leader is picked by the battle ID (so both sides agree), then they swap.</summary>
+		/// <summary>
+		/// The leader of a run: the challenger chases first (bskftw, Nov 19), so the guest leads run 0, then they swap. With an
+		/// older copy on the other side the first leader is picked by the battle ID, as that copy does, so both sides agree.
+		/// </summary>
 		private ulong LeaderFor(int run) {
 			ulong host = IsHost ? Me : Peer;
 			ulong guest = IsHost ? Peer : Me;
-			ulong first = (Id & 1) == 0 ? host : guest;
+			ulong first = challengerChases_ || (Id & 1) != 0 ? guest : host;
 			return run % 2 == 0 ? first : (first == host ? guest : host);
 		}
 	}

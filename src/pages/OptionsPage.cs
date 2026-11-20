@@ -14,7 +14,7 @@ namespace TRC.TuneLoader {
 		private Vector2 optionsScroll_;
 
 		/// <summary>
-		/// Options is four short pages in the menu's list since Stage 1 (IMPROVEMENT_PLAN.md U6: it was one long page), each
+		/// Options is four short pages in the menu's list since Stage 1 (docs/archive/IMPROVEMENT_PLAN.md U6: it was one long page), each
 		/// drawing the same settings as before: 0 keys and buttons, 1 look, 2 while driving, 3 sharing and backups.
 		/// Report a bug has its own page in Tools, so it's no longer repeated at the bottom here.
 		/// </summary>
@@ -32,79 +32,58 @@ namespace TRC.TuneLoader {
 		}
 
 		private void DrawOptionsKeys() {
-			GUILayout.Label("Shortcut", Theme.SectionLabel);
-			GUILayout.BeginVertical(Theme.Card);
-			GUILayout.Label(capturingShortcut_
-				? "Press the new shortcut now, for example Ctrl + T or F8. Press Esc to cancel."
-				: $"Open or close this window with <b>{shortcut_}</b>.", Theme.Body);
-			GUILayout.BeginHorizontal();
-			if (capturingShortcut_) {
-				if (NavButton("Cancel", Theme.Button)) {
-					capturingShortcut_ = false;
-					optionsResult_ = "Shortcut not changed.";
-				}
-			} else {
-				if (NavButton("Change shortcut", Theme.ButtonPrimary)) {
-					capturingShortcut_ = true;
-					capturingRestart_ = false;
-					optionsResult_ = "";
-				}
-				if (!shortcut_.SameAs(Shortcut.Default) && NavButton($"Reset to {Shortcut.Default}", Theme.Button)) {
-					SetShortcut(Shortcut.Default);
-				}
-			}
-			GUILayout.FlexibleSpace();
-			GUILayout.EndHorizontal();
-			GUILayout.Space(6);
-			GUILayout.Label(capturingRestart_
-				? "Press the new restart key now. Press Esc to cancel."
-				: $"During a time attack, <b>{restartShortcut_}</b> sends your car back to the start line, ready to go again.", Theme.Body);
-			GUILayout.BeginHorizontal();
-			if (capturingRestart_) {
-				if (NavButton("Cancel", Theme.Button)) {
-					capturingRestart_ = false;
-					optionsResult_ = "Restart key not changed.";
-				}
-			} else {
-				if (NavButton("Change restart key", Theme.Button)) {
-					capturingRestart_ = true;
-					capturingShortcut_ = false;
-					optionsResult_ = "";
-				}
-				if (!restartShortcut_.SameAs(Shortcut.RestartDefault) && NavButton($"Reset to {Shortcut.RestartDefault}", Theme.Button)) {
-					SetRestartShortcut(Shortcut.RestartDefault);
-				}
-			}
-			GUILayout.FlexibleSpace();
-			GUILayout.EndHorizontal();
+			BeginSection("Keys", "Any key, or one with Ctrl, Shift or Alt. Esc cancels while picking.");
+			KeyRow("Open and close this window", "", shortcut_.ToString(), capturingShortcut_,
+				() => { capturingShortcut_ = true; capturingRestart_ = false; capturingQuick_ = false; optionsResult_ = ""; },
+				() => { capturingShortcut_ = false; optionsResult_ = "Shortcut not changed."; },
+				!shortcut_.SameAs(Shortcut.Default), () => SetShortcut(Shortcut.Default), first: true);
+			KeyRow("Restart a time attack", "Back to the start line, ready to go again", restartShortcut_.ToString(), capturingRestart_,
+				() => { capturingRestart_ = true; capturingShortcut_ = false; capturingQuick_ = false; optionsResult_ = ""; },
+				() => { capturingRestart_ = false; optionsResult_ = "Restart key not changed."; },
+				!restartShortcut_.SameAs(Shortcut.RestartDefault), () => SetRestartShortcut(Shortcut.RestartDefault));
 			DrawStartKeyOption();
+			DrawQuickKeyOption();
 			if (!string.IsNullOrEmpty(optionsResult_)) {
-				GUILayout.Label(optionsResult_, Theme.Small);
+				GUILayout.Label(optionsResult_, Theme.SectionNote);
 			}
-			GUILayout.EndVertical();
-
-
-			GUILayout.Space(10);
+			EndSection();
 			DrawWheelOptions();
 		}
 
-		private void DrawOptionsLook() {
-			GUILayout.Label("Window size", Theme.SectionLabel);
-			GUILayout.BeginVertical(Theme.Card);
-			GUILayout.Label("Makes this window, the TRC spec badge and the pop-up bigger or smaller.", Theme.Body);
-			int scaleIndex = Array.IndexOf(WindowScales, windowScale_);
-			int pickedScale = Choice(WindowScales.Select(s => $"{s * 100:0}%").ToArray(), scaleIndex);
-			if (pickedScale != scaleIndex) {
-				windowScale_ = WindowScales[pickedScale];
-				SavePref(WindowScalePref, windowScale_);
-			}
-			GUILayout.EndVertical();
+		/// <summary>
+		/// A key setting: its name and what it does on the left, the key itself as a button (press to pick another) and
+		/// Reset on the right. While picking, it says so and offers Cancel. The same steps as the buttons it replaced.
+		/// </summary>
+		private void KeyRow(string label, string note, string key, bool capturing, Action change, Action cancel, bool canReset, Action reset, bool first = false) {
+			SettingRow(label, capturing ? "Press the new key now. Esc cancels." : note, () => {
+				if (capturing) {
+					if (NavButton("Cancel", Theme.ButtonQuiet)) {
+						cancel();
+					}
+					return;
+				}
+				if (canReset && NavButton("Reset", Theme.ButtonQuiet)) {
+					reset();
+				}
+				if (NavButton(key, Theme.Button)) {
+					change();
+				}
+			}, first: first);
+		}
 
-			GUILayout.Space(10);
-			GUILayout.Label("Look", Theme.SectionLabel);
-			GUILayout.BeginVertical(Theme.Card);
+		private void DrawOptionsLook() {
 			DrawLookOptions();
-			GUILayout.EndVertical();
+			BeginSection("Size");
+			int scaleIndex = Array.IndexOf(WindowScales, windowScale_);
+			SettingRow("Window size", "This window, the TRC spec badge and the pop-up", () => {
+				int pickedScale = Choice(WindowScales.Select(s => $"{s * 100:0}%").ToArray(), scaleIndex);
+				if (pickedScale != scaleIndex) {
+					windowScale_ = WindowScales[pickedScale];
+					SavePref(WindowScalePref, windowScale_);
+				}
+			}, wide: true, first: true);
+			DrawTextSizeRow();
+			EndSection();
 		}
 	}
 }

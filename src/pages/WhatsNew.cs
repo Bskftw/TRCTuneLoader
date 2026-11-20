@@ -13,13 +13,13 @@ namespace TRC.TuneLoader {
 		private const string WhatsNewPref = "whats_new_seen";
 
 		/// <summary>Raise with each version that has news worth a pop-up.</summary>
-		private const string WhatsNewVersion = "0.18.4";
+		private const string WhatsNewVersion = "0.19.0";
 
 		private static readonly string[] WhatsNewLines = {
-			"<b>Your bests carry over between cars</b>: in a car with no time on a track yet, the live delta and the sector pop-ups compare with your best in any car. A bar under the timer shows the delta, with your predicted time.",
-			"<b>Timing detail</b> and <b>telemetry</b> in Options, While driving: Detailed adds this car's best and each sector's gaps; telemetry shows your inputs, g-force and wheel slip (each off until you turn it on).",
-			"<b>Search</b> and <b>pins</b> on Home, <b>Compare tunes</b> in TRC spec, and faster loading on maps with lots of tracks.",
-			"<b>Traffic lab</b> (very early testing), in Tools: AI traffic on Project Dream's highways and on any track's path. In a room, one player starts it and the others press Join: everyone sees the same cars and crashes.",
+			"<b>A new look</b>: the parts down the left, a tile for each on Home, your last run with Go again, and new ready-made looks in Options, Look.",
+			"<b>Challenges</b> (Time attack): a daily and a weekly track with bronze, silver and gold times. <b>Lap compare</b> on My times shows where you lost time.",
+			"<b>Tools</b>: Host tools with Invite everyone, tandem aids, Driver stats, and the HUD page with presets. <b>Ctrl + Q</b> opens the quick menu while you drive.",
+			"<b>Highway traffic together</b> uses far less data and carries on when its host leaves. Everyone in the room needs 0.19.0.",
 		};
 
 		private bool whatsNewPending_;

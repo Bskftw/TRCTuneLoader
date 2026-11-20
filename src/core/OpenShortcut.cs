@@ -21,7 +21,7 @@ namespace TRC.TuneLoader {
 			if (e == null) {
 				return;
 			}
-			if (HandleStartKey(e)) {
+			if (HandleStartKey(e) || HandleQuickKeys(e)) {
 				return;
 			}
 			if (e.type == EventType.KeyUp && e.keyCode == shortcut_.Key) {
@@ -97,6 +97,10 @@ namespace TRC.TuneLoader {
 				optionsResult_ = $"{shortcut} already opens this window: pick another key for restart.";
 				return;
 			}
+			if (shortcut.SameAs(quickShortcut_)) {
+				optionsResult_ = $"{shortcut} already opens the quick menu: pick another key for restart.";
+				return;
+			}
 			restartShortcut_ = shortcut;
 			SavePref(RestartPref, shortcut.Save());
 			optionsResult_ = $"Restart key set to {shortcut}.";
@@ -104,8 +108,13 @@ namespace TRC.TuneLoader {
 		}
 
 		private void SetShortcut(Shortcut shortcut) {
-			shortcut_ = shortcut;
 			capturingShortcut_ = false;
+			// The quick menu reads keys first, so the same key would never open the window.
+			if (shortcut.SameAs(quickShortcut_)) {
+				optionsResult_ = $"{shortcut} already opens the quick menu: pick another key for this window.";
+				return;
+			}
+			shortcut_ = shortcut;
 			bool saved = false;
 			try {
 				saved = Kino.Prefs.Set(ShortcutPref, shortcut.Save());

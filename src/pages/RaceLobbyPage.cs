@@ -78,6 +78,7 @@ namespace TRC.TuneLoader {
 					}
 					GUILayout.EndHorizontal();
 				}
+				DrawResultCode();
 				GUILayout.EndVertical();
 			}
 

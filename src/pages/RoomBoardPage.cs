@@ -46,6 +46,11 @@ namespace TRC.TuneLoader {
 				if (map_ != null && s.MapKey.Length > 0 && s.MapKey != map_.Key) {
 					parts.Add("another map");
 				}
+				// What they can't do with you until one of you updates (N3), instead of it just not working.
+				List<string> missing = RoomBoard.Missing(MyFeatures, s.Features);
+				if (missing.Count > 0) {
+					parts.Add($"<color={Theme.WarnHex}>{(RoomBoard.IsNewer(s.Version, Version) ? "you" : "they")} need to update for {string.Join(", ", missing)}</color>");
+				}
 				GUILayout.BeginHorizontal();
 				string up4 = s.UpForBattle ? $"  <color={Theme.GoodHex}>up for a battle</color>" : "";
 				GUILayout.Label($"<b>{BattleMessage.PlainName(s.Name)}</b>{up4}  <color={Theme.MutedHex}>{string.Join(" · ", parts)}</color>", Theme.Body);
@@ -67,6 +72,7 @@ namespace TRC.TuneLoader {
 				GUILayout.EndHorizontal();
 			}
 			GUILayout.EndVertical();
+			DrawTrafficBoard(others);
 		}
 
 		/// <summary>The Battles tab at a section: 0 1v1 battles, 1 races, 2 fun games, 3 ratings.</summary>
@@ -95,7 +101,7 @@ namespace TRC.TuneLoader {
 					SaveSharedCourse(shared);
 				}
 				GUI.enabled = enabled;
-				if (NavButton("Dismiss", Theme.Button)) {
+				if (NavButton("Dismiss", Theme.ButtonQuiet)) {
 					roomBoard_.SharedCourses.Remove(shared);
 				}
 				GUILayout.EndHorizontal();

@@ -25,6 +25,11 @@ namespace TRC.TuneLoader {
 		private void StopArranging() {
 			arranging_ = false;
 			arrangeDrag_ = -1;
+			SaveScreenPlaces();
+		}
+
+		/// <summary>Saves where every box is (after arranging, or a preset that moves them).</summary>
+		private void SaveScreenPlaces() {
 			SavePref(HudPositionPref, hudPosition_);
 			SavePref(TrapFlashPositionPref, trapFlashPosition_);
 			SavePref(NoticePositionPref, noticePosition_);
@@ -65,13 +70,13 @@ namespace TRC.TuneLoader {
 				Name = "Timer: time attacks, races and battles", Sample = timer.text, Rect = timerRect, Style = Theme.HudPill,
 				MoveTo = p => hudPosition_ = new Vector2(Mathf.Clamp01((p.x + 150f) / screenWidth), Mathf.Clamp01(p.y / screenHeight)),
 			});
-			string flash = "<b>SPEED TRAP · Tsubaki 1</b>\n<color=#C9A7FF><b>187 km/h</b></color>  new best";
+			string flash = "<b>Speed trap, Tsubaki 1</b>\n<color=#C9A7FF><b>187 km/h</b></color>  new best";
 			float flashHeight = Theme.HudPill.CalcHeight(new GUIContent(flash), 320f);
 			boxes.Add(new ArrangeBox {
 				Name = "Speed trap flash", Sample = flash, Rect = TrapFlashRect(320f, flashHeight, screenWidth, screenHeight), Style = Theme.HudPill,
 				MoveTo = p => trapFlashPosition_ = new Vector2(Mathf.Clamp01((p.x + 160f) / screenWidth), Mathf.Clamp01(p.y / screenHeight)),
 			});
-			string sector = "<b>SECTOR 2</b>  <color=#C9A7FF><b>21.034</b></color>\n<color=#7FB843><b>-0.842</b> ahead of PB</color>";
+			string sector = "<b>Sector 2</b>  <color=#C9A7FF><b>21.034</b></color>\n<color=#7FB843><b>-0.842</b> ahead of PB</color>";
 			float sectorHeight = Theme.HudPill.CalcHeight(new GUIContent(sector), 300f);
 			boxes.Add(new ArrangeBox {
 				Name = "Sector pop-up", Sample = sector, Rect = SectorFlashRect(300f, sectorHeight, screenWidth, screenHeight), Style = Theme.HudPill,
@@ -91,12 +96,12 @@ namespace TRC.TuneLoader {
 			});
 			Vector2 sus = suspensionPosition_.x >= 0 ? suspensionPosition_ : new Vector2(16f, screenHeight - 262f - 16f);
 			boxes.Add(new ArrangeBox {
-				Name = "Suspension overlay", Sample = "<b>SUSPENSION</b>\n\nthe car from above, each tyre's travel,\nload and damper speed, and a 4 s trace",
+				Name = "Suspension overlay", Sample = "<b>Suspension</b>\n\nthe car from above, each tyre's travel,\nload and damper speed, and a 4 s trace",
 				Rect = new Rect(Mathf.Clamp(sus.x, 0f, screenWidth - 300f), Mathf.Clamp(sus.y, 0f, screenHeight - 262f), 300f, 262f), Style = Theme.HudPill,
 				MoveTo = p => suspensionPosition_ = p,
 			});
 			boxes.Add(new ArrangeBox {
-				Name = "Telemetry", Sample = "<b>TELEMETRY</b>\n\ninputs, gear and RPM,\ng-force and wheel slip",
+				Name = "Telemetry", Sample = "<b>Telemetry</b>\n\ninputs, gear and RPM,\ng-force and wheel slip",
 				Rect = TelemetryRect(screenWidth, screenHeight), Style = Theme.HudPill,
 				MoveTo = p => telemetryPosition_ = p,
 			});

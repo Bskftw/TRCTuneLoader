@@ -50,11 +50,32 @@ namespace TRC.TuneLoader {
 			public string Hex => partHex_[Part];
 			public NavPage[] Pages;
 
+			/// <summary>Its icon in the rail (Resources/icon_&lt;name&gt;.png); "" for the part's own.</summary>
+			public string Icon = "";
+
+			/// <summary>Drawn at the bottom of the rail, apart from the others (Options).</summary>
+			public bool Bottom;
+
 			/// <summary>The page last open in it, opened again when the category is picked.</summary>
 			public int LastPage;
 		}
 
 		private NavCategory[] categories_;
+
+		/// <summary>
+		/// Once, when the menu is built (UI redesign Stage 0, docs/archive/ui-redesign-plan.md risk 1): every page has its own key,
+		/// and every renumbering step in PageKeys points at a page that exists. A pin saved as a key that's shared or gone
+		/// would open the wrong page; this says so in the log the first time it's run.
+		/// </summary>
+		private static void CheckPageKeys(NavCategory[] categories) {
+			var keys = categories.SelectMany(c => c.Pages).Select(p => p.Key).ToList();
+			foreach (string twice in keys.GroupBy(k => k).Where(g => g.Count() > 1).Select(g => g.Key)) {
+				TrcLog.Warning($"Menu: two pages share the key {twice}, so a pin of one opens the other.");
+			}
+			foreach (string target in PageKeys.Targets.Where(k => !keys.Contains(k))) {
+				TrcLog.Warning($"Menu: PageKeys moves pins to {target}, but no page has that key.");
+			}
+		}
 
 		private NavCategory[] Categories {
 			get {
@@ -73,14 +94,15 @@ namespace TRC.TuneLoader {
 						new NavPage { Name = "My specs", Tab = SpecsTab, Note = () => Count(specs_.Count), Keywords = new[] { "spec", "make a spec", "own tunes" } },
 						new NavPage { Name = "Check my car", Tab = SpecCarTab, Note = () => MySpecs().Count > 0 ? "on a spec" : "", Keywords = new[] { "check", "meets a regulation" } },
 						new NavPage { Name = "Players", Tab = SpecPlayersTab, Note = () => Count(players_.Count(RulesProblem)), Keywords = new[] { "room", "who meets the rules" } },
-						new NavPage { Name = "Regulations", Tab = RegulationsTab, View = 0, Note = () => Count(regulations_.Count), Keywords = new[] { "rules", "class", "limits" } },
-						new NavPage { Name = "Make or edit", Tab = RegulationsTab, View = 1, Note = () => editingRegulation_ != null ? "editing" : "", Keywords = new[] { "new regulation", "edit a regulation" } },
-						new NavPage { Name = "Shared with you", Tab = RegulationsTab, View = 2, Keywords = new[] { "shared regulations" } },
+						new NavPage { Name = "Regulations", Tab = RegulationsTab, View = 0, Note = () => editingRegulation_ != null ? "editing" : Count(regulations_.Count),
+							Keywords = new[] { "rules", "class", "limits", "new regulation", "make a regulation", "edit a regulation", "import", "paste" } },
+						new NavPage { Name = "Shared with you", Tab = RegulationsTab, View = 1, Keywords = new[] { "shared regulations" } },
 					} },
 					new NavCategory { Name = "Time attack", Part = 2, Pages = new[] {
 						new NavPage { Name = "Tracks", Tab = CoursesTab, View = 0, Note = () => map_ == null ? "" : Count(CoursesHere().Count),
 							Keywords = new[] { "courses", "ghosts", "teleport", "start a run", "record path", "grid" } },
-						new NavPage { Name = "My times", Tab = CoursesTab, View = 2, Keywords = new[] { "laps", "records", "bests", "delete a time", "sectors" } },
+						new NavPage { Name = "My times", Tab = CoursesTab, View = 2, Keywords = new[] { "laps", "records", "bests", "delete a time", "sectors", "lap compare" } },
+						new NavPage { Name = "Challenges", Tab = CoursesTab, View = 4, Keywords = new[] { "daily", "weekly", "medals", "gold" } },
 						new NavPage { Name = "Course builder", Tab = CoursesTab, View = 3, Note = () => recorder_.State != CourseRecorder.Phase.Idle ? "recording" : "",
 							Keywords = new[] { "make a course", "course tool", "start line", "finish line" } },
 					} },
@@ -90,41 +112,67 @@ namespace TRC.TuneLoader {
 						new NavPage { Name = "Races", Tab = BattlesTab, View = RacesSection, Note = () => OpenCount(RacesSection), Keywords = new[] { "host a race", "lobby", "console players" } },
 						new NavPage { Name = "Tournaments", Tab = BattlesTab, View = TournamentsSection, Note = () => OpenCount(TournamentsSection), Keywords = new[] { "bracket", "knockout" } },
 					} },
-					new NavCategory { Name = "Free roam", Part = 4, Pages = new[] {
-						new NavPage { Name = "Speed traps", Tab = CoursesTab, View = 1, Note = () => Count(mapTraps_.Count), Keywords = new[] { "traps", "place a trap", "share traps", "top speed" } },
-						new NavPage { Name = "Fun games", Tab = BattlesTab, View = GamesSection, Note = () => OpenCount(GamesSection), Keywords = new[] { "games", "cops", "tag" } },
-						new NavPage { Name = "My ratings", Tab = BattlesTab, View = RatingsSection, Keywords = new[] { "elo", "safety rating", "license" } },
-					} },
+					new NavCategory { Name = "Free roam", Part = 4, Pages = FreeRoamPages() },
 					new NavCategory { Name = "Tools", Part = 5, Pages = ToolsPages() },
+					// Last, so Tools stays index 5 (HomeCards); drawn at the rail's bottom.
+					new NavCategory { Name = "Options", Part = 5, Icon = "options", Bottom = true, Pages = OptionsPages() },
 				};
+				CheckPageKeys(categories_);
 				return categories_;
 			}
 		}
 
+		private NavPage[] FreeRoamPages() {
+			var pages = new List<NavPage> {
+				new NavPage { Name = "Speed traps", Tab = CoursesTab, View = 1,
+					Note = () => mapTraps_.Count > 0 ? mapTraps_.Count.ToString(CultureInfo.InvariantCulture) : "", Keywords = new[] { "traps", "place a trap", "share traps", "top speed" } },
+			};
+			// The traffic lab goes here, with the free roam things (bskftw, Nov 12; moved from Tools on Nov 18).
+			AddTrafficPage(pages);
+			pages.Add(new NavPage { Name = "Fun games", Tab = BattlesTab, View = GamesSection, Note = () => OpenCount(GamesSection), Keywords = new[] { "games", "cops", "tag" } });
+			pages.Add(new NavPage { Name = "My ratings", Tab = BattlesTab, View = RatingsSection, Keywords = new[] { "elo", "safety rating", "license" } });
+			return pages.ToArray();
+		}
+
 		private NavPage[] ToolsPages() {
 			var pages = new List<NavPage> {
+				new NavPage { Name = "HUD", Tab = HudTab, Note = () => hudHidden_ ? "hidden" : "",
+					Keywords = new[] { "timer", "sector times", "timing detail", "pop-up", "badge", "telemetry", "screen layout", "arrange", "hide hud", "presets", "size", "streaming" } },
+				new NavPage { Name = "Host tools", Tab = HostToolsTab, Keywords = new[] { "host", "session", "who is ready", "invite", "grid", "come to the start" } },
+				new NavPage { Name = "Driver stats", Tab = StatsTab, Keywords = new[] { "stats", "km", "favourite", "win rate", "battles won", "podiums" } },
 				new NavPage { Name = "Mod check", Tab = ModCheckTab, Keywords = new[] { "mods", "ksl", "verified", "flagged" } },
 				new NavPage { Name = "Suspension logger", Tab = SuspensionTab, Keywords = new[] { "suspension", "springs", "dampers", "telemetry" } },
 				new NavPage { Name = "About", Tab = AboutTab, Keywords = new[] { "trc", "project dream", "credits", "version" } },
 				new NavPage { Name = "Report a bug", Tab = BugTab, Keywords = new[] { "bug", "log", "problem" } },
 			};
-			AddDevPages(pages);
-			// Options, in pages (IMPROVEMENT_PLAN.md U6): last in the list, under their own small heading.
-			pages.Add(new NavPage { Name = "Keys and buttons", Tab = OptionsTab, View = 0, Group = "Options",
-				Keywords = new[] { "shortcut", "hotkey", "open the window", "restart key", "start key", "wheel", "controller", "pad", "d-pad" } });
-			pages.Add(new NavPage { Name = "Look", Tab = OptionsTab, View = 1, Group = "Options",
+			AddLaneToolPage(pages);
+			return pages.ToArray();
+		}
+
+		/// <summary>
+		/// Options, its own part at the bottom of the rail (bskftw, Nov 18: "options should have its own category like tools").
+		/// The pages keep their tab and views (OptionsTab, 0 to 3), so pins and Home's search still find them.
+		/// </summary>
+		private NavPage[] OptionsPages() {
+			var pages = new List<NavPage>();
+			pages.Add(new NavPage { Name = "Keys and buttons", Tab = OptionsTab, View = 0,
+				Keywords = new[] { "shortcut", "hotkey", "open the window", "restart key", "start key", "quick menu", "wheel", "controller", "pad", "d-pad" } });
+			pages.Add(new NavPage { Name = "Look", Tab = OptionsTab, View = 1,
 				Keywords = new[] { "colours", "colors", "text size", "window size", "scale", "theme", "accent" } });
-			pages.Add(new NavPage { Name = "While driving", Tab = OptionsTab, View = 2, Group = "Options",
-				Keywords = new[] { "badge", "track check", "sector times", "manual sectors", "best line", "ghosts", "gantries", "start and finish", "map icons", "speed trap signs", "screen layout", "arrange", "timer", "hud" } });
-			pages.Add(new NavPage { Name = "Sharing and backups", Tab = OptionsTab, View = 3, Group = "Options",
+			pages.Add(new NavPage { Name = "While driving", Tab = OptionsTab, View = 2,
+				Keywords = new[] { "track check", "manual sectors", "best line", "ghosts", "gantries", "start and finish", "map icons", "speed trap signs" } });
+			pages.Add(new NavPage { Name = "Sharing and backups", Tab = OptionsTab, View = 3,
 				Keywords = new[] { "share my values", "private", "backups", "clean up", "tour" } });
 			return pages.ToArray();
 		}
 
-		/// <summary>Empty in the player mod: bskftw's private builds add their own pages to Tools (the traffic lab).</summary>
-		partial void AddDevPages(List<NavPage> pages);
+		/// <summary>The traffic lab's pages (traffic/TrafficLab.cs; a build without traffic/ has none): Free roam > Traffic lab.</summary>
+		partial void AddTrafficPage(List<NavPage> pages);
 
-		/// <summary>Empty in the player mod: draws a private build's own page when it's open.</summary>
+		/// <summary>And Tools > Lane tool.</summary>
+		partial void AddLaneToolPage(List<NavPage> pages);
+
+		/// <summary>Draws a traffic page when it's open; nothing in a build without traffic/.</summary>
 		partial void DrawDevPage(int tab, ref bool drawn);
 
 		/// <summary>Open races, tournaments or games for a Battles section ("in one" when the player is).</summary>
@@ -191,9 +239,6 @@ namespace TRC.TuneLoader {
 					if (regulationsView_ != page.View) {
 						regulationsView_ = page.View;
 						regulationResult_ = "";
-						if (page.View == 1 && editingRegulation_ == null) {
-							StartEditingRegulation(new Regulation { Author = BattleMessage.PlainName(MyName()) });
-						}
 					}
 					break;
 				case OptionsTab:

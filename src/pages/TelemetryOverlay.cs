@@ -65,7 +65,7 @@ namespace TRC.TuneLoader {
 			GUI.Box(rect, GUIContent.none, Theme.HudPanel);
 			float x = rect.x + TelemetryPad;
 			float y = rect.y + TelemetryPad - 4f;
-			GUI.Label(new Rect(x, y, 120f, 18f), "<b>TELEMETRY</b>", Theme.HudSmall);
+			GUI.Label(new Rect(x, y, 120f, 18f), "<b>Telemetry</b>", Theme.HudSmall);
 			y += TelemetryHeader;
 			if (telemetryInputs_) {
 				GUI.Label(new Rect(rect.xMax - TelemetryPad - 150f, rect.y + TelemetryPad - 4f, 150f, 18f),

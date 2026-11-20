@@ -10,31 +10,29 @@ namespace TRC.TuneLoader {
 		private string backupOptionsResult_ = "";
 
 		private void DrawOptionsSharing() {
-			GUILayout.Label("Sharing", Theme.SectionLabel);
-			GUILayout.BeginVertical(Theme.Card);
-			GUILayout.Label("<b>Share my tune values</b>: when your tune isn't the official one, other players with TRC Tune Loader see only what you changed, not the values. " +
-				"Turn this on to let them see your numbers too.", Theme.Body);
-			int share = Choice(new[] { "Keep my values private", "Share my values" }, shareValues_ ? 1 : 0);
-			if ((share == 1) != shareValues_) {
-				shareValues_ = share == 1;
-				SavePref(ShareValuesPref, shareValues_);
-				sync_?.SendReportNow();
-				TrcLog.Info(shareValues_ ? "Sharing tune values with other players." : "Tune values kept private.");
-			}
-			GUILayout.EndVertical();
+			BeginSection("Sharing");
+			SettingRow("Share my tune values", "Off: others with the mod see only what you changed from the official tune, not your numbers", () => {
+				bool share = Switch(shareValues_);
+				if (share != shareValues_) {
+					shareValues_ = share;
+					SavePref(ShareValuesPref, shareValues_);
+					sync_?.SendReportNow();
+					TrcLog.Info(shareValues_ ? "Sharing tune values with other players." : "Tune values kept private.");
+				}
+			}, first: true);
+			EndSection();
 
-			GUILayout.Space(10);
-			GUILayout.Label("Backups", Theme.SectionLabel);
-			GUILayout.BeginVertical(Theme.Card);
-			GUILayout.Label("How many backups to keep for each car and setup. When a new backup is saved, the oldest ones over this number are deleted.", Theme.Body);
+			BeginSection("Backups", "When a new backup is saved, the oldest over this number are deleted, per car and setup.");
 			int keepIndex = Array.IndexOf(BackupLimits, backupsKeep_);
-			int pickedKeep = Choice(BackupLimits.Select(n => n == 0 ? "Keep all" : $"Last {n}").ToArray(), keepIndex);
-			if (pickedKeep != keepIndex) {
-				backupsKeep_ = BackupLimits[pickedKeep];
-				SavePref(BackupsKeepPref, backupsKeep_);
-				cleanupPending_ = null;
-				backupOptionsResult_ = "";
-			}
+			SettingRow("Keep", "", () => {
+				int pickedKeep = Choice(BackupLimits.Select(n => n == 0 ? "Keep all" : $"Last {n}").ToArray(), keepIndex);
+				if (pickedKeep != keepIndex) {
+					backupsKeep_ = BackupLimits[pickedKeep];
+					SavePref(BackupsKeepPref, backupsKeep_);
+					cleanupPending_ = null;
+					backupOptionsResult_ = "";
+				}
+			}, wide: true, first: true);
 			if (backupsKeep_ > 0) {
 				GUILayout.BeginHorizontal();
 				if (cleanupPending_ == null) {
@@ -45,7 +43,7 @@ namespace TRC.TuneLoader {
 					if (NavButton($"Delete {cleanupPending_.Count} old backup(s)", Theme.ButtonPrimary)) {
 						DeleteOldBackups();
 					}
-					if (NavButton("Cancel", Theme.Button)) {
+					if (NavButton("Cancel", Theme.ButtonQuiet)) {
 						cleanupPending_ = null;
 						backupOptionsResult_ = "Nothing was deleted.";
 					}
@@ -54,22 +52,17 @@ namespace TRC.TuneLoader {
 				GUILayout.EndHorizontal();
 			}
 			if (!string.IsNullOrEmpty(backupOptionsResult_)) {
-				GUILayout.Label(backupOptionsResult_, Theme.Small);
+				GUILayout.Label(backupOptionsResult_, Theme.SectionNote);
 			}
-			GUILayout.EndVertical();
+			EndSection();
 
-
-			GUILayout.Space(10);
-			GUILayout.Label("Tour", Theme.SectionLabel);
-			GUILayout.BeginVertical(Theme.Card);
-			GUILayout.Label("A quick walk through every part of this window.", Theme.Body);
-			GUILayout.BeginHorizontal();
-			if (NavButton("Take the tour", Theme.Button)) {
-				StartTour();
-			}
-			GUILayout.FlexibleSpace();
-			GUILayout.EndHorizontal();
-			GUILayout.EndVertical();
+			BeginSection(null);
+			SettingRow("Tour", "A quick walk through every part of this window", () => {
+				if (NavButton("Take the tour", Theme.Button)) {
+					StartTour();
+				}
+			}, first: true);
+			EndSection();
 		}
 
 		/// <summary>Old backups the Clean up now button found, waiting for the second click that deletes them.</summary>

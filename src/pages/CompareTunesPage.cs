@@ -6,7 +6,7 @@ using UnityEngine;
 
 namespace TRC.TuneLoader {
 	/// <summary>
-	/// Compare tunes (IMPROVEMENT_PLAN.md F7), a page in TRC spec: two tunes for the car you're in, side by side, showing
+	/// Compare tunes (docs/archive/IMPROVEMENT_PLAN.md F7), a page in TRC spec: two tunes for the car you're in, side by side, showing
 	/// only the settings that differ, in CarX's own numbers. Either side is one of the official sets' tunes for this car
 	/// or the setup saved on the car now. It only reads and shows: nothing is put on the car, and "Check my tune" and the
 	/// spec checks don't use anything here.

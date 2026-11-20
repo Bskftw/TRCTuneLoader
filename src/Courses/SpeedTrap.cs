@@ -10,8 +10,8 @@ using UnityEngine;
 
 namespace TRC.TuneLoader {
 	/// <summary>
-	/// A speed trap: a line across the road where the car's speed is measured as it goes through, like the speed
-	/// cameras in Need for Speed. Free-roam traps stand on their own (map objects "TRC Speed Trap &lt;name&gt;", or
+	/// A speed trap: a line across the road where the car's speed is measured as it goes through, like a speed
+	/// camera. Free-roam traps stand on their own (map objects "TRC Speed Trap &lt;name&gt;", or
 	/// placed by the player); courses can have their own along the way (Course.Traps), counted in a run.
 	/// </summary>
 	public sealed class SpeedTrap {

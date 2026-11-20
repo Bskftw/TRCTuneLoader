@@ -199,8 +199,13 @@ namespace TRC.TuneLoader.CodeCheck {
 			var challenge = new BattleMessage { Kind = BattleKind.Challenge, BattleId = 9, From = 1, To = 2, FromName = "bskftw", Format = BattleFormat.Race, CourseCode = "CRS-1", SingleFile = true };
 			byte[] bytes = challenge.Encode();
 			BattleMessage back = BattleMessage.Decode(bytes);
-			BattleMessage older = BattleMessage.Decode(bytes.Take(bytes.Length - 1).ToArray());
+			BattleMessage older = BattleMessage.Decode(bytes.Take(bytes.Length - 2).ToArray());
 			Expect(back != null && back.SingleFile && older != null && !older.SingleFile, "a challenge says it's single file, and one from an older copy reads without it");
+			BattleMessage before = BattleMessage.Decode(bytes.Take(bytes.Length - 1).ToArray());
+			Expect(back.ChallengerChases && before != null && before.SingleFile && !before.ChallengerChases, "a challenge says the challenger chases first, and one from an older copy reads without it");
+			byte[] answer = new BattleMessage { Kind = BattleKind.Answer, BattleId = 9, From = 2, To = 1, Accept = true }.Encode();
+			BattleMessage answerBack = BattleMessage.Decode(answer), answerOld = BattleMessage.Decode(answer.Take(answer.Length - 1).ToArray());
+			Expect(answerBack != null && answerBack.ChallengerChases && answerOld != null && answerOld.Accept && !answerOld.ChallengerChases, "an answer says the challenger chases first, and one from an older copy reads without it");
 
 			var lobby = new RaceMessage { Kind = RaceKind.Lobby, RaceId = 5, From = RaceHost, HostName = "Host", CourseCode = "CRS-1", Settings = new RaceSettings { SingleFile = true } };
 			lobby.Entries.Add(new LobbyEntry { Id = RaceHost, Name = "Host" });

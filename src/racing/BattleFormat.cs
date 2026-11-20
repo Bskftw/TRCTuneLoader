@@ -8,7 +8,7 @@ using UnityEngine;
 
 namespace TRC.TuneLoader {
 	/// <summary>
-	/// Race and cat and mouse run on a course; a highway battle (Tokyo Xtreme Racer style) anywhere, on SP bars;
+	/// Race and cat and mouse run on a course; a highway battle anywhere, on pressure bars;
 	/// speed traps (0.15.1, for fun) on a course, won on the total of every trap.
 	/// </summary>
 	public enum BattleFormat : byte { Race = 0, CatAndMouse = 1, Highway = 2, SpeedTraps = 3 }

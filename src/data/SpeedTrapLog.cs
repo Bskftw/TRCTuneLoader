@@ -70,7 +70,7 @@ namespace TRC.TuneLoader {
 			return records;
 		}
 
-		private static List<string> CsvFields(string line) {
+		internal static List<string> CsvFields(string line) {
 			var fields = new List<string>();
 			var field = new StringBuilder();
 			bool quoted = false;

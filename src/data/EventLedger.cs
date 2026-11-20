@@ -144,7 +144,8 @@ namespace TRC.TuneLoader {
 		};
 
 		/// <summary>A 1v1 battle that got as far as lining up.</summary>
-		public static List<Field> BattleFields(BattleSession b, string myCar, string mySet) => new List<Field> {
+		/// <param name="opponentCheck">This PC's own check of the opponent's car: "agrees", "unchecked" or "differs: ..." (A1).</param>
+		public static List<Field> BattleFields(BattleSession b, string myCar, string mySet, string opponentCheck) => new List<Field> {
 			new Field("battle", (long)b.Id),
 			new Field("course", b.IsHighway ? "" : b.Course.Code),
 			new Field("map", b.Course.MapKey),
@@ -159,10 +160,17 @@ namespace TRC.TuneLoader {
 			new Field("their_times_ms", b.Runs.Select(r => r.Theirs != null && r.Theirs.Finished ? (long)Math.Round(r.Theirs.Time * 1000) : -1L).ToArray()),
 			new Field("car_name", myCar),
 			new Field("tune_set", mySet),
+			new Field("winner", b.Winner.ToString(CultureInfo.InvariantCulture)),
+			new Field("course_name", b.Course.Name),
+			new Field("opponent_name", b.PeerName),
+			new Field("opponent_car", b.PeerCar?.Car ?? ""),
+			new Field("opponent_tune", b.PeerCar?.TuneCode ?? ""),
+			new Field("opponent_check", opponentCheck),
 		};
 
 		/// <summary>A race or room game this player was in, with everyone's place (the server can cross-check every driver's line).</summary>
-		public static List<Field> RaceFields(RaceSession race, RaceResultRow mine) => new List<Field> {
+		/// <param name="doubted">Drivers whose car, as CarX shares it, disagreed with what their mod said (A1).</param>
+		public static List<Field> RaceFields(RaceSession race, RaceResultRow mine, string[] doubted) => new List<Field> {
 			new Field("race", (long)race.Id),
 			new Field("race_number", (long)race.RaceNumber),
 			new Field("host_steam", race.HostId.ToString(CultureInfo.InvariantCulture)),
@@ -177,6 +185,9 @@ namespace TRC.TuneLoader {
 			new Field("penalty_s", (double)mine.Penalty),
 			new Field("points", (long)mine.Points),
 			new Field("order", race.Results.Select(r => r.Id.ToString(CultureInfo.InvariantCulture)).ToArray()),
+			new Field("course_name", race.Course?.Name ?? ""),
+			new Field("names", race.Results.Select(r => r.Name).ToArray()),
+			new Field("doubted", doubted),
 		};
 
 		// ---- JSON ----

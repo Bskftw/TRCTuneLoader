@@ -50,7 +50,7 @@ namespace TRC.TuneLoader {
 
 		/// <summary>The trap flash, a little below the timer's spot (or on its own in free roam).</summary>
 		private void DrawTrapFlash(float screenWidth, float screenHeight) {
-			if (Time.unscaledTime >= trapFlashUntil_ || trapFlash_.Length == 0) {
+			if (!trapFlashOn_ || Time.unscaledTime >= trapFlashUntil_ || trapFlash_.Length == 0) {
 				return;
 			}
 			var content = new GUIContent(trapFlash_);

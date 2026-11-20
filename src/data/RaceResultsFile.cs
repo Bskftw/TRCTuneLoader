@@ -10,6 +10,7 @@ using UnityEngine;
 namespace TRC.TuneLoader {
 	public partial class TRCTuneLoaderMod {
 		private void LogRace() {
+			CheckRaceDrivers(atEnd: false);
 			string state = $"{race_.Id} {race_.Phase} {race_.RaceNumber}";
 			if (state != raceLoggedState_) {
 				raceLoggedState_ = state;
@@ -20,6 +21,7 @@ namespace TRC.TuneLoader {
 				foreach (RaceResultRow r in race_.Results) {
 					TrcLog.Info($"  P{r.Position} {r.Name}: {RowText(r)}");
 				}
+				CheckRaceDrivers(atEnd: true);
 				SaveRaceResults();
 				RateRace();
 			}
@@ -63,7 +65,10 @@ namespace TRC.TuneLoader {
 			} catch (Exception e) {
 				TrcLog.Error(e);
 			}
-			LedgerEvent(race_.IsGame ? "game" : "race", EventLedger.RaceFields(race_, mine));
+			string line = LedgerEvent(race_.IsGame ? "game" : "race", EventLedger.RaceFields(race_, mine, raceDoubts_.Keys.Select(id => id.ToString(CultureInfo.InvariantCulture)).ToArray()));
+			if (!race_.IsGame) {
+				KeepResultCode(line, $"race on {race_.Course?.Name ?? race_.CourseCode}");
+			}
 		}
 	}
 }

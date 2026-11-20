@@ -4,7 +4,7 @@ using System.IO;
 using UnityEngine;
 
 namespace TRC.TuneLoader.CodeCheck {
-	/// <summary>Remembered course paths (IMPROVEMENT_PLAN.md P1): exact round trip, stale paths dropped, damaged files ignored.</summary>
+	/// <summary>Remembered course paths (docs/archive/IMPROVEMENT_PLAN.md P1): exact round trip, stale paths dropped, damaged files ignored.</summary>
 	internal static partial class SelfTest {
 		private static void SavedPathsTests() {
 			string folder = Path.Combine(Path.GetTempPath(), "trc-paths-" + Guid.NewGuid().ToString("N"));

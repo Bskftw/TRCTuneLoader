@@ -66,7 +66,10 @@ namespace TRC.TuneLoader {
 			return UnknownWorkshop(player) ? RowState.Warn : RowState.Good;
 		}
 
-		private static int FlaggedMods(PlayerRow row) => row.Report == null ? 0 : ModCheck.FlagsFor(row.Report.Mods).Count;
+		private static int FlaggedMods(PlayerRow row) => row.Report == null || RowHasStaffPass(row) ? 0 : ModCheck.FlagsFor(row.Report.Mods).Count;
+
+		/// <summary>Their report carries a staff pass bskftw signed for this Steam account: flagged mods are excused, the car is still checked.</summary>
+		private static bool RowHasStaffPass(PlayerRow row) => row.Report != null && StaffPass.IsValid(row.Report.StaffPass, row.Player.SteamId);
 
 		/// <summary>For the Only problems filter: not TRC spec or not checkable, or their own report flags something.</summary>
 		private static bool HasProblem(PlayerRow row) =>
@@ -80,7 +83,7 @@ namespace TRC.TuneLoader {
 				: state == RowState.Unknown ? Theme.MutedHex
 				: Theme.GoodHex;
 			int flagged = FlaggedMods(row);
-			// An old report is greyed and says its age, so a stale "spec" isn't read as current (IMPROVEMENT_PLAN.md A5).
+			// An old report is greyed and says its age, so a stale "spec" isn't read as current (docs/archive/IMPROVEMENT_PLAN.md A5).
 			int age = row.Report == null ? 0 : ReportAge(row.Report);
 			string loader = row.Report == null
 				? $"<color={Theme.MutedHex}>{(row.Player.IsLocal ? "You" : "No TRC Tune Loader")}</color>"
@@ -88,6 +91,8 @@ namespace TRC.TuneLoader {
 					? $"<color={Theme.MutedHex}>TRC Tune Loader {row.Report.LoaderVersion} · report {AgeText(age)} old</color>"
 					: flagged > 0
 						? $"<color={Theme.BadHex}>TRC Tune Loader {row.Report.LoaderVersion} · {flagged} flagged mod(s)</color>"
+					: RowHasStaffPass(row)
+						? $"<color={Theme.AccentHex}>TRC Tune Loader {row.Report.LoaderVersion} · TRC staff exemption</color>"
 						: $"<color={Theme.AccentHex}>TRC Tune Loader {row.Report.LoaderVersion}</color>";
 			return $"<b>{row.Player.Name}{(row.Player.IsLocal ? " (you)" : "")}</b>\n" +
 				$"<color={Theme.MutedHex}>{row.Player.CarName} ({row.Player.SlotName})</color>\n" +
@@ -174,9 +179,13 @@ namespace TRC.TuneLoader {
 				lines.Add($"KSL: all mods verified {(report.AllVerified ? "yes" : "no")}, protected mode {(report.ProtectedMode ? "on" : "off")}");
 
 				List<string> flags = ModCheck.FlagsFor(report.Mods);
+				bool exempt = RowHasStaffPass(row);
+				if (exempt) {
+					lines.Add($"TRC staff exemption ({BattleMessage.PlainName(StaffPass.NameOf(report.StaffPass))}): flagged mods are allowed, the car is still checked");
+				}
 				if (flags.Count > 0) {
-					lines.Add("--- Flagged ---");
-					lines.AddRange(flags.Select(f => $"<color={Theme.BadHex}>{f}</color>"));
+					lines.Add(exempt ? "--- Flagged (excused) ---" : "--- Flagged ---");
+					lines.AddRange(flags.Select(f => $"<color={(exempt ? Theme.MutedHex : Theme.BadHex)}>{f}</color>"));
 				}
 				lines.Add($"--- Their mods ({report.Mods.Count}) ---");
 				lines.AddRange(report.Mods.Select(ModCheck.Line));

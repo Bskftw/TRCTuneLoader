@@ -4,7 +4,7 @@ using System.Collections.Generic;
 
 namespace TRC.TuneLoader {
 	/// <summary>
-	/// Whether a message's sender is in the room (IMPROVEMENT_PLAN.md N1). KSL doesn't say who sent a packet, so every
+	/// Whether a message's sender is in the room (docs/archive/IMPROVEMENT_PLAN.md N1). KSL doesn't say who sent a packet, so every
 	/// message carries its sender's Steam ID, and a changed copy of the mod could put any number there. Messages from
 	/// someone CarX doesn't list in the room are ignored: that stops made-up senders (it can't stop someone pretending to
 	/// be a player who is in the room).

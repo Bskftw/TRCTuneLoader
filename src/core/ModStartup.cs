@@ -24,7 +24,7 @@ namespace TRC.TuneLoader {
 	/// </summary>
 	[KSLMeta("TRCTuneLoader", Version, "bskftw")]
 	public partial class TRCTuneLoaderMod : BaseMod {
-		public const string Version = "0.18.4";
+		public const string Version = "0.19.0";
 
 		private const string BackupsFolderName = "Backups";
 		private const float CarRefreshSeconds = 1.0f;
@@ -78,6 +78,7 @@ namespace TRC.TuneLoader {
 				TrcLog.Warning($"Couldn't move all the old files into {modFolder_}: {moveError}");
 			}
 			FindOtherCopies();
+			LoadStaffPass();
 			adapter_ = new CarXTuneAdapter();
 			SetupRoomGate();
 
@@ -111,15 +112,20 @@ namespace TRC.TuneLoader {
 			}
 			// Last, so the room channels above keep their places for everyone.
 			RegisterDevPackets();
+			// A2's second step (a key pair per player) only if CarX's runtime can do it: looked at once, for the log.
+			TrcLog.Info($"Signed messages: on (built-in key{(RatingSeal.HasPrivateKey ? "" : ", development copy")}). Key pairs per player: {MessageSeal.KeyPairCheck()}.");
 		}
 
 		/// <summary>Empty in the player mod: only a private build on bskftw's PC fills it in (map load timing).</summary>
 		partial void StartDevTools();
 
+		/// <summary>Every frame: a map's hidden extras, filled in by traffic/ (kept out of the public source).</summary>
+		partial void UpdateHunt();
+
 		private readonly List<(ulong SteamId, string Key)> roomKeys_ = new List<(ulong, string)>();
 
 		/// <summary>
-		/// Messages from the room only count from someone CarX lists in it (RoomGate, IMPROVEMENT_PLAN.md N1). Every player is
+		/// Messages from the room only count from someone CarX lists in it (RoomGate, docs/archive/IMPROVEMENT_PLAN.md N1). Every player is
 		/// in under their Steam ID and under the ID a race host uses for a console player (RaceSession.ConsoleId: the host
 		/// sends console drivers' messages for them under that ID, so it has to pass).
 		/// </summary>
@@ -245,6 +251,12 @@ namespace TRC.TuneLoader {
 			}
 			try {
 				UpdateControl();
+				UpdateTrafficScore();
+				UpdateTandem();
+				UpdateMapPlaces();
+				UpdateDriverKm();
+				UpdateHunt();
+				WatchCarPhysics();
 			} catch (Exception e) {
 				if (courseErrors_++ < 6) {
 					TrcLog.Error(e);

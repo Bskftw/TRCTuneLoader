@@ -37,7 +37,7 @@ namespace TRC.TuneLoader {
 			GUILayout.Label("Race for", Theme.SectionLabel);
 			hostTrapScoring_ = Choice(new[] { "Fastest time", "Speed traps" }, hostTrapScoring_ ? 1 : 0) == 1;
 			GUILayout.Label(hostTrapScoring_
-				? "Like Need for Speed Most Wanted: the highest total of every speed trap on the course wins (on a circuit, every lap's). You have to finish for yours to count. The course's own traps count, or the free-roam traps along it."
+				? "The highest total of every speed trap on the course wins (on a circuit, every lap's). You have to finish for yours to count. The course's own traps count, or the free-roam traps along it."
 				: "The fastest to the finish wins.", Theme.Small);
 			List<Course> courses = CoursesHere().Where(c => c.Usable).ToList();
 			if (courses.Count == 0) {

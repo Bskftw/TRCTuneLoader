@@ -30,7 +30,7 @@ namespace TRC.TuneLoader {
 			GUILayout.Label("Elo moves only in TRC spec battles and races; events run to a regulation have their own Elo (above), and \"just for fun\" ones change nothing. " +
 				"The Safety Rating moves in TRC spec and regulation battles and races: up with clean kilometres, " +
 				$"down with hard contact, hard hits and resets (at most {RatingBook.MaxDropPerEvent:0.00} an event). Light touches in close racing, time attack, " +
-				"leaving the road and jump starts don't count. No blame: like iRacing, both cars in a contact get it.", Theme.Small);
+				"leaving the road and jump starts don't count. No blame: both cars in a contact get it.", Theme.Small);
 			GUILayout.EndVertical();
 			GUILayout.Label("Recent", Theme.SectionLabel);
 			GUILayout.BeginVertical(Theme.Card);

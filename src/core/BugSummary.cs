@@ -42,7 +42,8 @@ namespace TRC.TuneLoader {
 			Safe("Room channel", () => $"{roomSync_.Status} sent {roomSync_.Sent}, refused {roomSync_.Refused}, received {roomSync_.Received}, {roomBoard_.Fresh(BattleNow).Count} player(s) on the board");
 			Safe("Players in the room", () => players_.Count);
 			Safe("Options", () => $"shortcut {shortcut_}, restart {restartShortcut_}, badge {showBadge_}, track check {autoCheck_}, sectors {showSectors_}, best line {bestLineMode_}, " +
-				$"share values {shareValues_}, free-roam traps {freeRoamTraps_}, wheel action {wheelAction_}, wheel window {wheelWindow_}");
+				$"share values {shareValues_}, free-roam traps {freeRoamTraps_}, wheel action {wheelAction_}, wheel window {wheelWindow_}, wheel quick menu {wheelQuick_}, quick key {quickShortcut_}, " +
+				$"HUD hidden {hudHidden_}, HUD size {hudSize_}, sector pop-up {sectorFlashOn_}, trap pop-up {trapFlashOn_}, HUD presets {hudPresets_.Count}");
 			Safe("Server events", () => {
 				string file = Ledger.FilePath;
 				if (!File.Exists(file)) {

@@ -92,6 +92,7 @@ namespace TRC.TuneLoader {
 			SpeedTraps.Clear();
 			Lanes.Clear();
 			LaneProblems.Clear();
+			ClearPlaces();
 			LanesMapKey = mapKey;
 			var laneObjects = new List<(string Name, int Copy, Transform Transform)>();
 			var trapCopies = new List<(string Name, int Copy, SpeedTrap Trap)>();
@@ -127,6 +128,10 @@ namespace TRC.TuneLoader {
 				// "TRC Lane Highway - Left 1 [speed 80]": a traffic lane (Nov 8), read after the loop.
 				if (trcAt >= 0 && trcAt + 2 < words.Length && words[trcAt + 1] == "lane") {
 					laneObjects.Add((bare, copy, transform));
+					continue;
+				}
+				// "TRC Board Akina Downhill", "TRC Parking Akina Lot", "TRC Territory Gunma" (F14, Nov 18): places in the map.
+				if (ReadPlace(words, trcAt, bare, transform)) {
 					continue;
 				}
 				foreach (string numbered in new[] { SectorWord, GridWord, TrapWord }) {

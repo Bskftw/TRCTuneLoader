@@ -1,4 +1,4 @@
-// A battle every frame: the player's car fed in, and highway battles' SP and gap.
+// A battle every frame: the player's car fed in, and highway battles' pressure and gap.
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -86,8 +86,8 @@ namespace TRC.TuneLoader {
 		}
 
 		/// <summary>
-		/// A highway battle: line up side by side at speed, a rolling 3-2-1, then the one behind loses SP, faster the
-		/// bigger the gap; a hit costs some too. Empty SP (or falling right out of sight) loses.
+		/// A highway battle: line up side by side at speed, a rolling 3-2-1, then the one behind loses pressure, faster the
+		/// bigger the gap; a hit costs some too. An empty pressure bar (or falling right out of sight) loses.
 		/// </summary>
 		private void TickHighway(double now) {
 			double dt = lastHighwayTick_ < 0 ? 0 : Math.Min(0.5, now - lastHighwayTick_);
@@ -130,8 +130,8 @@ namespace TRC.TuneLoader {
 					Message = now < goTime_ ? $"{Math.Ceiling(goTime_ - now):0}" : "";
 					if (now >= goTime_) {
 						State = Phase.Running;
-						MySp = FullSp;
-						PeerSp = FullSp;
+						MyPressure = FullPressure;
+						PeerPressure = FullPressure;
 						Message = "";
 					}
 					break;
@@ -147,21 +147,21 @@ namespace TRC.TuneLoader {
 					}
 					if (HighwayGap < -DrainFromMetres) {
 						float behind = -HighwayGap - DrainFromMetres;
-						MySp = Math.Max(0f, MySp - Mathf.Min(MaxDrainPerSecond, behind / DrainMetresPerSp) * (float)dt);
+						MyPressure = Math.Max(0f, MyPressure - Mathf.Min(MaxDrainPerSecond, behind / DrainMetresPerPressure) * (float)dt);
 					}
 					if (apart > LostMetres && HighwayGap < 0f) {
-						MySp = 0f;
+						MyPressure = 0f;
 					}
 					bool timeUp = now - goTime_ > HighwayMaxSeconds;
-					if ((MySp <= 0f || PeerSp <= 0f || timeUp) && !peerRan_) {
+					if ((MyPressure <= 0f || PeerPressure <= 0f || timeUp) && !peerRan_) {
 						// Only this side was running: nobody wins, nothing counts.
 						Counted = false;
 						End(Phase.Ended, $"{PeerName} never started this run, so it doesn't count", now);
 						break;
 					}
-					if (MySp <= 0f || PeerSp <= 0f || timeUp) {
-						bool iWin = MySp > 0f && (PeerSp <= 0f || (timeUp && MySp > PeerSp));
-						bool draw = timeUp && Math.Abs(MySp - PeerSp) < 0.5f;
+					if (MyPressure <= 0f || PeerPressure <= 0f || timeUp) {
+						bool iWin = MyPressure > 0f && (PeerPressure <= 0f || (timeUp && MyPressure > PeerPressure));
+						bool draw = timeUp && Math.Abs(MyPressure - PeerPressure) < 0.5f;
 						Winner = draw ? 0 : iWin ? Me : Peer;
 						string text = draw ? "Time's up, dead even: a draw"
 							: iWin ? $"You gapped {PeerName}: you win" : $"{PeerName} gapped you: {PeerName} wins";

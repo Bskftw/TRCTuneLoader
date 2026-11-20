@@ -49,6 +49,7 @@ namespace TRC.TuneLoader {
 								message.Regulation = regulation.Length > 0 && regulation.Length <= MaxRegulationText ? Regulation.Parse(regulation) : null;
 								if (reader.BaseStream.Position < reader.BaseStream.Length) {
 									message.SingleFile = reader.ReadBoolean();
+									message.ChallengerChases = reader.BaseStream.Position < reader.BaseStream.Length && reader.ReadBoolean();
 								}
 							}
 							if (protocol == RuleProtocol && message.Regulation == null) {
@@ -60,6 +61,7 @@ namespace TRC.TuneLoader {
 						case BattleKind.Seen:
 							message.Accept = reader.ReadBoolean();
 							message.Reason = Clip(reader.ReadString());
+							message.ChallengerChases = reader.BaseStream.Position < reader.BaseStream.Length && reader.ReadBoolean();
 							break;
 						case BattleKind.Heartbeat:
 							message.SentAt = reader.ReadDouble();
@@ -76,7 +78,7 @@ namespace TRC.TuneLoader {
 							message.Position = new Vector3(reader.ReadSingle(), reader.ReadSingle(), reader.ReadSingle());
 							message.Heading = new Vector3(reader.ReadSingle(), 0f, reader.ReadSingle());
 							message.Kmh = reader.ReadSingle();
-							message.Sp = reader.ReadSingle();
+							message.Pressure = reader.ReadSingle();
 							if (reader.ReadBoolean()) {
 								message.Result = new RunResult {
 									Run = reader.ReadInt32(),
@@ -97,6 +99,7 @@ namespace TRC.TuneLoader {
 								message.HasRuleOk = true;
 								message.RuleOk = reader.ReadBoolean();
 								message.Elo = reader.ReadSingle();
+								message.ChallengerChases = reader.BaseStream.Position < reader.BaseStream.Length && reader.ReadBoolean();
 							}
 							break;
 						case BattleKind.Countdown:

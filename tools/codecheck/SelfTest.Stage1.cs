@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 
 namespace TRC.TuneLoader.CodeCheck {
-	/// <summary>Stage 1 of IMPROVEMENT_PLAN.md: who's in the room (RoomGate), the limits on messages (RateLimit), and unfinished messages kept.</summary>
+	/// <summary>Stage 1 of docs/archive/IMPROVEMENT_PLAN.md: who's in the room (RoomGate), the limits on messages (RateLimit), and unfinished messages kept.</summary>
 	internal static partial class SelfTest {
 		private static void Stage1Tests() {
 			RoomGateTests();

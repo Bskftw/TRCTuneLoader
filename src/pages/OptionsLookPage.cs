@@ -15,22 +15,6 @@ namespace TRC.TuneLoader {
 	/// Update (not halfway through drawing), bumps <see cref="Theme.Version"/>, and every style is made again from it.
 	/// </summary>
 	public partial class TRCTuneLoaderMod {
-		private sealed class Look {
-			public string Name;
-			public Color Background;
-			public Color Accent;
-			public Color Text;
-		}
-
-		private static readonly Look[] Looks = {
-			new Look { Name = "TRC", Background = Theme.DefaultBackground, Accent = Theme.DefaultAccent, Text = Theme.DefaultText },
-			new Look { Name = "Darker", Background = Rgb(0x0B0B0D), Accent = Theme.DefaultAccent, Text = Rgb(0xF4F4F4) },
-			new Look { Name = "Midnight", Background = Rgb(0x0F1626), Accent = Rgb(0x4FA3E0), Text = Rgb(0xE8EEF7) },
-			new Look { Name = "Grey", Background = Rgb(0x2B2B30), Accent = Theme.DefaultAccent, Text = Rgb(0xF2F2F2) },
-			new Look { Name = "High contrast", Background = Rgb(0x000000), Accent = Rgb(0xFF5C9A), Text = Rgb(0xFFFFFF) },
-			new Look { Name = "Light", Background = Rgb(0xF1F1F4), Accent = Rgb(0xC2416C), Text = Rgb(0x16161A) },
-		};
-
 		private static readonly Color[] Swatches = {
 			Rgb(0xD4537E), Rgb(0xE0443E), Rgb(0xE8A33D), Rgb(0xE8D23D), Rgb(0x7FB843), Rgb(0x2FBF9A),
 			Rgb(0x4FA3E0), Rgb(0x3D63E8), Rgb(0x9B7BEA), Rgb(0xFFFFFF), Rgb(0x9A9AA3), Rgb(0x000000),
@@ -40,59 +24,133 @@ namespace TRC.TuneLoader {
 		private string lookEditing_ = "";
 		private string lookHexTyped_ = "";
 
+		/// <summary>
+		/// Options > Look, for the redesign (docs/archive/ui-redesign-plan.md, "Colour customization, reworked"): ready-made
+		/// looks, the fonts, a readability check with Fix it, then your own colours. The same prefs as before
+		/// (ui_background, ui_accent...), so players' colours carry over. The whole window is the live sample.
+		/// </summary>
 		private void DrawLookOptions() {
-			GUILayout.Label("Text size (on top of the window size)", Theme.Body);
-			int sizeIndex = Array.FindIndex(TextSizes, s => Math.Abs(s - lookTextSize_) < 0.001f);
-			int pickedSize = Choice(TextSizes.Select(s => $"{s * 100:0}%").ToArray(), sizeIndex);
-			if (pickedSize >= 0 && pickedSize != sizeIndex) {
-				lookTextSize_ = TextSizes[pickedSize];
-				lookPending_ = true;
-			}
-
-			GUILayout.Space(8);
-			GUILayout.Label("Ready-made looks (the window and highlight colours; the parts keep theirs)", Theme.Body);
+			BeginSection("Ready-made looks", "The window and highlight colours. The parts keep theirs. Changes show on the whole window at once.");
 			GUILayout.BeginHorizontal();
-			foreach (Look look in Looks) {
+			foreach (LookTokens.Preset look in LookTokens.Presets) {
+				bool isDefault = look == LookTokens.Default;
+				Color? muted = isDefault ? (Color?)null : look.Muted;
 				bool current = SameColour(look.Background, Shown(LookOf(BackgroundKey))) && SameColour(look.Accent, Shown(LookOf(AccentKey))) &&
-					SameColour(look.Text, Shown(LookOf(TextKey))) && LookOf(MutedKey).Own == null && LookOf(ButtonKey).Own == null;
+					SameColour(look.Text, Shown(LookOf(TextKey))) && LookOf(ButtonKey).Own == null &&
+					(LookOf(MutedKey).Own == null ? muted == null : muted != null && SameColour(muted.Value, LookOf(MutedKey).Own.Value));
 				if (NavButton(look.Name, current ? Theme.ChipActive : Theme.Chip)) {
 					LookOf(BackgroundKey).Own = look.Background;
 					LookOf(AccentKey).Own = look.Accent;
 					LookOf(TextKey).Own = look.Text;
-					LookOf(MutedKey).Own = null;
+					LookOf(MutedKey).Own = muted;
 					LookOf(ButtonKey).Own = null;
 					lookPending_ = true;
 				}
 			}
 			GUILayout.FlexibleSpace();
-			GUILayout.EndHorizontal();
-
-			LookGroup("Window", BackgroundKey, TextKey, MutedKey);
-			LookGroup("Highlights", AccentKey, ButtonKey);
-			LookGroup("Parts (their names across the top and their cards on Home)", PartKeys);
-
-			Color background = Shown(LookOf(BackgroundKey)), text = Shown(LookOf(TextKey));
-			if (Mathf.Abs(Theme.Luminance(background) - Theme.Luminance(text)) < 0.35f) {
-				GUILayout.Label("The text and the background are close: the text may be hard to read.", Theme.PillWarn);
-			} else if (Theme.Luminance(background) > 0.5f) {
-				GUILayout.Label("On a light background some coloured notes (green, amber) are harder to read.", Theme.Small);
-			}
-			GUILayout.Space(6);
-			GUILayout.BeginHorizontal();
-			if (NavButton("Reset all colours", Theme.Button)) {
+			if (NavButton("Reset all colours", Theme.ButtonQuiet)) {
 				foreach (LookColour c in lookColours_) {
 					c.Own = null;
 				}
 				lookEditing_ = "";
 				lookPending_ = true;
 			}
-			GUILayout.FlexibleSpace();
+			GUILayout.EndHorizontal();
+			DrawReadability();
+			EndSection();
+
+			BeginSection("Font");
+			SettingRow("Road sign fonts", Theme.FontNote, () => {
+				bool on = Switch(Theme.RoadSign);
+				if (on != Theme.RoadSign) {
+					SavePref(LookFontPref, on ? "road" : "classic");
+					Theme.UseRoadSign(on);
+				}
+			}, first: true);
+			SettingRow("Heavier headings", "Bold headings and buttons", () => {
+				bool on = Switch(Theme.HeavyHeadings);
+				if (on != Theme.HeavyHeadings) {
+					SavePref("ui_font_bold", on);
+					Theme.UseHeavyHeadings(on);
+				}
+			});
+			EndSection();
+
+			BeginSection("Home tiles");
+			SettingRow("Tile colours", "Each part in its own colour (set under Make your own), or all in your accent", () => {
+				int accent = Choice(new[] { "Each part's colour", "My accent" }, homeTilesAccent_ ? 1 : 0);
+				if ((accent == 1) != homeTilesAccent_) {
+					homeTilesAccent_ = accent == 1;
+					SavePref("home_tiles_accent", homeTilesAccent_);
+				}
+			}, first: true);
+			EndSection();
+
+			BeginSection("Over the track", "The boxes over the track: the timer, speed traps, tandem, score, the badge and pop-ups.");
+			SettingRow("How solid", "Less lets more of the track show through", () => {
+				float opacity = Slider(Theme.HudOpacity, 0.4f, 1f, 0.05f, $"{Theme.HudOpacity * 100f:0}%");
+				if (Mathf.Abs(opacity - Theme.HudOpacity) > 0.001f) {
+					SavePref("hud_opacity", opacity);
+					Theme.UseHud(opacity, Theme.HudFollowsMenu);
+				}
+			}, wide: true, first: true);
+			SettingRow("Colour", "A bright menu look doesn't have to put bright boxes over the track", () => {
+				int follow = Choice(new[] { "Follow the menu", "Classic dark" }, Theme.HudFollowsMenu ? 0 : 1);
+				if ((follow == 0) != Theme.HudFollowsMenu) {
+					SavePref("hud_follow_menu", follow == 0);
+					Theme.UseHud(Theme.HudOpacity, follow == 0);
+				}
+			});
+			EndSection();
+
+			BeginSection("Make your own");
+			LookGroup("Window", BackgroundKey, TextKey, MutedKey);
+			LookGroup("Highlights", AccentKey, ButtonKey);
+			LookGroup("Parts (their icons in the menu and their tiles on Home)", PartKeys);
+			EndSection();
+		}
+
+		/// <summary>
+		/// Whether text reads on the background (4.5:1 or more, LookTokens.Contrast), and Fix it, which moves the text
+		/// (and the muted text) toward white or black until it does (plan risk 8).
+		/// </summary>
+		private void DrawReadability() {
+			Color background = Shown(LookOf(BackgroundKey)), text = Shown(LookOf(TextKey));
+			LookTokens look = LookTokens.From(background, Shown(LookOf(AccentKey)), text, LookValue(MutedKey), LookValue(ButtonKey));
+			float main = LookTokens.Contrast(look.Text, look.Panel), muted = LookTokens.Contrast(look.Muted, look.Panel);
+			if (main >= 4.5f && muted >= 4.5f) {
+				GUILayout.Label($"Reads well: text {main:0.0}:1, second text {muted:0.0}:1.", Theme.SectionNote);
+				return;
+			}
+			GUILayout.BeginHorizontal();
+			GUILayout.Label($"Hard to read: text {main:0.0}:1, second text {muted:0.0}:1 (4.5 or more reads well).", Theme.PillWarn);
+			if (NavButton("Fix it", Theme.Button)) {
+				if (main < 4.5f) {
+					LookOf(TextKey).Own = LookTokens.Readable(text, look.Panel);
+				}
+				if (muted < 4.5f) {
+					LookOf(MutedKey).Own = LookTokens.Readable(look.Muted, look.Panel);
+				}
+				lookPending_ = true;
+			}
 			GUILayout.EndHorizontal();
 		}
 
+		/// <summary>Text size, a row in Options > Look's Size section.</summary>
+		private void DrawTextSizeRow() {
+			int sizeIndex = Array.FindIndex(TextSizes, s => Math.Abs(s - lookTextSize_) < 0.001f);
+			SettingRow("Text size", "On top of the window size", () => {
+				int pickedSize = Choice(TextSizes.Select(s => $"{s * 100:0}%").ToArray(), sizeIndex);
+				if (pickedSize >= 0 && pickedSize != sizeIndex) {
+					lookTextSize_ = TextSizes[pickedSize];
+					lookPending_ = true;
+				}
+			}, wide: true);
+		}
+
 		private void LookGroup(string title, params string[] keys) {
-			GUILayout.Space(8);
-			GUILayout.Label(title, Theme.SectionLabel);
+			GUILayout.Space(6);
+			GUILayout.Label(title, Theme.SettingLabel);
 			foreach (string key in keys) {
 				LookRow(LookOf(key));
 			}
@@ -105,9 +163,13 @@ namespace TRC.TuneLoader {
 		private void LookRow(LookColour c) {
 			Color now = Shown(c);
 			GUILayout.BeginHorizontal();
-			string note = c.Note != null ? $"  <color={Theme.MutedHex}>{c.Note}</color>" : "";
-			string auto = c.CanBeAuto && c.Own == null ? $"  <color={Theme.MutedHex}>(Auto)</color>" : "";
-			GUILayout.Label($"<b>{c.Label}</b>{auto}{note}", Theme.Body, GUILayout.Width(330));
+			string auto = c.CanBeAuto && c.Own == null ? " (Auto)" : "";
+			GUILayout.BeginVertical(GUILayout.Width(170));
+			GUILayout.Label($"{c.Label}{auto}", Theme.SettingLabel);
+			if (c.Note != null) {
+				GUILayout.Label(c.Note, Theme.SettingNote);
+			}
+			GUILayout.EndVertical();
 			Swatch(now, 22f, current: true);
 			GUILayout.Space(8);
 			foreach (Color swatch in Swatches) {
@@ -120,7 +182,7 @@ namespace TRC.TuneLoader {
 			bool own = c.Own != null;
 			bool enabled = GUI.enabled;
 			GUI.enabled = enabled && own;
-			if (NavButton(c.CanBeAuto ? "Auto" : "Reset", Theme.Button)) {
+			if (NavButton(c.CanBeAuto ? "Auto" : "Reset", Theme.ButtonQuiet)) {
 				c.Own = null;
 				lookPending_ = true;
 			}

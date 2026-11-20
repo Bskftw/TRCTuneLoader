@@ -70,22 +70,16 @@ namespace TRC.TuneLoader {
 			}
 			navStylesVersion_ = Theme.Version;
 			categoryStyles_.Clear();
-			foreach (GUIStyle old in cardStyles_.Values) {
-				if (old.normal.background != null) {
-					UnityEngine.Object.Destroy(old.normal.background);
-				}
-			}
-			cardStyles_.Clear();
 			cardTitle_ = new GUIStyle(Theme.Heading) { fontSize = Mathf.RoundToInt(18 * Theme.TextScale) };
 			// Page titles and the "selected course" label are in the accent colour, so Look's accent shows inside the menu.
 			pageTitle_ = new GUIStyle(Theme.Heading) { fontSize = Mathf.RoundToInt(20 * Theme.TextScale), wordWrap = false, margin = new RectOffset(0, 10, 4, 4), normal = { textColor = Theme.Accent } };
 			tableHead_ = new GUIStyle(Theme.Small) { wordWrap = false, clipping = TextClipping.Clip, margin = new RectOffset(0, 0, 4, 4), padding = new RectOffset(4, 4, 0, 0) };
 			tableCell_ = new GUIStyle(Theme.Body) { wordWrap = false, clipping = TextClipping.Clip, alignment = TextAnchor.MiddleLeft, margin = new RectOffset(0, 0, 0, 0), padding = new RectOffset(4, 4, 0, 0) };
-			courseTitle_ = new GUIStyle(Theme.Heading) { fontSize = Mathf.RoundToInt(28 * Theme.TextScale), fontStyle = FontStyle.BoldAndItalic, wordWrap = false };
-			kicker_ = new GUIStyle(Theme.Small) { fontStyle = FontStyle.Bold, normal = { textColor = Theme.Accent } };
-			statBox_ = new GUIStyle(Theme.Card) { padding = new RectOffset(12, 12, 8, 8), margin = new RectOffset(0, 8, 4, 4) };
-			statLabel_ = new GUIStyle(Theme.Small) { margin = new RectOffset(0, 0, 0, 0) };
-			statValue_ = new GUIStyle(Theme.Heading) { margin = new RectOffset(0, 0, 0, 0), wordWrap = false };
+			courseTitle_ = new GUIStyle(Theme.PageTitle) { fontSize = Mathf.RoundToInt(26 * Theme.TextScale), wordWrap = false };
+			kicker_ = new GUIStyle(Theme.SectionNote) { normal = { textColor = Theme.AccentText } };
+			statBox_ = new GUIStyle(Theme.StatBox) { margin = new RectOffset(0, 8, 4, 4) };
+			statLabel_ = new GUIStyle(Theme.StatLabel);
+			statValue_ = new GUIStyle(Theme.StatValue);
 			keyCap_ = new GUIStyle(Theme.Small) {
 				normal = { background = Theme.Rounded(Theme.Control, Theme.Muted, 4), textColor = Theme.Text },
 				border = new RectOffset(4, 4, 4, 4),

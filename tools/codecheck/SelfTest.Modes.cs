@@ -220,7 +220,7 @@ namespace TRC.TuneLoader.CodeCheck {
 		}
 
 		private static void HighwayBattle() {
-			// Both roll side by side at 100 km/h; at GO the host speeds up and pulls away: the guest's SP drains to zero.
+			// Both roll side by side at 100 km/h; at GO the host speeds up and pulls away: the guest's pressure drains to zero.
 			var host = new Player { Name = "Host", Id = HostId, ClockOrigin = 100 };
 			var guest = new Player { Name = "Guest", Id = GuestId, ClockOrigin = 5000 };
 			Course free = Course.FreeRoam("test:1");
@@ -261,9 +261,9 @@ namespace TRC.TuneLoader.CodeCheck {
 				}
 			}
 			Expect(goSeen > 0, "a highway battle starts rolling once both are alongside at speed");
-			Expect(host.Session.State == BattleSession.Phase.Finished && host.Session.Winner == HostId && guest.Session.Winner == HostId && guest.Session.MySp <= 0f,
+			Expect(host.Session.State == BattleSession.Phase.Finished && host.Session.Winner == HostId && guest.Session.Winner == HostId && guest.Session.MyPressure <= 0f,
 				$"the car that pulls away gaps the other: both agree ({host.Session.Message} / {guest.Session?.Message})");
-			Expect(host.Session.MySp > 99f, "the leader's SP doesn't drain");
+			Expect(host.Session.MyPressure > 99f, "the leader's pressure doesn't drain");
 			HighwayCountdownLost(dropAll: false);
 			HighwayCountdownLost(dropAll: true);
 		}

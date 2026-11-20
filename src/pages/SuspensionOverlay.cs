@@ -61,7 +61,7 @@ namespace TRC.TuneLoader {
 			}
 			GUI.Box(rect, GUIContent.none, Theme.HudPanel);
 			SuspensionFrame frame = liveFrame_;
-			GUI.Label(new Rect(rect.x + 12f, rect.y + 6f, 150f, 18f), "<b>SUSPENSION</b>", Theme.HudSmall);
+			GUI.Label(new Rect(rect.x + 12f, rect.y + 6f, 150f, 18f), "<b>Suspension</b>", Theme.HudSmall);
 			SuspensionLog log = runLog_ ?? session_;
 			string state = runLog_ != null ? $"logging {runLog_.Label}" : $"session {log?.Seconds ?? 0:0} s";
 			GUI.Label(new Rect(rect.xMax - 160f, rect.y + 6f, 150f, 18f), state, Theme.HudSmall);

@@ -72,7 +72,7 @@ namespace TRC.TuneLoader {
 		private ulong me_;
 
 		/// <summary>
-		/// The most packets taken from one sender, and from the room together (IMPROVEMENT_PLAN.md N7): the mod sends 5 to 15 a
+		/// The most packets taken from one sender, and from the room together (docs/archive/IMPROVEMENT_PLAN.md N7): the mod sends 5 to 15 a
 		/// second each at its busiest, so only a flood is cut. The bursts cover what piles up while the game is frozen (a map loading).
 		/// </summary>
 		private ChannelLimit limit_;
@@ -85,8 +85,11 @@ namespace TRC.TuneLoader {
 		public int Refused { get; private set; }
 		public int Received { get; private set; }
 
+		private readonly MessageSeal.Guard guard_ = new MessageSeal.Guard();
+
 		public void Start(ulong me) {
 			me_ = me;
+			MessageSeal.EnsureKey();
 			try {
 				if (!Kino.Sync.IsAvailable) {
 					Status = $"{what_} need KSL's KSL.CarX extension.";
@@ -175,6 +178,12 @@ namespace TRC.TuneLoader {
 			packet.WriteInt32(piece.Count);
 			packet.WriteInt32(piece.Data.Length);
 			packet.WriteBytes(piece.Data);
+			// The seal (0.19, MessageSeal): on the end, where older copies stop reading.
+			var seal = MessageSeal.Make(packetName_, MessageSeal.PieceBody(protocol_, from, piece.MessageId, piece.Index, piece.Count, piece.Data));
+			packet.WriteInt64(seal.Ticks);
+			packet.WriteUInt32(seal.Counter);
+			packet.WriteBytes(seal.Tag);
+			packet.WriteBytes(MessageSeal.Magic);
 			return packet;
 		}
 
@@ -231,6 +240,15 @@ namespace TRC.TuneLoader {
 					return;
 				}
 				piece.Data = packet.ReadBytes(length);
+				var seal = MessageSeal.ReadSeal(packet.ReadInt64, packet.ReadUInt32, packet.ReadBytes);
+				MessageSeal.Result sealed_ = MessageSeal.Check(packetName_, MessageSeal.PieceBody(protocol_, from, piece.MessageId, piece.Index, piece.Count, piece.Data),
+					seal.Ticks, seal.Counter, seal.Tag, from, guard_, DateTime.UtcNow.Ticks);
+				if (sealed_ == MessageSeal.Result.Unsigned) {
+					MessageSeal.NoteUnsigned(from, what_);
+				} else if (sealed_ != MessageSeal.Result.Good) {
+					MessageSeal.NoteRefused(from, what_, sealed_);
+					return;
+				}
 
 				lock (lock_) {
 					byte[] whole = chunks_.Add(from, piece, DateTime.UtcNow);

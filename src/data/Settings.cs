@@ -48,6 +48,8 @@ namespace TRC.TuneLoader {
 				LoadPadOptions();
 				LoadPins();
 				startShortcut_ = Shortcut.Parse(Kino.Prefs.Get(StartKeyPref, Shortcut.StartDefault.Save()), Shortcut.StartDefault);
+				quickShortcut_ = Shortcut.Parse(Kino.Prefs.Get(QuickKeyPref, Shortcut.QuickDefault.Save()), Shortcut.QuickDefault);
+				LoadHudOptions();
 				tourSeen_ = Kino.Prefs.Get(TourPref, 0) >= 1;
 				float scale = Kino.Prefs.Get(WindowScalePref, 1f);
 				windowScale_ = WindowScales.OrderBy(s => Math.Abs(s - scale)).First();
@@ -86,6 +88,7 @@ namespace TRC.TuneLoader {
 				whatsNewPending_ = tourSeen_ && Kino.Prefs.Get(WhatsNewPref, "") != WhatsNewVersion;
 				wheelAction_ = WheelButtons.Binding.Parse(Kino.Prefs.Get(WheelActionPref, ""));
 				wheelWindow_ = WheelButtons.Binding.Parse(Kino.Prefs.Get(WheelWindowPref, ""));
+				wheelQuick_ = WheelButtons.Binding.Parse(Kino.Prefs.Get(WheelQuickPref, ""));
 			} catch (Exception e) {
 				TrcLog.Warning($"Couldn't read the Home options: {e.Message}");
 			}

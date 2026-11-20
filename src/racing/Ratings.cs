@@ -15,7 +15,7 @@ namespace TRC.TuneLoader {
 	///   Elo, one each for touge, highway and circuits: 1500 to start, moved by TRC spec battles (win, draw or loss
 	///   against the other driver's rating) and races (every other finisher counts as a little battle).
 	///
-	///   Safety Rating, 0 to 4.99, 2.50 to start, like iRacing's: no blame, it's what happened to this car. Only
+	///   Safety Rating, 0 to 4.99, 2.50 to start: no blame, it's what happened to this car. Only
 	///   battles and races count (time attack is the player alone, often just messing about). Clean kilometres raise
 	///   it; hard contact, a hard hit and a reset take it down. Light touches in close racing don't count, and one
 	///   event can move it only so far either way.

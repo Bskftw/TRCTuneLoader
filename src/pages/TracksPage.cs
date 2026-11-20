@@ -10,7 +10,7 @@ using UnityEngine;
 namespace TRC.TuneLoader {
 	public partial class TRCTuneLoaderMod {
 		/// <summary>The Time attack tab's sections, down the left (since 0.15.0: Battles is its own tab, speed traps have their own section).</summary>
-		private static readonly string[] CourseViews = { "Tracks", "Speed traps", "My times", "Course builder" };
+		private static readonly string[] CourseViews = { "Tracks", "Speed traps", "My times", "Course builder", "Challenges" };
 
 		private int coursesView_;
 
@@ -27,7 +27,7 @@ namespace TRC.TuneLoader {
 			int view = SideNav(CourseViews, coursesView_, new[] {
 				tracks > 0 ? tracks.ToString(CultureInfo.InvariantCulture) : "",
 				mapTraps_.Count > 0 ? mapTraps_.Count.ToString(CultureInfo.InvariantCulture) : "",
-				"", building,
+				"", building, "",
 			});
 			if (view != coursesView_) {
 				coursesView_ = view;
@@ -45,6 +45,7 @@ namespace TRC.TuneLoader {
 				case 0: DrawTracks(); break;
 				case 1: DrawSpeedTraps(); break;
 				case 2: DrawMyTimes(); break;
+				case 4: DrawChallengesPage(); break;
 				default: DrawCourseBuilder(); break;
 			}
 			GUILayout.EndVertical();

@@ -15,15 +15,15 @@ namespace TRC.TuneLoader.CodeCheck {
 		/// tools/compare_builds.py covers those (the code that writes them must stay the same).
 		/// </summary>
 		private static readonly Dictionary<string, string> WireExpected = new Dictionary<string, string>(StringComparer.Ordinal) {
-			{ "battle challenge, course with path", "1068 4258892E52CDEA14" },
-			{ "battle challenge, speed traps", "1081 C13FDF3184CCEB25" },
-			{ "battle challenge, regulation", "453 491FB95835DBFA3E" },
-			{ "battle answer", "24 D92533CB6CD40A39" },
-			{ "battle heartbeat", "149 16CD4775B2777E90" },
+			{ "battle challenge, course with path", "1069 ED9F4A536F1F34D0" },
+			{ "battle challenge, speed traps", "1082 F5553486D3739A2A" },
+			{ "battle challenge, regulation", "454 530AF06B44626153" },
+			{ "battle answer", "25 5A125050FD12FFB4" },
+			{ "battle heartbeat", "150 8EBC8B924E7E494C" },
 			{ "battle countdown", "38 7F9E4228FD239784" },
 			{ "battle abort", "37 C1B82E6793230BB9" },
-			{ "battle leave", "24 1604FDA2F4E53314" },
-			{ "battle seen", "54 86C2662510FAC1A8" },
+			{ "battle leave", "25 7C36D67703C69A54" },
+			{ "battle seen", "55 D731682AEC4178F2" },
 			{ "race lobby", "574 6F93480BDCCEF82E" },
 			{ "race join", "22 289528CAC6ACDFE2" },
 			{ "race leave", "17 2A00E7A0C2D803E4" },
@@ -35,11 +35,12 @@ namespace TRC.TuneLoader.CodeCheck {
 			{ "room status", "65 516157BF99D9B110" },
 			{ "room course share", "1026 A3F106F49DADEF29" },
 			{ "room trap share", "107 F337441A770D33EF" },
+			{ "room start invite", "71 13B4E096DC6696D9" },
 			{ "room regulation share", "423 8F575CDEA0003825" },
 			{ "room run share", "473 B9D482C298A97890" },
-			{ "chunk 1 of 3", "512 BB3EEB8A805CA88A" },
-			{ "chunk 2 of 3", "512 98D6DA4744FB3D21" },
-			{ "chunk 3 of 3", "80 0A1DD66C381DF40D" },
+			{ "chunk 1 of 3", "512 4A3E40E16E097814" },
+			{ "chunk 2 of 3", "512 341385DB4B7344DD" },
+			{ "chunk 3 of 3", "81 97EDCBBE193A0B94" },
 		};
 
 		private static void WireSnapshotTests() {
@@ -106,7 +107,7 @@ namespace TRC.TuneLoader.CodeCheck {
 				Kind = BattleKind.Heartbeat, BattleId = 7, From = GuestId, To = HostId, SentAt = 123.25, Echo = 99.5, EchoHold = 0.01, Ready = true,
 				Spec = true, TuneSet = "TRC V3.0", TuneCode = "TRC-91D4-D44C", Car = "Toyota AE86", Progress = 812.5f, RunIndex = 2, Phase = 4,
 				Result = new RunResult { Run = 1, Finished = true, Time = 181.234, SpecAtEnd = true, TrapTotal = 455.5f },
-				Position = new Vector3(1.5f, 2.25f, -3f), Heading = Vector3.forward, Kmh = 142.5f, Sp = 0.75f, TrapTotal = 300f,
+				Position = new Vector3(1.5f, 2.25f, -3f), Heading = Vector3.forward, Kmh = 142.5f, Pressure = 0.75f, TrapTotal = 300f,
 				HasRuleOk = true, RuleOk = true, Elo = 1532.5f, CountdownId = 3, GoHostTime = 456.75,
 			}.Encode());
 			yield return ("battle countdown", () => new BattleMessage { Kind = BattleKind.Countdown, BattleId = 7, From = HostId, To = GuestId, CountdownId = 3, GoHostTime = 456.75 }.Encode());
@@ -161,6 +162,7 @@ namespace TRC.TuneLoader.CodeCheck {
 				Kind = RoomKind.TrapShare, From = HostId, Name = "bskftw", Label = "Tsubaki", MapKey = "project-dream", MapName = "Project Dream",
 				Traps = { new SpeedTrap { Name = "Tsubaki Speed Trap 1", Gate = trap, MapKey = "project-dream" } },
 			}.Encode());
+			yield return ("room start invite", () => new RoomMessage { Kind = RoomKind.Invite, From = HostId, Name = "bskftw", MapKey = "project-dream", MapName = "Project Dream", Label = course.Code, Detail = course.Name }.Encode());
 			yield return ("room regulation share", () => new RoomMessage { Kind = RoomKind.RegulationShare, From = HostId, Name = "bskftw", Regulation = regulation }.Encode());
 			yield return ("room run share", () => {
 				var ghost = new Ghost {

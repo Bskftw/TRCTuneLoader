@@ -74,7 +74,7 @@ namespace TRC.TuneLoader {
 				if (NavButton(sharingGhost_ == ghost ? "Done" : "Share...", Theme.Button)) {
 					sharingGhost_ = sharingGhost_ == ghost ? null : ghost;
 				}
-				if (shared != null && NavButton("Dismiss", Theme.Button)) {
+				if (shared != null && NavButton("Dismiss", Theme.ButtonQuiet)) {
 					roomBoard_.SharedRuns.Remove(shared);
 				}
 				if (NavButton(renamingGhost_ == ghost ? "Cancel" : "Name", Theme.Button)) {
@@ -159,7 +159,7 @@ namespace TRC.TuneLoader {
 					SaveGhost(item.Ghost);
 					roomBoard_.SharedRuns.Remove(item);
 				}
-				if (NavButton("Dismiss", Theme.Button)) {
+				if (NavButton("Dismiss", Theme.ButtonQuiet)) {
 					roomBoard_.SharedRuns.Remove(item);
 				}
 				GUILayout.EndHorizontal();

@@ -141,7 +141,7 @@ namespace TRC.TuneLoader {
 				}
 			}
 			GUI.enabled = enabled;
-			if (NavButton("Cancel", Theme.Button)) {
+			if (NavButton("Cancel", Theme.ButtonQuiet)) {
 				makingSpec_ = false;
 			}
 			GUILayout.FlexibleSpace();
@@ -241,7 +241,7 @@ namespace TRC.TuneLoader {
 				if (NavButton("Remove the spec", Theme.ButtonPrimary)) {
 					RemoveSpec(spec);
 				}
-				if (NavButton("Keep", Theme.Button)) {
+				if (NavButton("Keep", Theme.ButtonQuiet)) {
 					removingSpec_ = "";
 				}
 			} else if (NavButton("Remove spec", Theme.Button)) {

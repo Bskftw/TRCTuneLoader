@@ -7,6 +7,9 @@ using UnityEngine;
 namespace TRC.TuneLoader {
 	public partial class TRCTuneLoaderMod {
 		private const string LookTextSizePref = "ui_text_size";
+
+		/// <summary>"road" (Bahnschrift and Segoe UI, the redesign's) or "classic" (Unity's own font).</summary>
+		private const string LookFontPref = "ui_font";
 		private static readonly float[] TextSizes = { 0.9f, 1f, 1.15f, 1.3f, 1.5f };
 
 		/// <summary>One colour the player can set.</summary>
@@ -68,6 +71,10 @@ namespace TRC.TuneLoader {
 			}
 			float size = KSL.API.Kino.Prefs.Get(LookTextSizePref, 1f);
 			lookTextSize_ = TextSizes.OrderBy(s => Math.Abs(s - size)).First();
+			Theme.UseRoadSign(KSL.API.Kino.Prefs.Get(LookFontPref, "road") != "classic");
+			homeTilesAccent_ = KSL.API.Kino.Prefs.Get("home_tiles_accent", false);
+			Theme.UseHeavyHeadings(KSL.API.Kino.Prefs.Get("ui_font_bold", false));
+			Theme.UseHud(KSL.API.Kino.Prefs.Get("hud_opacity", 0.86f), KSL.API.Kino.Prefs.Get("hud_follow_menu", true));
 			ApplyLook();
 		}
 

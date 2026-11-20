@@ -35,7 +35,7 @@ namespace TRC.TuneLoader {
 	/// channel can't be aimed reliably), so each says who it's from and for, and the other players ignore it.
 	/// </summary>
 	public sealed partial class BattleMessage {
-		/// <summary>2 since 0.10.1: small pieces, the path packed in centimetres, and Seen. 3 since 0.11.0: laps, and circuit courses. 4 since 0.12.0: tournament matches. 5 since 0.13.0: positions and SP (highway battles).</summary>
+		/// <summary>2 since 0.10.1: small pieces, the path packed in centimetres, and Seen. 3 since 0.11.0: laps, and circuit courses. 4 since 0.12.0: tournament matches. 5 since 0.13.0: positions and pressure (highway battles).</summary>
 		public const byte Protocol = 5;
 
 		/// <summary>
@@ -108,17 +108,20 @@ namespace TRC.TuneLoader {
 		/// <summary>The sender's latest run result (any run), so it still arrives if the other side moved on.</summary>
 		public RunResult Result;
 
-		/// <summary>Where the sender's car is, the way it points and its speed (km/h), and (highway battles) its SP.</summary>
+		/// <summary>Where the sender's car is, the way it points and its speed (km/h), and (highway battles) its pressure.</summary>
 		public Vector3 Position;
 		public Vector3 Heading;
 		public float Kmh;
-		public float Sp;
+		public float Pressure;
 
 		/// <summary>The sender's trap total so far in this run (speed trap battles), for the live standings.</summary>
 		public float TrapTotal;
 
 		/// <summary>0.16: the sender's car meets the battle's regulation, and their Elo for this battle's ratings.</summary>
 		public bool HasRuleOk;
+
+		/// <summary>Nov 19: the sender's copy lets the challenger chase first in cat and mouse. Every new copy sends it at the end of a challenge, answer and heartbeat; older ones don't.</summary>
+		public bool ChallengerChases;
 		public bool RuleOk;
 		public float Elo;
 

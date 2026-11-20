@@ -31,6 +31,7 @@ namespace TRC.TuneLoader {
 			if (timesResult_.Length > 0) {
 				GUILayout.Label(timesResult_, Theme.Body);
 			}
+			DrawLapCompare();
 			GUILayout.BeginVertical(Theme.Card, GUILayout.ExpandHeight(true));
 			timesScroll_ = GUILayout.BeginScrollView(timesScroll_);
 			if (shown.Count == 0) {
@@ -138,8 +139,8 @@ namespace TRC.TuneLoader {
 			// Open: like the selected course in Tracks (bskftw, Nov 3): the name big, then a card per car and set.
 			EnsureNavStyles();
 			GUILayout.BeginVertical(Theme.Card);
-			GUILayout.Label((last.MapName.Length > 0 ? last.MapName : "Course").ToUpperInvariant(), kicker_);
-			GUILayout.Label(last.CourseName.ToUpperInvariant(), courseTitle_);
+			GUILayout.Label(last.MapName.Length > 0 ? last.MapName : "Course", kicker_);
+			GUILayout.Label(last.CourseName, courseTitle_);
 			GUILayout.Label($"{(circuit ? "Circuit" : "Sprint")}{(last.OfficialCourse ? " · official" : "")} · {course.Count()} time(s) · last {last.When:MMM d, HH:mm}", Theme.Small);
 			foreach (var carSet in course.GroupBy(r => (r.CarId, r.TuneSet, r.Rule)).OrderBy(g => g.Key.Rule.Length > 0 ? 1 : 0).ThenBy(g => g.Min(r => r.TimeMs))) {
 				DrawTimesCar(course.Key, last.CourseName, carSet.ToList(), circuit, lapsOnly);
@@ -243,21 +244,31 @@ namespace TRC.TuneLoader {
 
 		/// <summary>The newest times first (already sorted and cut to <see cref="RecentCount"/> by <see cref="EnsureTimesViews"/>).</summary>
 		private void DrawRecentTimes(List<TimeAttackRecord> records) {
+			bool first = true;
 			foreach (TimeAttackRecord r in records) {
+				// Each run is one block, its splits right under its line, with a line and space between runs
+				// (bskftw, Nov 19: the splits sat after a gap and ran into the next run).
+				if (!first) {
+					GUILayout.Space(4f);
+					Hairline(4f);
+				}
+				first = false;
 				string what = r.IsLap ? $"lap {r.LapNumber}" : r.Laps == 0 ? "laps" : r.Laps > 1 ? $"{r.Laps} laps {(r.Flying ? "flying" : "standing")}" : r.Flying ? "flying" : "standing";
 				string spec = r.IsSpec ? $"<color={Theme.GoodHex}>{r.TuneSet} spec</color>" : $"<color={Theme.MutedHex}>{DoesntCount(r)}</color>";
 				GUILayout.BeginHorizontal();
+				GUILayout.BeginVertical();
 				GUILayout.Label($"<color={Theme.MutedHex}>{r.When:MMM d HH:mm}</color>  <b>{TimeAttackRun.FormatTime(r.Seconds)}</b>  {r.CourseName} · {what} · {r.Car} · {spec}", Theme.Body);
-				GUILayout.FlexibleSpace();
-				TimeAttackRecord one = r;
-				DeleteTimesButton($"run {r.When.Ticks} {r.CourseCode} {r.TimeMs} {r.LapNumber}", "Delete", $"the {TimeAttackRun.FormatTime(r.Seconds)} on {r.CourseName}", x => TimeAttackLog.Same(x, one));
-				GUILayout.EndHorizontal();
 				if (showSectors_ && r.SectorMs.Length > 1) {
 					GUILayout.Label($"      {SavedSectors(r, times_)}", Theme.Small);
 				}
 				if (r.TrapKmh.Length > 0) {
 					GUILayout.Label($"      <color={Theme.WarnHex}>Speed traps {string.Join(" · ", r.TrapKmh.Select(k => $"{k:0}"))} km/h, total {r.TrapTotal:0}</color>", Theme.Small);
 				}
+				GUILayout.EndVertical();
+				GUILayout.FlexibleSpace();
+				TimeAttackRecord one = r;
+				DeleteTimesButton($"run {r.When.Ticks} {r.CourseCode} {r.TimeMs} {r.LapNumber}", "Delete", $"the {TimeAttackRun.FormatTime(r.Seconds)} on {r.CourseName}", x => TimeAttackLog.Same(x, one));
+				GUILayout.EndHorizontal();
 			}
 		}
 
@@ -273,7 +284,7 @@ namespace TRC.TuneLoader {
 			if (NavButton($"Delete {what}?", Theme.ButtonPrimary)) {
 				DeleteTimes(which, what);
 			}
-			if (NavButton("Keep", Theme.Button)) {
+			if (NavButton("Keep", Theme.ButtonQuiet)) {
 				timesDeletePending_ = "";
 			}
 		}

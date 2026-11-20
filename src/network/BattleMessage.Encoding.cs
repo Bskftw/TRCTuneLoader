@@ -41,12 +41,16 @@ namespace TRC.TuneLoader {
 						string regulation = Regulation?.ToText() ?? "";
 						writer.Write(regulation.Length <= MaxRegulationText ? regulation : "");
 						writer.Write(SingleFile);
+						// Nov 19: read only when there.
+						writer.Write(true);
 						break;
 					case BattleKind.Answer:
 					case BattleKind.Leave:
 					case BattleKind.Seen:
 						writer.Write(Accept);
 						writer.Write(Clip(Reason));
+						// Nov 19: read only when there.
+						writer.Write(true);
 						break;
 					case BattleKind.Heartbeat:
 						writer.Write(SentAt);
@@ -66,7 +70,7 @@ namespace TRC.TuneLoader {
 						writer.Write(Heading.x);
 						writer.Write(Heading.z);
 						writer.Write(Kmh);
-						writer.Write(Sp);
+						writer.Write(Pressure);
 						writer.Write(Result != null);
 						if (Result != null) {
 							writer.Write(Result.Run);
@@ -81,6 +85,8 @@ namespace TRC.TuneLoader {
 						// 0.16: read only when there.
 						writer.Write(RuleOk);
 						writer.Write(Elo);
+						// Nov 19: read only when there.
+						writer.Write(true);
 						break;
 					case BattleKind.Countdown:
 						writer.Write(CountdownId);

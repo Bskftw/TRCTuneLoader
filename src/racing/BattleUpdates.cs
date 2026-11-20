@@ -17,7 +17,7 @@ namespace TRC.TuneLoader {
 		/// <summary>Players need at least this TRC Tune Loader version to battle (battle messages changed in 0.10.1, 0.11.0, 0.12.0 and 0.13.0).</summary>
 		private static readonly System.Version BattleVersion = new System.Version(0, 13, 0);
 		private static readonly int[] BattleLapChoices = { 1, 2, 3, 5 };
-		private static readonly string[] BattleFormats = { "Side-by-side race", "Cat and mouse", "Highway battle (SP)", "Speed traps" };
+		private static readonly string[] BattleFormats = { "Side-by-side race", "Cat and mouse", "Highway battle (pressure)", "Speed traps" };
 		private const float InviteSeconds = 45f;
 
 		/// <summary>A battle on the track survives the car being out of reach this long (a teleport, a loading hitch).</summary>
@@ -103,6 +103,7 @@ namespace TRC.TuneLoader {
 				}
 				battle_.Tick(now, pose_.Position, pose_.Forward, pose_.SpeedKmh, Time.timeScale, onRoad);
 			}
+			CheckBattleOpponent(atEnd: false);
 			foreach (BattleMessage message in battle_.TakeOutbox()) {
 				SendBattle(message);
 			}
@@ -114,6 +115,7 @@ namespace TRC.TuneLoader {
 
 			if (!battle_.Active && battleEndedAt_ < 0) {
 				battleEndedAt_ = Time.unscaledTime;
+				CheckBattleOpponent(atEnd: true);
 				ReportMatchBattle(battle_);
 				RateBattle(battle_);
 				if (battle_.Started) { visit_?.Battle(battle_.Winner == battle_.Me); }
@@ -122,7 +124,8 @@ namespace TRC.TuneLoader {
 					battleLogged_ = true;
 					try {
 						BattleLog.Append(TimesFolder, battle_, lastBattleCar_?.Car ?? "", lastBattleCar_?.TuneSet ?? "", Version);
-						LedgerEvent("battle", EventLedger.BattleFields(battle_, lastBattleCar_?.Car ?? "", lastBattleCar_?.TuneSet ?? ""));
+						string line = LedgerEvent("battle", EventLedger.BattleFields(battle_, lastBattleCar_?.Car ?? "", lastBattleCar_?.TuneSet ?? "", BattleCheckText));
+						KeepResultCode(line, $"battle vs {BattleMessage.PlainName(battle_.PeerName)} on {battle_.Course.Name}");
 					} catch (Exception e) {
 						TrcLog.Error(e);
 					}
@@ -227,6 +230,17 @@ namespace TRC.TuneLoader {
 			battleResult_ = "";
 			TrcLog.Info($"Battle {id}: challenged {battle_.PeerName} ({peer}) on {course.Name} ({course.Code}, {course.Path.Count} path points), " +
 				$"{BattleFormats[(int)format]}, {RuleText(open, regulation, fun)}{(regulation != null ? $" ({regulation.Code})" : "")}{(matchId != 0 ? $", tournament battle {matchId} game {matchGame}" : "")}.");
+			RemindIfPeerNewer(peer, battle_.PeerName);
+		}
+
+		/// <summary>The other driver runs a newer version: say so as the battle starts (bskftw, Nov 19: the older copy should be told it's out of date).</summary>
+		private void RemindIfPeerNewer(ulong peer, string peerName) {
+			string theirs = roomBoard_.StatusOf(peer, BattleNow)?.Version ?? sync_?.ReportFrom(peer)?.LoaderVersion ?? "";
+			if (!RoomBoard.IsNewer(theirs, Version)) {
+				return;
+			}
+			TrcLog.Info($"Battle vs {peerName}: they run TRC Tune Loader {theirs}, newer than this one ({Version}).");
+			ShowNotice($"<b>{peerName} has TRC Tune Loader {theirs}</b> (you have {Version})\n<color={Theme.MutedHex}>Turn on automatic updates for it in KSL, then restart CarX</color>", 10f);
 		}
 
 		private void AnswerChallenge(BattleMessage challenge, bool accept) {
@@ -261,6 +275,7 @@ namespace TRC.TuneLoader {
 			battleEndedAt_ = -1f;
 			battleResult_ = "";
 			TrcLog.Info($"Battle {challenge.BattleId}: accepted {battle_.PeerName}'s challenge on {course.Name} ({course.Code}).");
+			RemindIfPeerNewer(challenge.From, battle_.PeerName);
 			CloseWindow();
 		}
 

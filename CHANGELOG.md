@@ -2,9 +2,52 @@
 
 All versions of TRC Tune Loader, newest first. "Not tested in game yet" means the version builds and its automatic tests pass, but nobody has tried it in CarX yet.
 
+## 0.19.0 (Nov 19 2026)
+
+Partly tested in game: the new look, the regulations page, the quick menu and HUD, and the solo parts of host tools, tandem aids, lap compare, driver stats and challenges. What needs other players (traffic together, signed messages, checking the other drivers' cars, Invite everyone, who chases first, staff passes) builds and passes its automatic tests, but nobody has tried it in CarX yet. **Everyone needs this version** for highway traffic together (older and newer copies can't share it); Home says who needs to update for what.
+
+- **A new look for the whole window.** The parts and their pages are down the left with icons, Options has its own place at the bottom, and every page has its title and choices along the top. A road sign font (Bahnschrift) for headings and numbers, so times don't jiggle. Settings are switches and rows instead of rows of buttons.
+- **Home**: a tile for each part in its colour, your last run with Go again, today's challenge, and search at the top right.
+- **Options > Look**: new ready-made looks (TRC Night, Carbon, Deep Blue, Sakura, High Contrast), a check that your colours are readable with Fix it, the font, and how solid the boxes over the track are.
+- **Over the track**: every box (timer, speed traps, tandem, score, the badge, pop-ups) has the same panel. The timer shows this lap's sectors as coloured blocks, and tandem has a gap bar.
+- **Traffic lab** tidied into sections, with Start at the top and the cars as chips to tap.
+- The Traffic lab is in Free roam now, and the lane tool has its own page in Tools.
+- Regulations are one page now, laid out like My specs: the list on the left, the picked one (or the one you're making) on the right. "Make or edit" is gone.
+- Highway battles: the bars are called **pressure** now (whoever's behind loses pressure).
+- Cat and mouse: the driver who sends the challenge chases first (when you both have this version).
+- Battles: when the other driver has a newer version, a note says so as the battle starts.
+- TRC staff: staff who need a tool like Unity Explorer loaded can be given a staff pass, so their runs and battles still count. Their car is still checked, and the Players page shows "TRC staff exemption".
+- Highway traffic in a room: about a quarter of the data (only the cars that changed), and lined up better with the host's (your ping is taken into account).
+- Highway traffic in a room: when the player running it leaves, someone following carries it on with the same cars, instead of everyone's traffic stopping.
+- Traffic lab: how much traffic each lane gets (none, less, normal, more) in the lane tool, and the traffic's driving numbers in TrafficLab/driving.txt (anyone following you uses yours).
+- New: Tools, Host tools (every track on the map can be picked for an invite). Everyone in the room at a glance (version, TRC spec, ready in your race), the session's buttons in one place, and **Invite everyone** to a track's start: each player gets a Go button, and nobody's car moves unless they press it.
+- New: tandem aids (Tools, HUD; off until switched on). The gap to the car next to you (body to body, so door to door when you're alongside), both cars' drift angles, and how long you've held it close.
+- New: lap compare. After a run or lap, My times shows where you lost time against your best, stretch by stretch, with your speed and the best's.
+- New: Tools, Driver stats. Kilometres per car (counted from now on), your favourite track and car, battle wins and win rate, races and podiums.
+- New: Time attack, Challenges. A daily and a weekly challenge: A track picked from the date (the same for everyone on the map), with bronze, silver and gold times.
+- Maps: boards with a track's best times, parking areas as meet points (the room board shows who's parked where), and territory in the colour of the team that holds it (see the map makers' guide).
+- Home: each player shows what they can't do with you until one of you updates (battles, races, highway traffic and so on).
+- Battles, races, the room board and player checks are signed, so they can't be changed on the way or sent again later. Older versions are still understood for now.
+- Traffic lab: traffic cars you hit keep driving. A bump shoves them and changes their speed, and they get back to their own speed after a few seconds. Only a big crash (80 km/h or more) still leaves a wreck.
+- Traffic lab: in a shared room, a car someone else hits no longer jumps back about a car length on your screen.
+- Traffic lab: wrecks no longer vanish in front of you. They only go once you can't see them.
+- Traffic lab: wrecks' wheels keep turning while they roll, and the LCT truck no longer sinks into the road when it's hit.
+- Traffic lab: traffic cars tilt with banked roads, and change lanes less often (about a third as often).
+- Traffic lab: a traffic score. Near misses and tight squeezes build a combo; what a crash costs (the combo, the whole score, or no points for 5 s) is picked by whoever runs the traffic. Your best on each map is kept. Switch the box off in Tools > HUD.
+- Traffic lab: everyone's traffic score on Home, and a 10-minute score attack anyone in the room can join.
+- Traffic lab: rush hour (quiet, rush hour, or both coming and going every 20 minutes) and traffic presets (four ready-made, or save your own).
+- Traffic lab: lane traffic's lights glow red when a car brakes or stands, and blink amber after a bump (hazards).
+- Report a bug: what you type now goes onto the next line instead of off the side of the box.
+- New: Tools, HUD. Everything the mod shows over the track in one place: Hide HUD, one size for all of it, Arrange the screen, sector times, Timing detail, the sector and speed trap pop-ups (each can be turned off now), the TRC spec badge, telemetry and the suspension overlay. These moved from Options, While driving.
+- New: HUD presets. Racing, Cruising and Streaming, or save your own (what shows, the size and where every box is).
+- New: the quick menu while driving (Ctrl + Q, or a wheel or controller button): restart run, start track, traffic on or off, hide the HUD, mark a clip. Press it again to move along; it happens once you stop pressing.
+- Battles and races: your mod checks the other drivers' cars itself, from what CarX shares, at the countdown and the finish, and warns you when one doesn't match what their mod says.
+- Battles and races: a result code for the Project Dream season bot (Copy result code), to paste into /report-race with your proof.
+- New: Mark clip (in the quick menu) writes the time, map, track, run time, car and speed to clips.csv in the mod's folder, to find the moment later in a recording.
+
 ## 0.18.4 (Nov 12 2026)
 
-Partly tested in game: faster map loading and the traffic start. The rest builds and passes its automatic tests, but nobody has tried it in CarX yet. (0.18.3 was never released; its changes are here.)
+Partly tested in game: faster map loading, the traffic start, the telemetry, and battles with a friend. The rest builds and passes its automatic tests, but nobody has tried it in CarX yet. (0.18.3 was never released; its changes are here.)
 
 - Time attack: your best times now carry over between cars. In a car with no time on a track yet, the live delta, the sector pop-ups and the best line compare with your best on that track in any car. Before, they showed nothing.
 - Time attack: a bar under the timer shows the live delta (green when you're ahead, red when you're behind), with your predicted time beside the number.
@@ -159,7 +202,7 @@ Not tested in game yet. (0.15.2 was never released: its changes are in here too.
 Not tested in game yet. Fixes from testing 0.15.0, and speed traps the way they were meant to be.
 
 **New**
-- **Speed trap battles** in 1v1 battles, for fun, like Most Wanted: side by side, and the higher total of every trap on the course wins. You have to finish for yours to count. Both of you need 0.15.1; it doesn't change your Elo.
+- **Speed trap battles** in 1v1 battles, for fun: side by side, and the higher total of every trap on the course wins. You have to finish for yours to count. Both of you need 0.15.1; it doesn't change your Elo.
 - **Live speed traps** in races and battles: every trap flashes your speed and your total so far, and the timer shows your total, your place on the traps and the top three, live. Before, you only saw the totals at the end.
 - **Second text colour** (Options, Look): the grey notes and labels can have their own colour now. "Reset" makes them follow your text colour again.
 
@@ -183,7 +226,7 @@ Not tested in game yet. Built from a night of testing with a second player: tidi
 - **Speed traps, reworked.** They have their own section. Name each trap and pick how wide it is (4 to 30 m). Traps named like "Tsubaki Speed Trap 1, 2, 3" fold under **Tsubaki**. Edit renames a trap, changes its width or moves it.
 - **SPEED CHECK signs.** Every trap has a floating neon sign over the road with your last speed through it. The line across the road only shows while you place or edit a trap, so you can see how wide it is.
 - **Free-roam traps work all the time** when they're on, during time attacks, battles and races too.
-- **Speed trap races**, like Most Wanted: **Race for: Speed traps** when hosting. The highest total of every trap on the course wins (every lap on a circuit), and you have to finish. A course without traps of its own uses the free-roam traps along its road, and everyone in the race now scores the same traps.
+- **Speed trap races**: **Race for: Speed traps** when hosting. The highest total of every trap on the course wins (every lap on a circuit), and you have to finish. A course without traps of its own uses the free-roam traps along its road, and everyone in the race now scores the same traps.
 - **Your own colours and text size** (Options, Look): ready looks (TRC, Darker, Midnight, Grey, High contrast, Light) or your own background, accent and text colours, and text from 90% to 150%.
 - **Delete times** in My times: one run, a car's times on a course, or a whole course (asks twice; the old file is kept).
 - **Reverse on save:** the Course builder can also save your course the other way ("Akina Downhill" gives "Akina Uphill").
@@ -256,7 +299,7 @@ Not tested in game yet. A Home tab, the room board, sharing courses, wheel butto
 Not tested in game yet. Speed traps, ratings and licenses, your best line on the road, race control, room games and highway battles. Everyone needs 0.13.0, for races and for battles.
 
 **New: speed traps**
-- **Free roam:** drive through a speed trap anywhere on the map and your speed flashes on screen, NFS Most Wanted style: **purple** for a new best on that trap, **green** close to it, **amber** slower. Every trap keeps your best speed.
+- **Free roam:** drive through a speed trap anywhere on the map and your speed flashes on screen: **purple** for a new best on that trap, **green** close to it, **amber** slower. Every trap keeps your best speed.
 - **Courses here, Speed traps:** your traps and bests on this map, **Free-roam traps on / Off**, and **Add speed trap here** to place your own where your car is.
 - **Traps on a course:** in a course's **Edit**, add speed traps along the road. They flash during time attacks, battles and races, and your trap speeds are saved with the time.
 - **Speed trap races:** the host can score a race on the total of everyone's trap speeds instead of the time.
@@ -264,7 +307,7 @@ Not tested in game yet. Speed traps, ratings and licenses, your best line on the
 
 **New: ratings and licenses**
 - An **Elo rating** for touge, highway and circuit, moved by TRC spec battles and races.
-- A **Safety Rating** like iRacing: clean kilometres raise it, incidents lower it (resets, hits, possible contact, leaving the road, jump starts).
+- A **Safety Rating**: clean kilometres raise it, incidents lower it (resets, hits, possible contact, leaving the road, jump starts).
 - **Licenses:** Rookie, D, C, B, A. Keep your Safety Rating at 3.00 or more over enough events to go up; below 1.00 you go down one.
 - **My times, Ratings** shows yours and the latest changes. Other TRC Tune Loader players see your license and Elo on the Players page and in races.
 - Kept on your PC for now. They'll be checked and shared once the TRC server is up.
@@ -288,7 +331,7 @@ Not tested in game yet. Speed traps, ratings and licenses, your best line on the
 - They're played anywhere on the map, no course needed, in rounds of 3 to 15 minutes.
 
 **New: highway battles**
-- A third 1v1 format, Tokyo Xtreme Racer style: drive alongside each other, a rolling 3-2-1, then whoever is behind loses SP, faster the bigger the gap. A hit costs SP too. Empty SP, or 600 m behind, loses. No course needed.
+- A third 1v1 format, the highway battle: drive alongside each other, a rolling 3-2-1, then whoever is behind loses pressure, faster the bigger the gap. A hit costs pressure too. An empty pressure bar, or 600 m behind, loses. No course needed.
 
 **Changed**
 - Battles and races changed format: they need 0.13.0 on every player.

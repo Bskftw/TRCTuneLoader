@@ -84,7 +84,7 @@ namespace TRC.TuneLoader {
 					editing_ = null;
 					DeleteCourse(course);
 				}
-				if (NavButton("Keep", Theme.Button)) {
+				if (NavButton("Keep", Theme.ButtonQuiet)) {
 					deletePending_ = null;
 				}
 			} else if (NavButton("Delete", Theme.Button)) {

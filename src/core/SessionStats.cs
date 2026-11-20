@@ -5,7 +5,7 @@ using System.Globalization;
 
 namespace TRC.TuneLoader {
 	/// <summary>
-	/// What happened on one visit to a map (IMPROVEMENT_PLAN.md F5): the kilometres, top speed, runs, laps, speed traps,
+	/// What happened on one visit to a map (docs/archive/IMPROVEMENT_PLAN.md F5): the kilometres, top speed, runs, laps, speed traps,
 	/// battles and races, kept only to show a short summary on Home when the player leaves the map. Nothing is saved or
 	/// sent. Nothing here knows about the game, so the self-test can fill one in.
 	/// </summary>

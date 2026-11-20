@@ -19,7 +19,7 @@
     <LangVersion>9</LangVersion>
     <AssemblyName>TRCTuneLoader</AssemblyName>
     <RootNamespace>TRC.TuneLoader</RootNamespace>
-    <Version>0.18.4</Version>
+    <Version>0.19.0</Version>
     <Configurations>Debug;Release;Release_Encrypted</Configurations>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <Nullable>disable</Nullable>
@@ -39,6 +39,11 @@
     <!-- Taken from the game itself, so it always matches the Unity version CarX runs -->
     <Reference Include="UnityEngine.CoreModule">
       <HintPath>$(CarXManaged)\UnityEngine.CoreModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <!-- Sound (the hunt's song, traffic/HuntInGame.cs) -->
+    <Reference Include="FMODUnity">
+      <HintPath>$(CarXManaged)\FMODUnity.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <!-- Unity's IMGUI and text styles, for the TRC window (src/components/Window.cs, src/components/Theme.cs) -->
@@ -97,6 +102,7 @@
     <EmbeddedResource Include="Resources\gantry_glow.png" />
     <EmbeddedResource Include="Resources\gantry_font.txt" />
     <EmbeddedResource Include="Resources\frog.png" />
+    <EmbeddedResource Include="Resources\icon_*.png" />
     <!--
       The official TRC tunes (KINO .knd files) are built into the mod, so players can't see or edit them.
       They live in official_tunes/<set>/, which Git ignores: copy them from KINO's tunes folder.
@@ -114,12 +120,15 @@
       build must have it: without it the mod uses a development key.
     -->
     <EmbeddedResource Include="ratings.key" LogicalName="TRC.TuneLoader.RatingsKey" Condition="Exists('ratings.key')" />
+    <!-- The season bot's result code key (src/anticheat/ResultCode.cs): the same file sits next to the bot. Git-ignored. -->
+    <EmbeddedResource Include="results.key" LogicalName="TRC.TuneLoader.ResultsKey" Condition="Exists('results.key')" />
   </ItemGroup>
 
   <Target Name="CheckOfficialTunes" BeforeTargets="Build" Condition="'$(Configuration)' == 'Release_Encrypted'">
     <Error Condition="'@(OfficialTune)' == ''" Text="No official tunes in official_tunes\&lt;set&gt;\*.knd. Copy the TRC KINO tunes there before building the player version." />
     <Message Importance="high" Text="Building in @(OfficialTune->Count()) official tune(s)." />
     <Error Condition="!Exists('$(MSBuildProjectDirectory)\ratings.key')" Text="Missing ratings.key (the ratings file's private key). Restore it from your backup next to TRCTuneLoader.csproj: a new key would reset every player's ratings." />
+    <Error Condition="!Exists('$(MSBuildProjectDirectory)\results.key')" Text="Missing results.key (the season bot's result code key). Restore it from your backup, or copy it from ..\TRCSeasonBot\results.key: a new key makes the bot refuse every code made before." />
   </Target>
 
   <!--
@@ -150,6 +159,9 @@
     <Copy SourceFiles="$(MSBuildProjectDirectory)\dist\TRCTuneLoader.ksm" DestinationFolder="$(GameModFolder)" Retries="0" ContinueOnError="WarnAndContinue" Condition="'$(CarXRunningCode)' != '0'" />
     <!-- The traffic lab's cars next to the mod (since 0.18.0; Directory.Build.targets). -->
     <Copy SourceFiles="@(TrafficCar)" DestinationFolder="$(GameModFolder)\TrafficLab\cars" SkipUnchangedFiles="true" Condition="'$(CarXRunningCode)' != '0'" />
+    <!-- The hunt's song (bskftw, Nov 18), kept out of git (.gitignore): TrafficLab/sounds/hunt.wav (tools/make_hunt_song.py). -->
+    <Delete Files="$(GameModFolder)\TrafficLab\sounds\hunt.mp3" Condition="'$(CarXRunningCode)' != '0'" />
+    <Copy SourceFiles="$(HuntSong)" DestinationFiles="$(GameModFolder)\TrafficLab\sounds\hunt.wav" SkipUnchangedFiles="true" Condition="'$(CarXRunningCode)' != '0' And '$(HuntSong)' != '' And Exists('$(HuntSong)')" />
     <Message Importance="high" Condition="'$(CarXRunningCode)' != '0'" Text="TRC Tune Loader installed to $(GameModFolder). Start (or restart) CarX to load it." />
   </Target>
 

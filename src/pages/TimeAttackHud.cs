@@ -119,7 +119,10 @@ namespace TRC.TuneLoader {
 			float width = Mathf.Max(lines > 0 ? 240f : 150f, TimerTextWidth() + 32f);
 			bool extra = lines > 0;
 			float barSpace = deltaBar.HasValue ? 10f : 0f;
-			Rect rect = HudRect(screenWidth, screenHeight, width, 50f + 18f * lines + barSpace);
+			int sectors = run.Course.SectorEnds.Length;
+			bool blocks = showSectors_ && sectors > 1;
+			float blockSpace = blocks ? 12f : 0f;
+			Rect rect = HudRect(screenWidth, screenHeight, width, 50f + 18f * lines + barSpace + blockSpace);
 			hudRect_ = rect;
 			HandleHudDrag(rect, screenWidth, screenHeight);
 			if (Event.current.type != EventType.Repaint) {
@@ -134,11 +137,37 @@ namespace TRC.TuneLoader {
 			if (extra) {
 				GUI.Label(new Rect(rect.x, rect.y + 38f + barSpace, rect.width, 18f * lines), below, Theme.HudSmall);
 			}
+			if (blocks) {
+				DrawSectorBlocks(new Rect(rect.x + 14f, rect.yMax - 19f, rect.width - 28f, 6f), run, sectors);
+			}
 			var bar = new Rect(rect.x + 14f, rect.yMax - 9f, rect.width - 28f, 3f);
 			float done = run.Course.Length > 0 ? Mathf.Clamp01(run.Progress / run.Course.Length) : 0f;
 			GUI.DrawTexture(bar, Theme.ProgressBack);
 			GUI.DrawTexture(new Rect(bar.x, bar.y, bar.width * done, bar.height), Theme.AccentLine);
 			DrawMoveHint(rect);
+		}
+
+		/// <summary>
+		/// This lap's sectors as a strip of blocks (UI redesign Stage 5): each done one in its pace colour (purple, green,
+		/// amber), the ones to come grey, so the lap reads at a glance. The times stay in the lines above.
+		/// </summary>
+		private void DrawSectorBlocks(Rect strip, TimeAttackRun run, int count) {
+			List<double> done = run.CurrentSectors;
+			const float gap = 3f;
+			float each = (strip.width - gap * (count - 1)) / count;
+			Color before = GUI.color;
+			for (int i = 0; i < count; i++) {
+				Color colour = Theme.Raised;
+				if (i < done.Count) {
+					long ms = (long)Math.Round(done[i] * 1000.0);
+					long? all = i < sectorBestAll_.Length ? sectorBestAll_[i] : null;
+					long? mine = i < sectorBestMine_.Length ? sectorBestMine_[i] : null;
+					Theme.TryHex(PaceColour(ms, all, mine), out colour);
+				}
+				GUI.color = colour;
+				GUI.DrawTexture(new Rect(strip.x + i * (each + gap), strip.y, each, strip.height), Texture2D.whiteTexture);
+			}
+			GUI.color = before; // risk 8: the tint stops here
 		}
 
 		/// <summary>The live delta as a bar from the middle: green to the right when ahead, red to the left when behind (full at 1 s).</summary>
@@ -305,12 +334,12 @@ namespace TRC.TuneLoader {
 					? $"\n<color={Theme.MutedHex}>{TimeAttackRun.FormatGap(car)} on this car's best · PB in {ShortCar(bestAnyCarName_)}</color>"
 					: $"\n<color={Theme.MutedHex}>No time in this car yet · PB in {ShortCar(bestAnyCarName_)}</color>";
 			}
-			sectorFlash_ = $"<b>SECTOR {split.Index + 1}</b>  <color={colour}><b>{TimeAttackRun.FormatTime(split.Time)}</b></color>\n{gap}";
+			sectorFlash_ = $"<b>Sector {split.Index + 1}</b>  <color={colour}><b>{TimeAttackRun.FormatTime(split.Time)}</b></color>\n{gap}";
 			sectorFlashUntil_ = Time.unscaledTime + SectorFlashSeconds;
 		}
 
 		private void DrawSectorFlash(float screenWidth, float screenHeight) {
-			if (Time.unscaledTime >= sectorFlashUntil_ || sectorFlash_.Length == 0) {
+			if (!sectorFlashOn_ || Time.unscaledTime >= sectorFlashUntil_ || sectorFlash_.Length == 0) {
 				return;
 			}
 			var content = new GUIContent(sectorFlash_);

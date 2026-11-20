@@ -8,10 +8,13 @@ using UnityEngine;
 
 namespace TRC.TuneLoader {
 	public partial class TRCTuneLoaderMod {
-		private static readonly string[] RegulationSections = { "Regulations", "Make or edit", "Shared with you" };
+		private static readonly string[] RegulationSections = { "Regulations", "Shared with you" };
 
 		private int regulationsView_;
 		private Vector2 regulationsScroll_;
+		private Vector2 regulationListScroll_;
+		private string pickedRegulation_ = "";
+		private string deletingRegulation_ = "";
 		private string regulationResult_ = "";
 		private string checkedRegulation_ = "";
 		private string sharingRegulation_ = "";
@@ -20,92 +23,148 @@ namespace TRC.TuneLoader {
 		private void DrawRegulationsTab() {
 			GUILayout.BeginHorizontal(GUILayout.ExpandHeight(true));
 			int shared = roomBoard_.SharedRegulations.Count;
-			int view = SideNav(RegulationSections, regulationsView_, new[] { regulations_.Count > 0 ? regulations_.Count.ToString(CultureInfo.InvariantCulture) : "", editingRegulation_ != null ? "editing" : "", shared > 0 ? $"{shared} new" : "" });
+			int view = SideNav(RegulationSections, regulationsView_, new[] { regulations_.Count > 0 ? regulations_.Count.ToString(CultureInfo.InvariantCulture) : "", shared > 0 ? $"{shared} new" : "" });
 			if (view != regulationsView_) {
 				regulationsView_ = view;
 				regulationResult_ = "";
-				if (view == 1 && editingRegulation_ == null) {
-					StartEditingRegulation(new Regulation { Author = BattleMessage.PlainName(MyName()) });
-				}
 			}
 			GUILayout.Space(10);
-			GUILayout.BeginVertical(GUILayout.ExpandHeight(true));
-			// Up and down only: nothing on these pages should need scrolling sideways.
-			regulationsScroll_ = GUILayout.BeginScrollView(regulationsScroll_, false, false, GUIStyle.none, GUI.skin.verticalScrollbar);
-			if (regulationResult_.Length > 0) {
-				GUILayout.Label(regulationResult_, Theme.Body);
+			if (regulationsView_ == 0) {
+				DrawRegulationsHome();
+			} else {
+				GUILayout.BeginVertical(GUILayout.ExpandHeight(true));
+				// Up and down only: nothing on these pages should need scrolling sideways.
+				regulationsScroll_ = GUILayout.BeginScrollView(regulationsScroll_, false, false, GUIStyle.none, GUI.skin.verticalScrollbar);
+				if (regulationResult_.Length > 0) {
+					GUILayout.Label(regulationResult_, Theme.Body);
+				}
+				DrawSharedRegulations();
+				GUILayout.EndScrollView();
+				GUILayout.EndVertical();
 			}
-			switch (regulationsView_) {
-				case 0: DrawRegulationList(); break;
-				case 1: DrawRegulationEditor(); break;
-				default: DrawSharedRegulations(); break;
-			}
-			GUILayout.EndScrollView();
-			GUILayout.EndVertical();
 			GUILayout.EndHorizontal();
 		}
 
-		private void DrawRegulationList() {
+		/// <summary>
+		/// Regulations in one page, laid out like My specs (bskftw, Nov 18: "view, load and make ... all in the same place"):
+		/// the list down the left with New and Paste, the picked one (or the editor) on the right.
+		/// </summary>
+		private void DrawRegulationsHome() {
+			GUILayout.BeginVertical(GUILayout.ExpandHeight(true));
 			GUILayout.Label("Regulations keep tunes balanced without everyone running the same tune: a most power, tyre widths, no swaps, which setup. " +
 				"Make one, share it, and run 1v1 battles, races and tournaments to it. Each driver's mod checks their own car.", Theme.Small);
-			if (regulations_.Count == 0) {
-				GUILayout.BeginVertical(Theme.Card);
-				GUILayout.Label("No regulations yet. Make one (Make or edit), or import one someone gave you below.", Theme.Small);
-				GUILayout.EndVertical();
+			if (regulationResult_.Length > 0) {
+				GUILayout.Label(regulationResult_, Theme.Body);
 			}
-			foreach (Regulation r in regulations_.ToList()) {
-				GUILayout.BeginVertical(Theme.Card);
-				GUILayout.Label($"<b>{r.Name}</b>  <color={Theme.MutedHex}>{r.Code}{(r.Author.Length > 0 ? $" · by {r.Author}" : "")}</color>", Theme.Body);
-				GUILayout.Label(r.Summary(), Theme.Small);
-				if (r.Notes.Length > 0) {
-					GUILayout.Label(r.Notes, Theme.Small);
-				}
-				GUILayout.BeginHorizontal();
-				if (NavButton(checkedRegulation_ == r.Code ? "Hide check" : "Check my car", Theme.ButtonPrimary)) {
-					checkedRegulation_ = checkedRegulation_ == r.Code ? "" : r.Code;
-					myFactsUntil_ = 0;
-				}
-				if (NavButton("Edit", Theme.Button)) {
-					StartEditingRegulation(r);
-					regulationsView_ = 1;
-				}
-				if (NavButton(sharingRegulation_ == r.Code ? "Done sharing" : "Share...", Theme.Button)) {
-					sharingRegulation_ = sharingRegulation_ == r.Code ? "" : r.Code;
-				}
-				if (NavButton("Copy for Discord", Theme.Button)) {
-					GUIUtility.systemCopyBuffer = $"{r.Name} ({r.Code}): {r.ShareText()}";
-					regulationResult_ = $"Copied {r.Name}. Paste it in Discord: anyone with TRC Tune Loader imports it here with Paste.";
-				}
-				GUILayout.FlexibleSpace();
-				if (NavButton("Delete", Theme.Button)) {
-					DeleteRegulation(r);
-				}
-				GUILayout.EndHorizontal();
-				if (checkedRegulation_ == r.Code) {
-					DrawRegulationCheck(r);
-				}
-				if (sharingRegulation_ == r.Code) {
-					DrawShareRegulation(r);
-				}
-				GUILayout.EndVertical();
-			}
+			GUILayout.BeginHorizontal(GUILayout.ExpandHeight(true));
 
-			GUILayout.Label("Import", Theme.SectionLabel);
-			GUILayout.BeginVertical(Theme.Card);
-			GUILayout.Label("Paste a regulation someone copied for Discord (the line starting TRCREG1.), or a whole .trcreg file's text.", Theme.Small);
-			GUILayout.BeginHorizontal();
-			if (NavButton("Paste from clipboard", Theme.ButtonPrimary)) {
+			GUILayout.BeginVertical(Theme.Card, GUILayout.Width(200), GUILayout.ExpandHeight(true));
+			regulationListScroll_ = GUILayout.BeginScrollView(regulationListScroll_, false, false, GUIStyle.none, GUI.skin.verticalScrollbar);
+			foreach (Regulation r in regulations_.ToList()) {
+				bool picked = editingRegulation_ == null && r.Code == pickedRegulation_;
+				if (NavButton($"<b>{r.Name}</b>\n<color={Theme.MutedHex}>{r.Code}{(r.Author.Length > 0 ? $" · {r.Author}" : "")}</color>", picked ? Theme.RowSelected : Theme.Row)) {
+					pickedRegulation_ = r.Code;
+					editingRegulation_ = null;
+					regulationResult_ = "";
+				}
+			}
+			if (regulations_.Count == 0) {
+				GUILayout.Label("No regulations yet.", Theme.Small);
+			}
+			GUILayout.EndScrollView();
+			bool making = editingRegulation_ != null && editingRegulation_.FilePath.Length == 0;
+			if (NavButton("New regulation", making ? Theme.ButtonPrimary : Theme.Button)) {
+				if (making) {
+					editingRegulation_ = null;
+				} else {
+					StartEditingRegulation(new Regulation { Author = BattleMessage.PlainName(MyName()) });
+				}
+				regulationResult_ = "";
+			}
+			if (NavButton("Paste from clipboard", Theme.Button)) {
 				ImportRegulation(GUIUtility.systemCopyBuffer);
+			}
+			if (NavButton("Look again", Theme.Button)) {
+				LoadRegulations();
 			}
 			if (NavButton("Open the folder", Theme.Button)) {
 				Directory.CreateDirectory(RegulationsFolder);
 				Application.OpenURL("file:///" + RegulationsFolder.Replace('\\', '/'));
 			}
-			if (NavButton("Reload", Theme.Button)) {
-				LoadRegulations();
+			GUILayout.EndVertical();
+			GUILayout.Space(10);
+
+			GUILayout.BeginVertical(GUILayout.ExpandHeight(true));
+			// Up and down only: nothing on these pages should need scrolling sideways.
+			regulationsScroll_ = GUILayout.BeginScrollView(regulationsScroll_, false, false, GUIStyle.none, GUI.skin.verticalScrollbar);
+			Regulation shown = RegulationByCode(pickedRegulation_);
+			if (editingRegulation_ != null) {
+				GUILayout.Label(editingRegulation_.FilePath.Length > 0 ? $"Editing {editingRegulation_.Name}" : "New regulation", Theme.Heading);
+				DrawRegulationEditor();
+			} else if (shown != null) {
+				DrawRegulation(shown);
+			} else {
+				GUILayout.BeginVertical(Theme.Guide);
+				GUILayout.Label("Make a regulation", Theme.Heading);
+				GUILayout.Label("1. Press New regulation, name it and set its limits, then Save.", Theme.Body);
+				GUILayout.Label("2. Pick it on the left to check your car and the room against it, share it, or edit it.", Theme.Body);
+				GUILayout.Label("3. Got one from someone? Copy their TRCREG1. line (or a .trcreg file's text) and press Paste from clipboard.", Theme.Body);
+				GUILayout.EndVertical();
+			}
+			GUILayout.EndScrollView();
+			GUILayout.EndVertical();
+			GUILayout.EndHorizontal();
+			GUILayout.EndVertical();
+		}
+
+		/// <summary>The picked regulation: what it allows, checking your car and the room, sharing, editing.</summary>
+		private void DrawRegulation(Regulation r) {
+			GUILayout.Label(r.Name, Theme.Heading);
+			GUILayout.Label($"{r.Code}{(r.Author.Length > 0 ? $" · by {r.Author}" : "")}", Theme.Small);
+			GUILayout.BeginVertical(Theme.Card);
+			GUILayout.Label(r.Summary(), Theme.Small);
+			if (r.Notes.Length > 0) {
+				GUILayout.Label(r.Notes, Theme.Small);
+			}
+			GUILayout.EndVertical();
+			GUILayout.BeginHorizontal();
+			if (NavButton("Edit", Theme.ButtonPrimary)) {
+				StartEditingRegulation(r);
+				regulationResult_ = "";
+			}
+			if (NavButton(sharingRegulation_ == r.Code ? "Done sharing" : "Share...", Theme.Button)) {
+				sharingRegulation_ = sharingRegulation_ == r.Code ? "" : r.Code;
+			}
+			if (NavButton("Copy for Discord", Theme.Button)) {
+				GUIUtility.systemCopyBuffer = $"{r.Name} ({r.Code}): {r.ShareText()}";
+				regulationResult_ = $"Copied {r.Name}. Paste it in Discord: anyone with TRC Tune Loader imports it here with Paste from clipboard.";
 			}
 			GUILayout.FlexibleSpace();
+			if (deletingRegulation_ == r.Code) {
+				if (NavButton("Delete it", Theme.ButtonPrimary)) {
+					deletingRegulation_ = "";
+					DeleteRegulation(r);
+				}
+				if (NavButton("Keep", Theme.ButtonQuiet)) {
+					deletingRegulation_ = "";
+				}
+			} else if (NavButton("Delete", Theme.Button)) {
+				deletingRegulation_ = r.Code;
+			}
 			GUILayout.EndHorizontal();
+			if (sharingRegulation_ == r.Code) {
+				GUILayout.BeginVertical(Theme.Card);
+				DrawShareRegulation(r);
+				GUILayout.EndVertical();
+			}
+			// The check is always shown for the picked one: it's what "load" means for a regulation (bskftw, Nov 18).
+			if (checkedRegulation_ != r.Code) {
+				checkedRegulation_ = r.Code;
+				myFactsUntil_ = 0;
+			}
+			GUILayout.Label("Your car and the room", Theme.SectionLabel);
+			GUILayout.BeginVertical(Theme.Card);
+			DrawRegulationCheck(r);
 			GUILayout.EndVertical();
 		}
 
@@ -186,7 +245,7 @@ namespace TRC.TuneLoader {
 					SaveRegulation(r.Copy(), $"Saved {r.Name}.");
 					roomBoard_.SharedRegulations.Remove(item);
 				}
-				if (NavButton("Dismiss", Theme.Button)) {
+				if (NavButton("Dismiss", Theme.ButtonQuiet)) {
 					roomBoard_.SharedRegulations.Remove(item);
 				}
 				GUILayout.FlexibleSpace();
